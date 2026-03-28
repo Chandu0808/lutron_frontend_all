@@ -1318,7 +1318,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <Typography fontWeight={700} fontSize={14} sx={{ color: "#fff" }}>
-                          High End
+                          High End Trim
                         </Typography>
                         <OutlinedInput
                           value={draftHighEndTrim}
