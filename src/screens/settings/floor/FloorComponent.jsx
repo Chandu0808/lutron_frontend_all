@@ -26,6 +26,7 @@ import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItem
 import { MdDelete, MdEditSquare, MdCalculate } from 'react-icons/md';
 
 
+
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 
 
@@ -36,6 +37,7 @@ import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../../customhooks/U
 
 
 export default function FloorComponent() {
+
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,6 +60,7 @@ export default function FloorComponent() {
   // Add confirmation dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [floorToDelete, setFloorToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { role } = UseAuth();
   const visibleSidebarItems = getVisibleSidebarItems(role);
@@ -77,17 +80,35 @@ export default function FloorComponent() {
     setShowDeleteDialog(true);
   };
 
+  // const handleConfirmDelete = async () => {
+  //   if (floorToDelete) {
+  //     try {
+  //       await dispatch(deleteFloor(floorToDelete.id)).unwrap();
+  //       setShowDeleteSuccess(true);
+  //       // No need to refetch, the reducer will remove it from state
+  //     } catch (err) {
+  //       setDeleteErrorMessage(err.message || 'Failed to delete floor. Please try again.');
+  //       setShowDeleteError(true);
+  //     }
+  //   }
+  //   setShowDeleteDialog(false);
+  //   setFloorToDelete(null);
+  // };
+
   const handleConfirmDelete = async () => {
-    if (floorToDelete) {
-      try {
-        await dispatch(deleteFloor(floorToDelete.id)).unwrap();
-        setShowDeleteSuccess(true);
-        // No need to refetch, the reducer will remove it from state
-      } catch (err) {
-        setDeleteErrorMessage(err.message || 'Failed to delete floor. Please try again.');
-        setShowDeleteError(true);
-      }
+    if (!floorToDelete) return;
+
+    setDeleting(true); //  start
+
+    try {
+      await dispatch(deleteFloor(floorToDelete.id)).unwrap();
+      setShowDeleteSuccess(true);
+    } catch (err) {
+      setDeleteErrorMessage(err.message || 'Failed to delete');
+      setShowDeleteError(true);
     }
+
+    setDeleting(false); //  end
     setShowDeleteDialog(false);
     setFloorToDelete(null);
   };
@@ -348,6 +369,7 @@ export default function FloorComponent() {
                         <Tooltip title="Delete Floor" arrow placement="top">
                           <IconButton
                             onClick={() => handleDelete(floor)}
+                            disabled={showDeleteDialog}
                             sx={{
                               backgroundColor: '#1E1E1E',
                               color: '#fff',
@@ -451,7 +473,18 @@ export default function FloorComponent() {
             setShowDeleteDialog(false);
             setFloorToDelete(null);
           }}
+          confirmDisabled={deleting}   //  add this
         />
+        {/* <ConfirmDialog
+          open={showDeleteDialog}
+          title="Delete Floor"
+          message={`Are you sure you want to delete floor "${floorToDelete?.floor_name}"?`}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => {
+            setShowDeleteDialog(false);
+            setFloorToDelete(null);
+          }}
+        /> */}
       </Grid>
     </Grid>
   );

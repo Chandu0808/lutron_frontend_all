@@ -104,6 +104,9 @@ const App = () => {
           {/* Protected routes with layout */}
           <Route element={<MainLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/alerts" element={<Dashboard />} />
+            <Route path="/dashboard/energy" element={<Dashboard />} />
+            <Route path="/dashboard/space-utilization" element={<Dashboard />} />
             <Route path="/users" element={<UsersComponent />} />
             <Route path="/createusers" element={<CreateUser />} />
             <Route path="/heatmap" element={<Suspense fallback={<div>Loading...</div>}><HeatMap /></Suspense>} />

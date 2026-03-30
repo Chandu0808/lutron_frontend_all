@@ -2,42 +2,42 @@
 import React from "react";
 
 // ConfirmDialog
-export function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
+export function ConfirmDialog({ open, title, message, onConfirm, onCancel, confirmDisabled }) {
   if (!open) return null;
   return (
     <div style={{
-      position: "fixed", 
-      top: 0, 
-      left: 0, 
-      width: "100vw", 
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100vw",
       height: "100vh",
-      background: "rgba(0,0,0,0.5)", 
-      zIndex: 9999, 
-      display: "flex", 
-      alignItems: "center", 
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 9999,
+      display: "flex",
+      alignItems: "center",
       justifyContent: "center",
       backdropFilter: "blur(2px)"
     }}>
       <div style={{
-        background: "#fff", 
-        borderRadius: 16, 
-        padding: "32px 40px", 
-        minWidth: 400, 
+        background: "#fff",
+        borderRadius: 16,
+        padding: "32px 40px",
+        minWidth: 400,
         maxWidth: 500,
         boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
         border: "1px solid rgba(0,0,0,0.1)",
         animation: "dialogFadeIn 0.2s ease-out"
       }}>
-        <div style={{ 
-          fontWeight: 700, 
-          fontSize: 24, 
+        <div style={{
+          fontWeight: 700,
+          fontSize: 24,
           marginBottom: 16,
           color: "#232323",
           textAlign: "center"
         }}>
           {title}
         </div>
-        <div style={{ 
+        <div style={{
           marginBottom: 32,
           fontSize: 16,
           color: "#666",
@@ -46,18 +46,18 @@ export function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
         }}>
           {message}
         </div>
-        <div style={{ 
-          display: "flex", 
-          justifyContent: "center", 
-          gap: 16 
+        <div style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 16
         }}>
-          <button 
-            onClick={onCancel} 
-            style={{ 
-              padding: "12px 32px", 
-              borderRadius: 8, 
+          <button
+            onClick={onCancel}
+            style={{
+              padding: "12px 32px",
+              borderRadius: 8,
               border: "1px solid #ddd",
-              background: "#f8f9fa", 
+              background: "#f8f9fa",
               color: "#666",
               fontSize: 16,
               fontWeight: 500,
@@ -76,7 +76,25 @@ export function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
           >
             Cancel
           </button>
-          <button 
+          <button
+            onClick={onConfirm}
+            disabled={confirmDisabled}   // disable button
+            style={{
+              padding: "12px 32px",
+              borderRadius: 8,
+              border: "none",
+              background: confirmDisabled ? "#999" : "#232323", // gray when loading
+              color: "#fff",
+              fontSize: 16,
+              fontWeight: 500,
+              cursor: confirmDisabled ? "not-allowed" : "pointer",
+              transition: "all 0.2s ease",
+              minWidth: 100
+            }}
+          >
+            {confirmDisabled ? "Deleting..." : "Confirm"}  {/* TEXT CHANGE */}
+          </button>
+          {/* <button 
             onClick={onConfirm} 
             style={{ 
               padding: "12px 32px", 
@@ -98,7 +116,7 @@ export function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
             }}
           >
             Confirm
-          </button>
+          </button> */}
         </div>
       </div>
       <style>{`
@@ -128,15 +146,15 @@ export function Toast({ open, message, onClose, duration = 2500 }) {
   if (!open) return null;
   return (
     <div style={{
-      position: "fixed", 
-      bottom: 32, 
-      right: 32, 
-      background: "#232323", 
+      position: "fixed",
+      bottom: 32,
+      right: 32,
+      background: "#232323",
       color: "#fff",
-      padding: "16px 24px", 
-      borderRadius: 12, 
-      fontWeight: 600, 
-      fontSize: 16, 
+      padding: "16px 24px",
+      borderRadius: 12,
+      fontWeight: 600,
+      fontSize: 16,
       zIndex: 9999,
       boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
       border: "1px solid rgba(255,255,255,0.1)",

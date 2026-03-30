@@ -17,6 +17,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useDispatch, useSelector, shallowEqual } from 'react-redux'
+import { useLocation } from "react-router-dom";
 import { useNavigate } from 'react-router-dom'
 import {
   LineChart,
@@ -168,6 +169,7 @@ const MONTH_NAME_TO_INDEX = {
   Dec: 11,
 };
 
+
 const parseDateFromState = (value) => {
   if (!value) {
     return new Date();
@@ -198,6 +200,52 @@ function Dashboard() {
   // Operators will only see floors they have been assigned to
   // The /floor/list endpoint uses require_operator_permission_for_scope
   // to filter floors based on user permissions
+
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigateToAlerts = () => {
+    navigate("/dashboard/alerts");
+  };
+
+  const handleNavigateToEnergy = () => {
+    navigate("/dashboard/energy");
+  };
+
+  const handleNavigateToSpace = () => {
+    navigate("/dashboard/space-utilization");
+  };
+
+  const handleNavigateToOverview = () => {
+  navigate("/dashboard");   // 
+};
+
+  // const handleNavigateToOverview = () => {
+  //   // setActiveTab("overview");
+  //   navigate("/dashboard");
+  // };
+
+
+  useEffect(() => {
+    const path = location.pathname;
+
+    if (path === "/dashboard") {
+      setActiveTab("overview");
+    } else if (path === "/dashboard/alerts") {
+      setActiveTab("alerts");
+    } else if (path === "/dashboard/energy") {
+      setActiveTab("energy");
+    } else if (path === "/dashboard/space-utilization") {
+      setActiveTab("space-utilization");
+    }
+  }, [location.pathname]);
+
+
+  // useEffect(() => {
+  //   setActiveTab(getTabFromPath());
+  // }, [location.pathname]);
 
   const dispatch = useDispatch()
   const theme = useTheme()
@@ -347,10 +395,10 @@ function Dashboard() {
   const overviewData = useSelector(selectDashboardOverview)
   const overviewLoading = useSelector(selectDashboardOverviewLoading)
   const overviewError = useSelector(selectDashboardOverviewError)
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
 
   // Local state
-  const [activeTab, setActiveTab] = useState('overview') // Default to "Overview" tab
+  // const [activeTab, setActiveTab] = useState('overview') // Default to "Overview" tab
 
   // Fetch and auto-refresh dashboard overview when Overview tab is active
   useEffect(() => {
@@ -724,9 +772,7 @@ function Dashboard() {
     }
   }
 
-
-
-  // Handle floor name click - just expand/collapse without affecting checkbox
+ // Handle floor name click - just expand/collapse without affecting checkbox
   const handleFloorChange = async (floorId) => {
     const floor = getAvailableFloors().find(f => f.id === parseInt(floorId))
 
@@ -1686,8 +1732,6 @@ function Dashboard() {
     };
   };
 
-
-
   // Memoize the date parameters to prevent unnecessary recalculations
   const dateParams = useMemo(() => {
     const params = calculateDateParameters();
@@ -1740,8 +1784,6 @@ function Dashboard() {
       endDate: endDate,
       isNavigating: isNavigating
     };
-
-
 
     return params;
   }, [selectedAreas, selectedFloorIds, selectedGroupIds, selectedDuration, dateParams, isNavigating, allAreasLoaded]);
@@ -1979,7 +2021,7 @@ function Dashboard() {
               // This prevents line charts from re-rendering when donut charts complete
               isApiCallInProgressRef.current = false;
             });
-        } else if (activeTab === 'space-utilization') {
+        } else if (activeTab === "space-utilization") {
           // Space Utilization APIs - PARALLEL EXECUTION FOR MAXIMUM SPEED
           const spaceUtilizationApis = [
             { name: 'occupancyCount', promise: dispatch(fetchOccupancyCount(apiParams)) },
@@ -2018,7 +2060,7 @@ function Dashboard() {
               setGlobalLoading(false);
               isApiCallInProgressRef.current = false;
             });
-        } else if (activeTab === 'charts') {
+        } else if (activeTab === 'space-utilization') {
           // Charts tab - Instant Occupancy Count, Occupancy By Group from logs, and Space Utilization Per Area from logs APIs
           const chartsApis = [
             { name: 'instantOccupancyCount', promise: dispatch(fetchInstantOccupancyCount(apiParams)) },
@@ -2115,6 +2157,13 @@ function Dashboard() {
     }
 
     setActiveTab(tab);
+    if (tab === "overview") {
+      navigate("/dashboard");   //  special case
+    } else {
+      navigate(`/dashboard/${tab}`);
+    }
+   
+
 
     // Show global loader immediately when tab changes
     setGlobalLoading(true);
@@ -2705,11 +2754,6 @@ function Dashboard() {
     return areaIds;
   };
 
-
-
-
-
-
   const availableAreas = flattenAreaTree(areaTree)
   const isLoading = floorStatus === 'loading'
   const hasError = dashboardError || (floorStatus === 'failed')
@@ -2719,7 +2763,6 @@ function Dashboard() {
     if (!data || !data['x-axis'] || !data['y-axis']) {
       return [];
     }
-
 
     let xAxis = data['x-axis'] || data.x_axis || [];
     let yAxis = data['y-axis'] || data.y_axis || {};
@@ -4248,13 +4291,6 @@ function Dashboard() {
       setExportLoading(prev => ({ ...prev, 'Consumption by Group_download': false }));
     }
   };
-
-
-
-
-
-
-
 
   // Add click outside handler to close export dropdowns
   useEffect(() => {
@@ -5946,8 +5982,6 @@ function Dashboard() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-
-
                                   // Clear data cache when selection changes to prevent stale data
                                   dispatch(clearDataCache());
 
@@ -6248,7 +6282,7 @@ function Dashboard() {
                           }}
                           title="Next"
                         >
-                          Next ›
+                          Next›
                         </button>
                       </>
                     )}
@@ -6405,77 +6439,106 @@ function Dashboard() {
             >
               {/* Tabs - hidden on Overview so widget area fills space */}
               {activeTab !== 'overview' && (
-              <div
-                style={{
-                  display: 'inline-flex',
-                  gap: isLargeScreen ? '12px' : (isMediumScreen ? '10px' : '6px'),
-                  backgroundColor: "#807864",
-                  borderRadius: "5px",
-                  padding: isLargeScreen ? '5px 10px' : (isMediumScreen ? '4px 8px' : '3px 6px'),
-                  minWidth: 0,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-                  backgroundColor: contentColor,
-                  maxWidth: '100%',
-                  flexWrap: 'nowrap',
-                }}
-              >
-                <button
-                  onClick={globalLoading ? undefined : (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleTabChange('overview');
-                  }}
-                  disabled={globalLoading}
+                <div
                   style={{
-                    padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
-                    border: `1px solid ${buttonColor}`,
-                    borderRadius: '50%',
-                    backgroundColor: activeTab === 'overview' ? '#fff' : buttonColor,
-                    color: activeTab === 'overview' ? buttonColor : '#fff',
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
-                    fontFamily: 'inherit',
-                    transition: 'all 0.2s ease',
-                    boxShadow: activeTab === 'overview'
-                      ? `0 2px 6px ${buttonColor}33`
-                      : 'none',
-                    opacity: globalLoading ? 0.5 : 1,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
+                    display: 'inline-flex',
+                    gap: isLargeScreen ? '12px' : (isMediumScreen ? '10px' : '6px'),
+                    backgroundColor: "#807864",
+                    borderRadius: "5px",
+                    padding: isLargeScreen ? '5px 10px' : (isMediumScreen ? '4px 8px' : '3px 6px'),
+                    minWidth: 0,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                    backgroundColor: contentColor,
+                    maxWidth: '100%',
+                    flexWrap: 'nowrap',
                   }}
                 >
-                  Overview
-                </button>
-                <button
-                  onClick={globalLoading ? undefined : (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleTabChange('energy');
-                  }}
-                  disabled={globalLoading}
-                  style={{
-                    padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
-                    border: `1px solid ${buttonColor}`,
-                    borderRadius: '50%',
-                    backgroundColor: activeTab === 'energy' ? '#fff' : buttonColor,
-                    color: activeTab === 'energy' ? buttonColor : '#fff',
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
-                    fontFamily: 'inherit',
-                    transition: 'all 0.2s ease',
-                    boxShadow: activeTab === 'energy'
-                      ? `0 2px 6px ${buttonColor}33`
-                      : 'none',
-                    opacity: globalLoading ? 0.5 : 1,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  Energy
-                </button>
-                {false && (
+                  <button
+                    onClick={globalLoading ? undefined : (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleTabChange('overview');
+                    }}
+                    disabled={globalLoading}
+                    style={{
+                      padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
+                      border: `1px solid ${buttonColor}`,
+                      borderRadius: '50%',
+                      backgroundColor: activeTab === 'overview' ? '#fff' : buttonColor,
+                      color: activeTab === 'overview' ? buttonColor : '#fff',
+                      cursor: globalLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
+                      fontFamily: 'inherit',
+                      transition: 'all 0.2s ease',
+                      boxShadow: activeTab === 'overview'
+                        ? `0 2px 6px ${buttonColor}33`
+                        : 'none',
+                      opacity: globalLoading ? 0.5 : 1,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={globalLoading ? undefined : (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleTabChange('energy');
+                    }}
+                    disabled={globalLoading}
+                    style={{
+                      padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
+                      border: `1px solid ${buttonColor}`,
+                      borderRadius: '50%',
+                      backgroundColor: activeTab === 'energy' ? '#fff' : buttonColor,
+                      color: activeTab === 'energy' ? buttonColor : '#fff',
+                      cursor: globalLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
+                      fontFamily: 'inherit',
+                      transition: 'all 0.2s ease',
+                      boxShadow: activeTab === 'energy'
+                        ? `0 2px 6px ${buttonColor}33`
+                        : 'none',
+                      opacity: globalLoading ? 0.5 : 1,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Energy
+                  </button>
+                  {false && (
+                    <button
+                      onClick={globalLoading ? undefined : (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleTabChange('space-utilization');
+                      }}
+                      disabled={globalLoading}
+                      style={{
+                        padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
+                        border: `1px solid ${buttonColor}`,
+                        borderRadius: '50%',
+                        backgroundColor: activeTab === 'space-utilization' ? '#fff' : buttonColor,
+                        color: activeTab === 'space-utilization' ? buttonColor : '#fff',
+                        cursor: globalLoading ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
+                        fontFamily: 'inherit',
+                        transition: 'all 0.2s ease',
+                        boxShadow: activeTab === 'space-utilization'
+                          ? `0 2px 6px ${buttonColor}33`
+                          : 'none',
+                        opacity: globalLoading ? 0.5 : 1,
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isLargeScreen ? 'Space Utilization' : (isMediumScreen ? 'Space Util' : 'Space')}
+                    </button>
+                  )}
                   <button
                     onClick={globalLoading ? undefined : (e) => {
                       e.preventDefault();
@@ -6504,64 +6567,35 @@ function Dashboard() {
                   >
                     {isLargeScreen ? 'Space Utilization' : (isMediumScreen ? 'Space Util' : 'Space')}
                   </button>
-                )}
-                <button
-                  onClick={globalLoading ? undefined : (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleTabChange('charts');
-                  }}
-                  disabled={globalLoading}
-                  style={{
-                    padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
-                    border: `1px solid ${buttonColor}`,
-                    borderRadius: '50%',
-                    backgroundColor: activeTab === 'charts' ? '#fff' : buttonColor,
-                    color: activeTab === 'charts' ? buttonColor : '#fff',
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
-                    fontFamily: 'inherit',
-                    transition: 'all 0.2s ease',
-                    boxShadow: activeTab === 'charts'
-                      ? `0 2px 6px ${buttonColor}33`
-                      : 'none',
-                    opacity: globalLoading ? 0.5 : 1,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  {isLargeScreen ? 'Space Utilization' : (isMediumScreen ? 'Space Util' : 'Space')}
-                </button>
-                <button
-                  onClick={globalLoading ? undefined : (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleTabChange('alerts');
-                  }}
-                  disabled={globalLoading}
-                  style={{
-                    padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
-                    border: `1px solid ${buttonColor}`,
-                    borderRadius: '50%',
-                    backgroundColor: activeTab === 'alerts' ? '#fff' : buttonColor,
-                    color: activeTab === 'alerts' ? buttonColor : '#fff',
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
-                    fontFamily: 'inherit',
-                    transition: 'all 0.2s ease',
-                    boxShadow: activeTab === 'alerts'
-                      ? `0 2px 6px ${buttonColor}33`
-                      : 'none',
-                    opacity: globalLoading ? 0.5 : 1,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  Alerts
-                </button>
-              </div>
+                  <button
+                    onClick={globalLoading ? undefined : (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleTabChange('alerts');
+                    }}
+                    disabled={globalLoading}
+                    style={{
+                      padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
+                      border: `1px solid ${buttonColor}`,
+                      borderRadius: '50%',
+                      backgroundColor: activeTab === 'alerts' ? '#fff' : buttonColor,
+                      color: activeTab === 'alerts' ? buttonColor : '#fff',
+                      cursor: globalLoading ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
+                      fontFamily: 'inherit',
+                      transition: 'all 0.2s ease',
+                      boxShadow: activeTab === 'alerts'
+                        ? `0 2px 6px ${buttonColor}33`
+                        : 'none',
+                      opacity: globalLoading ? 0.5 : 1,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Alerts
+                  </button>
+                </div>
               )}
             </Grid>
           </Grid>
@@ -6601,19 +6635,30 @@ function Dashboard() {
           >
             {/* Data Container for your next section */}
             <Box mt={activeTab === 'alerts' ? 0 : 3}>
-              {activeTab === 'overview' && (
+              {activeTab === "overview" && (
                 <DashboardOverview
                   data={overviewData}
                   loading={overviewLoading}
                   error={overviewError}
-                  onNavigateToEnergy={() => handleTabChange('energy')}
-                  onNavigateToAlerts={() => handleTabChange('alerts')}
-                  onNavigateToSpaceUtilization={() => handleTabChange('charts')}
-                  onNavigateToSchedule={() => navigate('/schedule')}
-                  onNavigateToFloor={() => navigate('/heatmap')}
-                  onNavigateToQuickControls={() => navigate('/quickcontrols')}
+
+                  // onNavigateToOverview={handleNavigateToOverview}  //
+
+                  onNavigateToAlerts={() => navigate("/dashboard/alerts")}
+                  onNavigateToEnergy={handleNavigateToEnergy}
+                  onNavigateToSpaceUtilization={handleNavigateToSpace}
+                  onNavigateToSchedule={() => navigate("/schedule")}
+                  onNavigateToFloor={() => navigate("/heatmap")}
+                  onNavigateToQuickControls={() => navigate("/quickcontrols")}
                 />
               )}
+
+              {/* {activeTab === "alerts" && <Alerts />}
+
+              {activeTab === "energy" && (
+                <div>Energy Component Here</div> // or your actual energy component
+              )}
+
+              {activeTab === "space-utilization" && <SpaceUtilization />} */}
               {activeTab === 'energy' && (
                 <>
                   {/* 2-Grid Layout for Charts */}
@@ -6623,9 +6668,6 @@ function Dashboard() {
                     sx={{ mb: 2 }}
                     direction={{ xs: 'column', md: 'row' }}
                     width="100%"
-
-
-
                   >
                     <Grid item xs={12} md={6} lg={6} xl={6} >
                       <SavingsStrategyChart
@@ -6897,7 +6939,7 @@ function Dashboard() {
                 </>
               )}
 
-              {activeTab === 'space-utilization' && false && (
+              {activeTab === 'space-utilization' && (
                 <div style={{ padding: '0px' }}>
                   <SpaceUtilization
                     title={getWidgetTitle('utilization', 'Utilization')}
@@ -6908,7 +6950,7 @@ function Dashboard() {
                 </div>
               )}
 
-              {activeTab === 'charts' && (
+              {activeTab === 'space-utilization' && (
                 <div style={{ padding: '0px' }}>
                   <SpaceUtilization
                     title={getWidgetTitle('instant_occupancy_count', 'Instant Occupancy Count')}
