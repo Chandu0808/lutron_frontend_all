@@ -60,9 +60,17 @@ import { UseAuth } from '../../customhooks/UseAuth'; // Add this import
 import { interpolateHexColor, arraylargest } from '../../utils/colorScale';
 
 
-const isWhitening = (type) => ['whitening', 'white tune', 'whitetune', 'white_tune', 'White Tune', 'WhiteTune'].includes((type || '').toLowerCase());
-const isDimmed = (type) => (type || '').toLowerCase() === 'dimmed';
-const isSwitched = (type) => (type || '').toLowerCase() === 'switched';
+const normalizeZoneType = (type) =>
+  (type ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    // backend may return `white tune`, `white_tune`, `white-tune`, etc.
+    .replace(/[\s_-]/g, "");
+
+const isWhitening = (type) => ["whitening", "whitetune"].includes(normalizeZoneType(type));
+const isDimmed = (type) => normalizeZoneType(type) === "dimmed";
+const isSwitched = (type) => normalizeZoneType(type) === "switched";
 
 
 // Add the missing TOP_PADDING constant
@@ -887,8 +895,6 @@ const HeatMap = () => {
       // This ensures fade/delay times are loaded when area status is refreshed
       // Fade/delay times are stored in the scene definition, not in area status zones
       if (areaStatus.active_scene && areaStatus.area_id) {
-        console.log(`Loading fade/delay times from active scene ${areaStatus.active_scene} for area ${areaStatus.area_id}`);
-
         dispatch(fetchSceneStatus({
           areaId: areaStatus.area_id,
           sceneId: areaStatus.active_scene
@@ -899,35 +905,37 @@ const HeatMap = () => {
             // Redux stores details in state.sceneStatus, but unwrap() returns the full response
             const sceneDetails = sceneStatusResponse?.details || sceneStatusResponse || [];
 
-            console.log('Active scene status response:', sceneStatusResponse);
-            console.log('Active scene details extracted:', sceneDetails);
-
             if (sceneDetails && Array.isArray(sceneDetails) && sceneDetails.length > 0) {
               setZoneLocalValues(prev => {
                 const updated = { ...prev };
 
                 sceneDetails.forEach(detail => {
-                  // CRITICAL: Match by zone_id first (most reliable)
-                  const zoneId = detail.zone_id;
-                  let zone = null;
+                  const rawZoneId =
+                    detail.zone_id ??
+                    detail.ZoneId ??
+                    detail.Zone_ID ??
+                    detail.zoneID;
+                  const parsedZoneId =
+                    rawZoneId !== undefined && rawZoneId !== null && rawZoneId !== ''
+                      ? Number(rawZoneId)
+                      : NaN;
+                  const hasNumericZoneId = Number.isFinite(parsedZoneId);
 
-                  if (zoneId) {
-                    zone = areaStatus.zones?.find(z => z.id === zoneId);
+                  let zone = null;
+                  if (hasNumericZoneId) {
+                    zone = areaStatus.zones?.find((z) => Number(z.id) === parsedZoneId);
                     if (!zone) {
-                      console.warn(`Zone not found by zone_id ${zoneId} for scene detail:`, detail);
+                      console.warn(`Zone not found by zone_id ${parsedZoneId} for scene detail:`, detail);
                     }
                   }
 
-                  // Fallback: match by name if zone_id not available
+                  // Fallback: match by name if zone_id missing or did not match area zones
                   if (!zone && detail.zone_name) {
-                    zone = areaStatus.zones?.find(z => z.name === detail.zone_name);
-                    if (zone) {
-                      console.warn(`Matched zone by name "${detail.zone_name}" (zone_id not found in scene detail)`);
-                    }
+                    zone = areaStatus.zones?.find((z) => z.name === detail.zone_name);
                   }
 
                   if (zone) {
-                    const zoneType = (detail.zone_type || '').toLowerCase();
+                    const zoneType = (detail.zone_type || detail.ZoneType || '').toLowerCase();
                     if (zoneType === 'dimmed' || zoneType === 'whitetune') {
                       // CRITICAL: Update fade/delay times from scene (these are the source of truth)
                       // Always use scene values - these are the saved values from the backend
@@ -942,17 +950,6 @@ const HeatMap = () => {
                         fadeTime: fadeTime, // ALWAYS use scene value
                         delayTime: delayTime, // ALWAYS use scene value
                       };
-                      console.log(`Loaded fade/delay from active scene for zone "${zone.name}" (zone_id: ${zone.id}):`, {
-                        fadeTime: fadeTime,
-                        delayTime: delayTime,
-                        fromScene: areaStatus.active_scene,
-                        sceneDetail: {
-                          zone_id: detail.zone_id,
-                          zone_name: detail.zone_name,
-                          FadeTime: detail.FadeTime,
-                          DelayTime: detail.DelayTime
-                        }
-                      });
                     }
                   } else {
                     console.warn(`Zone not found for scene detail:`, {
@@ -963,14 +960,6 @@ const HeatMap = () => {
                     });
                   }
                 });
-
-                console.log('Updated zone local values with fade/delay times:',
-                  Object.entries(updated).map(([id, val]) => ({
-                    zone_id: id,
-                    fadeTime: val.fadeTime,
-                    delayTime: val.delayTime
-                  }))
-                );
 
                 return updated;
               });
@@ -989,7 +978,7 @@ const HeatMap = () => {
 
   useEffect(() => {
     setZonePage(0);
-  }, [selectedAreaId]);
+  }, [selectedAreaId, areaStatus?.zones?.length]);
 
   useEffect(() => {
     if (areaStatus && areaStatus.zones) {
@@ -1556,34 +1545,19 @@ const HeatMap = () => {
   const whiteTuneZones = areaStatus?.zones?.filter(z => isWhitening(z.type)) || [];
   const dimmedZones = areaStatus?.zones?.filter(z => isDimmed(z.type)) || [];
 
-  let zonesToShow = [];
+  // Show ALL reconciled zones on the sidebar:
+  // - CCT/WhiteTune first
+  // - then Dimmed
+  // - then Switched
+  // This ensures newly reconciled switching zones (e.g. SW_2/4) are visible outside the Edit Scene dialog.
+  const zonesToShow = [...whiteTuneZones, ...dimmedZones, ...switchedZones];
+
+  // Pagination: keep existing responsive behavior
   let zonesPerPage = ZONES_PER_PAGE;
-
-  // Smart zone display logic based on content and screen size
-  if (whiteTuneZones.length > 0 || dimmedZones.length > 0) {
-    // Order zones to prioritize CCT zones first, then dimmer zones
-    // This ensures that on large screens, if there are 2 CCT + 2 dimmer,
-    // the first page will show 2 CCT + 1 dimmer (3 total)
-    zonesToShow = [...whiteTuneZones, ...dimmedZones];
-
-    // For large screens (>= 1440px) - show 4 zones per page
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      zonesPerPage = 4;
-    } else {
-      // For laptop/tablet/mobile (< 1440px) - show 2 zones at a time with pagination
-      zonesPerPage = 2;
-    }
+  if (is1440Screen || isUltraWide || is2560Screen) {
+    zonesPerPage = 4;
   } else {
-    zonesToShow = switchedZones;
-
-    // For large screens and desktop (>= 1440px)
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      // Show 4 zones by default for large screens/desktop
-      zonesPerPage = 4;
-    } else {
-      // For laptop/tablet/mobile (< 1440px), show 2 zones at a time with pagination
-      zonesPerPage = 2;
-    }
+    zonesPerPage = 2;
   }
   const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage);
 
@@ -2259,13 +2233,14 @@ const HeatMap = () => {
                                         const zoneId = detail.zone_id;
                                         let zone = null;
 
-                                        if (zoneId) {
-                                          zone = areaStatus.zones?.find(z => z.id === zoneId);
+                                        if (zoneId != null) {
+                                          zone = areaStatus.zones?.find(z => Number(z.id) === Number(zoneId));
                                         }
 
                                         // Fallback: match by name if zone_id not available
                                         if (!zone && detail.zone_name) {
-                                          zone = areaStatus.zones?.find(z => z.name === detail.zone_name);
+                                          const wanted = String(detail.zone_name).trim().toLowerCase();
+                                          zone = areaStatus.zones?.find(z => String(z.name).trim().toLowerCase() === wanted);
                                         }
 
                                         if (zone) {
@@ -2321,13 +2296,14 @@ const HeatMap = () => {
                                         const zoneId = detail.zone_id;
                                         let zone = null;
 
-                                        if (zoneId) {
-                                          zone = areaStatus.zones?.find(z => z.id === zoneId);
+                                        if (zoneId != null) {
+                                          zone = areaStatus.zones?.find(z => Number(z.id) === Number(zoneId));
                                         }
 
                                         // Fallback: match by name
                                         if (!zone && detail.zone_name) {
-                                          zone = areaStatus.zones?.find(z => z.name === detail.zone_name);
+                                          const wanted = String(detail.zone_name).trim().toLowerCase();
+                                          zone = areaStatus.zones?.find(z => String(z.name).trim().toLowerCase() === wanted);
                                         }
 
                                         if (zone) {
@@ -2976,8 +2952,38 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
   if (isSwitchType) {
     const isOn = safeValues.on_off === 'On';
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <Typography fontWeight="bold" fontSize={{ xs: 11, md: 13 }} sx={{ minWidth: 20, mr: 1 }}>
+      <Box
+        sx={{
+          bgcolor: '#fff',
+          borderRadius: 0.5,
+          pt: 0.5,
+          pb: 0.5,
+          pl: 0.5,
+          pr: 0.5,
+          width: { xs: 140, sm: 150, md: 160 },
+          minWidth: { xs: 140, sm: 150, md: 160 },
+          maxWidth: { xs: 140, sm: 150, md: 160 },
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 1,
+          mb: 0.5,
+          justifyContent: 'flex-start',
+          boxSizing: 'border-box',
+        }}
+      >
+        <Typography
+          fontWeight="bold"
+          fontSize={{ xs: 11, md: 13 }}
+          sx={{
+            flex: 1,
+            minWidth: 20,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            mr: 0.5,
+          }}
+        >
           {zone.name}
         </Typography>
         <Box
@@ -2995,7 +3001,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
             padding: 1,
             position: 'relative',
             minWidth: { xs: 40, md: 48 }, // Increased width
-            ml: 1,
+            ml: 'auto',
             opacity: disabled ? 0.5 : 1,
           }}
         >

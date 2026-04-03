@@ -40,6 +40,11 @@ const HIGH_END_TRIM_MAX = 100;
 /** Must sit above app chrome: TopbarComponent outer Box uses z-index 10002; mobile Drawer uses 10003. MUI Dialog defaults to ~1300. */
 const AREA_SETTINGS_DIALOG_Z_INDEX = 11000;
 
+// Normalize zone fields coming from backend (strings vs numbers, casing, extra spaces).
+const normalizeZoneName = (name) => (name ?? "").toString().trim().toLowerCase();
+const normalizeZoneType = (type) =>
+  (type ?? "").toString().trim().toLowerCase().replace(/[\s_-]/g, "");
+
 // Helper functions for zone type detection
 const isWhitening = (type) => ['whitening', 'white tune', 'whitetune', 'white_tune', 'White Tune', 'WhiteTune'].includes((type || '').toLowerCase());
 const isDimmed = (type) => (type || '').toLowerCase() === 'dimmed';
@@ -144,21 +149,33 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     setDraftHighEndTrim(zone.high_end_trim ?? '');
   }, [open, isSuperAdmin, tuningZones, selectedTuningZoneId]);
 
-  // Fetch and store area zones when area status is available
+  // Fetch and store area zones when the dialog opens.
+  // This is important after backend reconciliation because `areaStatus.zones` can be temporarily stale.
   useEffect(() => {
-    if (areaStatus && areaStatus.zones) {
-      setAreaZones(areaStatus.zones || []);
-    } else if (areaId && open) {
-      // If areaStatus is not available, fetch zones directly
-      BaseUrl.post("/area/zone_status", { area_id: areaId })
-        .then(res => {
+    if (!open || !areaId) return;
+
+    let cancelled = false;
+
+    const loadZones = async () => {
+      try {
+        const res = await BaseUrl.post("/area/zone_status", { area_id: areaId });
+        if (!cancelled) {
           setAreaZones(res.data?.zones || []);
-        })
-        .catch(err => {
-          console.error("Failed to fetch zones:", err);
-        });
-    }
-  }, [areaStatus, areaId, open]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch zones:", err);
+        if (!cancelled) {
+          setAreaZones(areaStatus?.zones || []);
+        }
+      }
+    };
+
+    loadZones();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, areaId, areaStatus]);
 
   // When occupancyMode changes in Redux, update local state
   useEffect(() => {
@@ -192,14 +209,12 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       return sceneDetail.zone_id;
     }
     
-    // Fallback: Match by exact zone name and type (case-sensitive)
-    // This prevents "OS-41-45" from matching "E_OS-41-45"
+    // Fallback: Match by zone name and type using normalized string comparisons.
+    // Backend reconciliation may change casing/spacing, so avoid strict equality here.
     if (areaZones.length > 0 && sceneDetail.zone_name) {
       const matchingZone = areaZones.find(z => {
-        // Exact string match for zone name (case-sensitive, no partial matches)
-        const nameMatch = z.name === sceneDetail.zone_name;
-        // Case-insensitive match for zone type
-        const typeMatch = (z.type || '').toLowerCase() === (sceneDetail.zone_type || '').toLowerCase();
+        const nameMatch = normalizeZoneName(z.name) === normalizeZoneName(sceneDetail.zone_name);
+        const typeMatch = normalizeZoneType(z.type) === normalizeZoneType(sceneDetail.zone_type);
         return nameMatch && typeMatch;
       });
       
@@ -271,6 +286,12 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     }
     
     if (sceneDetails && Array.isArray(sceneDetails) && sceneDetails.length > 0) {
+      // Avoid initializing scene zone values until we have a zone list for fallback matching.
+      // If backend scene details arrive before `/area/zone_status`, some details might not have `zone_id`.
+      const anySceneDetailMissingZoneId = sceneDetails.some((d) => d.zone_id == null);
+      if ((!areaZones || areaZones.length === 0) && anySceneDetailMissingZoneId) {
+        return;
+      }
       console.log('=== INITIALIZING/UPdating SCENE ZONE VALUES ===');
       console.log('Scene details:', sceneDetails.map(d => ({
         zone_name: d.zone_name,
@@ -522,7 +543,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       
       // CRITICAL: Verify we're updating the correct zone by zone_id
       // This is a safety check to ensure zone_id matches
-      if (zoneValues.zone_id && zoneValues.zone_id !== zoneId) {
+      if (zoneValues.zone_id != null && zoneId != null && Number(zoneValues.zone_id) !== Number(zoneId)) {
         console.error('CRITICAL ERROR: Zone ID mismatch!', {
           expected_zone_id: zoneId,
           found_zone_id: zoneValues.zone_id,
@@ -694,6 +715,10 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       const refreshedSceneStatus = await dispatch(fetchSceneStatus({ areaId, sceneId })).unwrap();
       console.log('=== SCENE STATUS AFTER SAVE ===');
       console.log('Refreshed scene status:', refreshedSceneStatus);
+
+      // Refresh area status zones after backend reconciliation so the UI immediately reflects new/reconciled zones.
+      const refreshedAreaStatus = await dispatch(fetchAreaStatus(areaId)).unwrap();
+      setAreaZones(refreshedAreaStatus?.zones || []);
       
       if (refreshedSceneStatus && refreshedSceneStatus.details) {
         console.log('Scene details after save:', refreshedSceneStatus.details.map(d => ({
@@ -1105,10 +1130,24 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
             <Box sx={{ bgcolor: "#807864", borderRadius: "4px", p: "12px 12px" }}>
               <Typography fontWeight={700} fontSize={15} mb={1} sx={{ color: "#fff" }}>Edit Scene</Typography>
               <Select
+                fullWidth
                 value={selectedScene || ""}
                 onChange={e => setSelectedScene(Number(e.target.value))}
                 displayEmpty
                 disabled={!canEditScene}
+                MenuProps={{
+                  sx: { zIndex: AREA_SETTINGS_DIALOG_Z_INDEX + 1 },
+                  PaperProps: {
+                    sx: {
+                      maxHeight: "min(50vh, 320px)",
+                      overflowY: "auto",
+                    },
+                  },
+                  MenuListProps: {
+                    dense: false,
+                    sx: { py: 0.5 },
+                  },
+                }}
                 input={
                   <OutlinedInput
                     sx={{
@@ -1122,6 +1161,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                   />
                 }
                 sx={{
+                  width: "100%",
                   fontSize: 14,
                   height: 36,
                   color: canEditScene ? buttonColor : "#999",
@@ -1131,13 +1171,16 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                   "& .MuiSelect-icon": { color: canEditScene ? buttonColor : "#999" },
                   "& .MuiOutlinedInput-notchedOutline": { borderColor: canEditScene ? "#fff" : "#ddd" }
                 }}
-                renderValue={selected => {
-                  if (!selected) return <span style={{ color: canEditScene ? "#aaa" : "#999" }}>Select Scene To Edit</span>;
-                  const scene = areaScenes.find(s => s.id === selected);
+                renderValue={(selected) => {
+                  if (!selected) {
+                    return (
+                      <span style={{ color: canEditScene ? "#aaa" : "#999" }}>Select Scene To Edit</span>
+                    );
+                  }
+                  const scene = areaScenes.find((s) => s.id === selected);
                   return scene ? scene.name : "";
                 }}
               >
-                <MenuItem disabled value=""><span style={{ color: canEditScene ? "#aaa" : "#999" }}>Select Scene To Edit</span></MenuItem>
                 {areaScenes.map(scene => (<MenuItem key={scene.id} value={Number(scene.id)}>{scene.name}</MenuItem>))}
               </Select>
               {selectedScene && !sceneStatusLoading && sceneDetails.length > 0 && (
@@ -1157,16 +1200,29 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                     
                     // Find the matching zone in areaZones to get min/max values
                     // CRITICAL: Use zone_id for matching (most reliable)
-                    const matchedZone = areaZones.find(z => z.id === zoneId);
+                    const matchedZone = areaZones.find(z => Number(z.id) === Number(zoneId));
                     
                     if (!matchedZone) {
                       console.warn(`Warning: Zone not found in areaZones for zone_id ${zoneId}, zone_name: ${d.zone_name}`);
                     }
                     
+                    const matchedTypeNormalized = normalizeZoneType(matchedZone?.type);
+                    const detailTypeNormalized = normalizeZoneType(d.zone_type);
+                    const rawType = matchedTypeNormalized || detailTypeNormalized;
+
+                    // ZoneControlCard decides UI based on exact canonical types:
+                    // `switched` => toggle, `dimmed` => brightness slider, `whitetune`/`cct` => brightness + CCT slider.
+                    const canonicalType =
+                      rawType === "dimmed" ? "dimmed" :
+                      rawType === "switched" ? "switched" :
+                      rawType === "cct" ? "cct" :
+                      rawType === "whitetune" ? "whitetune" :
+                      rawType || d.zone_type;
+
                     const zone = {
                       id: zoneId, // Always use zone_id
                       name: d.zone_name,
-                      type: (d.zone_type || "").toLowerCase().replace(/[\s_-]/g, "") === "dimmed" ? "dimmed" : d.zone_type,
+                      type: canonicalType,
                       brightness_min: matchedZone?.brightness_min || d.brightness_min,
                       brightness_max: matchedZone?.brightness_max || d.brightness_max,
                       cct_min: matchedZone?.cct_min || d.cct_min,
@@ -1178,10 +1234,11 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                     const storedValues = sceneZoneValues[zoneKey];
                     
                     // Validate that stored values belong to this zone (safety check)
-                    if (storedValues && storedValues.zone_id !== zoneId) {
+                    const storedZoneId = storedValues?.zone_id;
+                    if (storedValues && storedZoneId != null && Number(storedZoneId) !== Number(zoneId)) {
                       console.error('ERROR: Stored values zone_id mismatch!', {
                         expected: zoneId,
-                        found: storedValues.zone_id,
+                        found: storedZoneId,
                         zone_name: d.zone_name,
                         zoneKey: zoneKey
                       });

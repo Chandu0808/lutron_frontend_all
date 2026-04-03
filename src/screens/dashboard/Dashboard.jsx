@@ -195,6 +195,9 @@ const parseDateFromState = (value) => {
   return new Date();
 };
 
+/** When true, renders the second Space Utilization block (instant occupancy / Charts tab APIs). */
+const SHOW_SPACE_UTILIZATION_CHARTS_TAB = false;
+
 function Dashboard() {
   // Note: Floor filtering is handled automatically by the backend API
   // Operators will only see floors they have been assigned to
@@ -6950,7 +6953,7 @@ function Dashboard() {
                 </div>
               )}
 
-              {activeTab === 'space-utilization' && (
+              {SHOW_SPACE_UTILIZATION_CHARTS_TAB && activeTab === 'space-utilization' && (
                 <div style={{ padding: '0px' }}>
                   <SpaceUtilization
                     title={getWidgetTitle('instant_occupancy_count', 'Instant Occupancy Count')}
