@@ -17,7 +17,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useDispatch, useSelector, shallowEqual } from 'react-redux'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LineChart,
   Line,
@@ -348,9 +348,34 @@ function Dashboard() {
   const overviewLoading = useSelector(selectDashboardOverviewLoading)
   const overviewError = useSelector(selectDashboardOverviewError)
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const getTabFromPath = useCallback((pathname) => {
+    if (pathname === '/dashboard/alerts') return 'alerts'
+    if (pathname === '/dashboard/energy') return 'energy'
+    if (pathname === '/dashboard/spaceutilization' || pathname === '/dashboard/space-utilization') return 'charts'
+    return 'overview'
+  }, [])
+
+  const getPathFromTab = useCallback((tab) => {
+    if (tab === 'alerts') return '/dashboard/alerts'
+    if (tab === 'energy') return '/dashboard/energy'
+    if (tab === 'charts' || tab === 'space-utilization') return '/dashboard/spaceutilization'
+    return '/dashboard/overview'
+  }, [])
+
+  const focusAlertFromLocation = location.state?.focusAlert || null
 
   // Local state
-  const [activeTab, setActiveTab] = useState('overview') // Default to "Overview" tab
+  const [activeTab, setActiveTab] = useState(() => getTabFromPath(location.pathname))
+
+  // Keep dashboard tab synced with URL path for deep links and refresh.
+  useEffect(() => {
+    const tabFromPath = getTabFromPath(location.pathname)
+    if (activeTab !== tabFromPath) {
+      setActiveTab(tabFromPath)
+    }
+  }, [location.pathname, activeTab, getTabFromPath])
 
   // Fetch and auto-refresh dashboard overview when Overview tab is active
   useEffect(() => {
@@ -397,6 +422,17 @@ function Dashboard() {
   const [showDurationDropdown, setShowDurationDropdown] = useState(false)
   const [showAreaDropdown, setShowAreaDropdown] = useState(false)
   const [expandedNodes, setExpandedNodes] = useState(new Set())
+
+  useEffect(() => {
+    if (!focusAlertFromLocation) return
+
+    // Always show the alerts list for floorplan-driven alert navigation.
+    if (activeTab !== 'alerts') {
+      setActiveTab('alerts')
+    }
+    setSelectedAlertTypes([])
+    setFilterKey(prev => prev + 1)
+  }, [focusAlertFromLocation, activeTab])
 
   // Close area tree when clicking outside (including tabs and anywhere else)
   useEffect(() => {
@@ -2115,6 +2151,11 @@ function Dashboard() {
     }
 
     setActiveTab(tab);
+
+    const nextPath = getPathFromTab(tab);
+    if (location.pathname !== nextPath) {
+      navigate(nextPath);
+    }
 
     // Show global loader immediately when tab changes
     setGlobalLoading(true);
@@ -6924,6 +6965,7 @@ function Dashboard() {
                 <Alerts
                   key={`alerts-${filterKey}`}
                   selectedTypes={selectedAlertTypes}
+                  focusAlert={focusAlertFromLocation}
                 />
               )}
 

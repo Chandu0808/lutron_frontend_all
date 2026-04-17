@@ -59,7 +59,7 @@ const Login = () => {
     if (!token) {
       setAutoRdirect(false)
     } else {
-      navigate('/dashboard')
+      navigate('/dashboard/overview')
     }
   }, []);
 
@@ -80,7 +80,7 @@ const Login = () => {
 
         // Normal flow: fetch profile and go to dashboard
         await dispatch(fetchProfile());
-        navigate("/dashboard");
+        navigate("/dashboard/overview");
       }
     };
     fetchAndNavigate();

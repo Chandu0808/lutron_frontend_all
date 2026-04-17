@@ -27,7 +27,7 @@ const MainLayout = () => {
   const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
 
   const isLutronWebsite = location.pathname === '/lutronwebsite-page';
-  const isDashboard = location.pathname === '/dashboard';
+  const isDashboard = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/');
 
   return (
     <Box sx={{ width: '100%', minHeight: 'calc(100vh - 100px)', bgcolor: backgroundColor }}>

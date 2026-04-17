@@ -87,7 +87,7 @@ const formatDateTime = (timeStr) => {
   }
 };
 
-function Alerts({ selectedTypes = [] }) {
+function Alerts({ selectedTypes = [], focusAlert = null }) {
   const dispatch = useDispatch();
   const theme = useTheme();
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
@@ -118,6 +118,9 @@ function Alerts({ selectedTypes = [] }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [highlightedAlertKey, setHighlightedAlertKey] = useState(null);
+  const [pendingScrollKey, setPendingScrollKey] = useState(null);
+  const highlightedRowRef = useRef(null);
   
   // Export dropdown state
   const [showExportDropdown, setShowExportDropdown] = useState(false);
@@ -289,6 +292,67 @@ function Alerts({ selectedTypes = [] }) {
   const endIndex = startIndex + itemsPerPage;
   const paginatedAlerts = filtered.slice(startIndex, endIndex);
 
+  const normalizeText = (value) => String(value || '').toLowerCase().trim();
+  const getAlertKey = (alert) => {
+    return [
+      normalizeText(alert?.location),
+      normalizeText(alert?.alert_type),
+      normalizeText(alert?.device_name),
+      normalizeText(alert?.serial_no),
+      normalizeText(alert?.reported_time || alert?.time)
+    ].join('|');
+  };
+
+  useEffect(() => {
+    if (!focusAlert || loading || !Array.isArray(filtered) || filtered.length === 0) return;
+
+    const targetLocation = normalizeText(focusAlert.location);
+    const targetAreaName = normalizeText(focusAlert.areaName);
+    const targetType = normalizeText(focusAlert.alertType);
+    const targetDevice = normalizeText(focusAlert.deviceName);
+    const targetSerial = normalizeText(focusAlert.serialNo);
+    const targetTime = normalizeText(focusAlert.reportedTime || focusAlert.time);
+
+    let matchedIndex = filtered.findIndex((alert) => {
+      const location = normalizeText(alert?.location);
+      const type = normalizeText(alert?.alert_type);
+      const device = normalizeText(alert?.device_name);
+      const serial = normalizeText(alert?.serial_no);
+      const time = normalizeText(alert?.reported_time || alert?.time);
+
+      if (targetLocation && location === targetLocation) {
+        const typeOk = !targetType || type === targetType;
+        const deviceOk = !targetDevice || device === targetDevice;
+        const serialOk = !targetSerial || serial === targetSerial;
+        const timeOk = !targetTime || time === targetTime;
+        return typeOk && deviceOk && serialOk && timeOk;
+      }
+
+      if (targetAreaName) {
+        if (location === targetAreaName || location.endsWith(targetAreaName)) return true;
+        const lastPart = location.split('/').pop()?.trim() || '';
+        return lastPart === targetAreaName;
+      }
+
+      return false;
+    });
+
+    if (matchedIndex < 0) return;
+
+    const matchedAlert = filtered[matchedIndex];
+    const matchedKey = getAlertKey(matchedAlert);
+    const page = Math.floor(matchedIndex / itemsPerPage) + 1;
+    setCurrentPage(page);
+    setHighlightedAlertKey(matchedKey);
+    setPendingScrollKey(matchedKey);
+
+    const timeoutId = setTimeout(() => {
+      setHighlightedAlertKey(null);
+    }, 6000);
+
+    return () => clearTimeout(timeoutId);
+  }, [focusAlert, filtered, itemsPerPage, loading]);
+
   // Reset to first page when items per page changes
   useEffect(() => {
     setCurrentPage(1);
@@ -296,8 +360,22 @@ function Alerts({ selectedTypes = [] }) {
 
   // Reset to first page when filtered data changes
   useEffect(() => {
+    if (focusAlert) return;
     setCurrentPage(1);
-  }, [filtered.length]);
+  }, [filtered.length, focusAlert]);
+
+  // Auto-scroll to the highlighted row only for floorplan alert redirection.
+  useEffect(() => {
+    if (!focusAlert || !pendingScrollKey) return;
+    if (!highlightedRowRef.current) return;
+
+    highlightedRowRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+
+    setPendingScrollKey(null);
+  }, [focusAlert, pendingScrollKey, currentPage, paginatedAlerts]);
 
   // Force immediate re-render when selectedTypes changes
   useEffect(() => {
@@ -477,17 +555,32 @@ function Alerts({ selectedTypes = [] }) {
                 </td>
               </tr>
             )}
-            {paginatedAlerts.map((a, index) => (
-              <tr key={index}>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.location ?? "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.alert_type ?? "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.device_name ?? "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.serial_no ?? "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.model_number || "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{a.description ?? "-"}</td>
-                <td style={{ border: "1px solid #8f8a7b", padding: "10px 8px" }}>{formatDateTime(a.reported_time || a.time)}</td>
+            {paginatedAlerts.map((a, index) => {
+              const rowKey = getAlertKey(a);
+              const isHighlighted = highlightedAlertKey && rowKey === highlightedAlertKey;
+              const rowCellStyle = {
+                border: isHighlighted ? "2px solid #d32f2f" : "1px solid #8f8a7b",
+                padding: "10px 8px",
+                backgroundColor: isHighlighted ? "rgba(255, 230, 230, 0.95)" : "transparent",
+                fontWeight: isHighlighted ? 700 : 400,
+                transition: "background-color 0.2s ease, border 0.2s ease"
+              };
+
+              return (
+              <tr
+                key={index}
+                ref={isHighlighted && rowKey === pendingScrollKey ? highlightedRowRef : null}
+              >
+                <td style={rowCellStyle}>{a.location ?? "-"}</td>
+                <td style={rowCellStyle}>{a.alert_type ?? "-"}</td>
+                <td style={rowCellStyle}>{a.device_name ?? "-"}</td>
+                <td style={rowCellStyle}>{a.serial_no ?? "-"}</td>
+                <td style={rowCellStyle}>{a.model_number || "-"}</td>
+                <td style={rowCellStyle}>{a.description ?? "-"}</td>
+                <td style={rowCellStyle}>{formatDateTime(a.reported_time || a.time)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

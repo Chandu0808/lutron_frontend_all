@@ -14,7 +14,7 @@ const AuthGuard = ({ children, allowedRoles }) => {
 
     if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
         if (!role || !allowedRoles.includes(role)) {
-            return <Navigate to="/dashboard" state={{ from: location }} replace />;
+            return <Navigate to="/dashboard/overview" state={{ from: location }} replace />;
         }
     }
     return children;

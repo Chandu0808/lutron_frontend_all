@@ -1,5 +1,5 @@
 import React, { useContext, lazy, Suspense, useEffect } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { ThemeContext } from './screens/settings/theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
@@ -55,7 +55,6 @@ const HeatMap = lazy(() => import('./screens/heatmap/HeatMap'));
 const App = () => {
   const { theme } = useContext(ThemeContext);
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const profile = useSelector(selectProfile);
 
   useEffect(() => {
@@ -103,10 +102,12 @@ const App = () => {
           <Route path="/auth/change_password" element={<ChangePassword />} />
           {/* Protected routes with layout */}
           <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Navigate to="/dashboard/overview" replace />} />
+            <Route path="/dashboard/overview" element={<Dashboard />} />
             <Route path="/dashboard/alerts" element={<Dashboard />} />
             <Route path="/dashboard/energy" element={<Dashboard />} />
-            <Route path="/dashboard/space-utilization" element={<Dashboard />} />
+            <Route path="/dashboard/spaceutilization" element={<Dashboard />} />
+            <Route path="/dashboard/space-utilization" element={<Navigate to="/dashboard/spaceutilization" replace />} />
             <Route path="/users" element={<UsersComponent />} />
             <Route path="/createusers" element={<CreateUser />} />
             <Route path="/heatmap" element={<Suspense fallback={<div>Loading...</div>}><HeatMap /></Suspense>} />

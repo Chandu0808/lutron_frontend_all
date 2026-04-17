@@ -183,7 +183,7 @@ export default function TopbarComponent() {
   };
 
   const menuItems = [
-    { label: "Dashboard", path: "/dashboard" },
+    { label: "Dashboard", path: "/dashboard/overview" },
     { label: "Floorplan", path: "/heatmap" },
     { label: "Schedules", path: "/schedule" },
     { label: "Quick Controls", path: "/quickcontrols" },

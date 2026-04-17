@@ -1598,6 +1598,26 @@ const HeatMap = () => {
     });
   };
 
+  const findAlertForArea = (areaName) => {
+    if (!activeAlerts || !Array.isArray(activeAlerts) || activeAlerts.length === 0) {
+      return null;
+    }
+
+    const normalizedAreaName = (areaName || '').toLowerCase().trim();
+
+    return activeAlerts.find((alert) => {
+      const alertLocation = (alert.location || '').toLowerCase().trim();
+      if (!alertLocation || !normalizedAreaName) return false;
+
+      if (alertLocation === normalizedAreaName) return true;
+      if (alertLocation.endsWith(normalizedAreaName)) return true;
+
+      const alertLocationParts = alertLocation.split('/');
+      const lastPart = alertLocationParts[alertLocationParts.length - 1].trim();
+      return lastPart === normalizedAreaName;
+    }) || null;
+  };
+
   const navIconSx = {
     bgcolor: '#fff',
     borderRadius: '50%',
@@ -1775,6 +1795,7 @@ const HeatMap = () => {
                 highlightedAreaId={highlightedAreaId}
                 searchBounceAnimation={searchBounceAnimation}
                 hasActiveAlert={hasActiveAlert}
+                findAlertForArea={findAlertForArea}
                 navigate={navigate}
 
               />
@@ -3430,6 +3451,7 @@ function HeatmapPdfSvgViewer({
   containerFitMode,
   highlightedAreaId,
   hasActiveAlert,
+  findAlertForArea,
   navigate
 }) {
 
@@ -3839,22 +3861,26 @@ function HeatmapPdfSvgViewer({
                     onClick={() => handleAreaClick(area)}
                     style={{ cursor: "pointer" }}
                   >
-                    {/*AREA POLYGON */}
-                    <polygon
-                      points={points}
-                      fill={getFill(area)}
-                      stroke="#000"
-                      strokeWidth="1"
-                      style={{ pointerEvents: "all" }} // important
-                    />
-
                     {/* ALERT ICON */}
                     {hasActiveAlert(area.name || area.area_name) && center.x && center.y && (
                       <g
                         onClick={(e) => {
                           e.stopPropagation(); // prevents area click
-                          console.log("ALERT CLICKED");
-                          navigate("/dashboard/alerts");
+                          const areaName = area.name || area.area_name || '';
+                          const matchedAlert = findAlertForArea(areaName);
+                          navigate("/dashboard/alerts", {
+                            state: {
+                              focusAlert: {
+                                areaName,
+                                location: matchedAlert?.location || null,
+                                alertType: matchedAlert?.alert_type || null,
+                                deviceName: matchedAlert?.device_name || null,
+                                serialNo: matchedAlert?.serial_no || null,
+                                reportedTime: matchedAlert?.reported_time || null,
+                                time: matchedAlert?.time || null,
+                              }
+                            }
+                          });
                         }}
                         style={{
                           cursor: "pointer",
