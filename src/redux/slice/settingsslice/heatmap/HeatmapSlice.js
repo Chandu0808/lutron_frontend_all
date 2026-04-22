@@ -113,6 +113,31 @@ export const updateAreaScene = createAsyncThunk(
   }
 );
 
+const formatRenameAreaError = (err) => {
+  const detail = err.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => item?.msg || JSON.stringify(item));
+    return parts.filter(Boolean).join("; ") || err.message;
+  }
+  return err.response?.data?.message || err.message || "Failed to rename area";
+};
+
+export const renameArea = createAsyncThunk(
+  "heatmap/renameArea",
+  async ({ area_id, new_name }, { rejectWithValue }) => {
+    try {
+      const response = await BaseUrl.post("/area/rename", {
+        area_id,
+        new_name,
+      });
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(formatRenameAreaError(err));
+    }
+  }
+);
+
 // Add a new thunk for base floor data (without light status)
 export const fetchBaseFloorData = createAsyncThunk(
   "heatmap/fetchBaseFloorData",
@@ -412,6 +437,22 @@ const heatmapSlice = createSlice({
       .addCase(updateAreaScene.rejected, (state, action) => {
         // Handle error if needed
       });
+
+    builder.addCase(renameArea.fulfilled, (state, action) => {
+      const payload = action.payload;
+      if (!payload || payload.area_id == null || !payload.name) return;
+      const { area_id: renamedId, name } = payload;
+      if (state.areaStatus && state.areaStatus.area_id === renamedId) {
+        state.areaStatus.area_name = name;
+      }
+      if (state.heatmapData?.areas?.length) {
+        state.heatmapData.areas = state.heatmapData.areas.map((area) =>
+          (area.area_id || area.id) === renamedId
+            ? { ...area, name, area_name: name }
+            : area
+        );
+      }
+    });
 
     // Update zones by area
     builder

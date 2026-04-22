@@ -2,7 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
-  Box, CircularProgress, IconButton, Typography, Slider, Badge, Button, useMediaQuery, useTheme
+  Box,
+  CircularProgress,
+  IconButton,
+  Typography,
+  Slider,
+  Badge,
+  Button,
+  useMediaQuery,
+  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
 } from "@mui/material";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import ZoomOutIcon from "@mui/icons-material/ZoomOut";
@@ -31,6 +45,7 @@ import {
   updateZonesByArea,
   toggleAllZonesInArea,
   updateAreaScene,
+  renameArea,
   refreshAllHeatmapData,
   selectHeatmapLoading,
   optimisticallyUpdateAreaStatus,
@@ -42,6 +57,7 @@ import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import { BaseUrl } from '../../BaseUrl'
 import CloseIcon from "@mui/icons-material/Close";
 import SettingsIcon from "@mui/icons-material/Settings";
+import EditIcon from "@mui/icons-material/Edit";
 import Switch from "@mui/material/Switch";
 import PersonIcon from '@mui/icons-material/Person';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -218,6 +234,9 @@ const HeatMap = () => {
     return true;
   };
 
+  const canRenameArea = () =>
+    currentUserRole === "Superadmin" || currentUserRole === "Admin";
+
   // Responsive breakpoints - optimized for better coverage including ultra-wide screens
   const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // < 600px
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600px - 900px
@@ -284,8 +303,17 @@ const HeatMap = () => {
   const [lastOccupancyStatus, setLastOccupancyStatus] = useState({});
   const [lastEnergyStatus, setLastEnergyStatus] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [areaRenameOpen, setAreaRenameOpen] = useState(false);
+  const [areaRenameValue, setAreaRenameValue] = useState("");
+  const [areaRenameError, setAreaRenameError] = useState("");
+  const [areaRenameSaving, setAreaRenameSaving] = useState(false);
   const [shadesLocalValues, setShadesLocalValues] = useState({});
   const [shadesUpdating, setShadesUpdating] = useState(false);
+
+  useEffect(() => {
+    setAreaRenameOpen(false);
+    setAreaRenameError("");
+  }, [selectedAreaId]);
   const [fitScale, setFitScale] = useState(1.0); // Default fit scale - will be calculated
   const [filteredAreas, setFilteredAreas] = useState(heatmapData.areas || []);
 
@@ -1453,6 +1481,51 @@ const HeatMap = () => {
     a => (a.area_id || a.id) === selectedAreaId
   );
 
+  const getCurrentAreaDisplayName = () =>
+    areaStatus?.area_name || selectedAreaObj?.name || selectedAreaObj?.area_name || "Zone";
+
+  const openAreaRenameDialog = () => {
+    if (!canRenameArea()) return;
+    setAreaRenameError("");
+    setAreaRenameValue(getCurrentAreaDisplayName());
+    setAreaRenameOpen(true);
+  };
+
+  const closeAreaRenameDialog = () => {
+    setAreaRenameOpen(false);
+    setAreaRenameError("");
+    setAreaRenameSaving(false);
+  };
+
+  const handleAreaRenameSubmit = async () => {
+    const trimmed = areaRenameValue.trim();
+    if (!trimmed) {
+      setAreaRenameError("Name must not be empty.");
+      return;
+    }
+    if (trimmed.length > 512) {
+      setAreaRenameError("Name must be at most 512 characters.");
+      return;
+    }
+    const areaId = areaStatus?.area_id ?? selectedAreaObj?.area_id ?? selectedAreaObj?.id;
+    if (areaId == null || Number(areaId) < 1) {
+      setAreaRenameError("Unable to determine area.");
+      return;
+    }
+    setAreaRenameSaving(true);
+    setAreaRenameError("");
+    try {
+      await dispatch(
+        renameArea({ area_id: Number(areaId), new_name: trimmed })
+      ).unwrap();
+      closeAreaRenameDialog();
+    } catch (e) {
+      setAreaRenameError(typeof e === "string" ? e : "Failed to rename area");
+    } finally {
+      setAreaRenameSaving(false);
+    }
+  };
+
   const fetchSettingsApi = async (areaId) => {
     return {
       locked: false,
@@ -2043,21 +2116,50 @@ const HeatMap = () => {
                     buttonColor={buttonColor}
                   />
                 )}
-                <Typography
-                  fontWeight={400}
-                  fontSize={{ xs: 7, sm: 8, md: 9, lg: 10 }} // Further reduced font sizes
+                <Box
                   sx={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
                     minWidth: 0,
-                    maxWidth: '100%', // Ensure it doesn't exceed container
-                    lineHeight: 1.2, // Tighter line height
+                    flex: 1,
+                    gap: 0.25,
                   }}
                 >
-                  {areaStatus?.area_name || selectedAreaObj?.name || selectedAreaObj?.area_name || 'Zone'}
-                </Typography>
+                  <Typography
+                    fontWeight={400}
+                    fontSize={{ xs: 7, sm: 8, md: 9, lg: 10 }}
+                    sx={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      flex: 1,
+                      minWidth: 0,
+                      maxWidth: "100%",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {areaStatus?.area_name || selectedAreaObj?.name || selectedAreaObj?.area_name || "Zone"}
+                  </Typography>
+                  {canRenameArea() && (
+                    <IconButton
+                      size="small"
+                      onClick={openAreaRenameDialog}
+                      aria-label="Rename area"
+                      title="Rename area"
+                      sx={{
+                        flexShrink: 0,
+                        fontSize: { xs: 11, sm: 12, md: 13, lg: 14 },
+                        p: { xs: 0.15, sm: 0.2, md: 0.25 },
+                        color: "#222",
+                        bgcolor: "rgba(255,255,255,0.35)",
+                        borderRadius: 1,
+                        "&:hover": { bgcolor: "rgba(255,255,255,0.55)" },
+                      }}
+                    >
+                      <EditIcon sx={{ fontSize: "inherit" }} />
+                    </IconButton>
+                  )}
+                </Box>
               </Box>
 
               {/* Right side with icons */}
@@ -2874,6 +2976,45 @@ const HeatMap = () => {
             </Box>
           </Box>
         )}
+
+        <Dialog
+          open={areaRenameOpen}
+          onClose={areaRenameSaving ? undefined : closeAreaRenameDialog}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Rename area</DialogTitle>
+          <DialogContent>
+            {areaRenameError ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {areaRenameError}
+              </Alert>
+            ) : null}
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Area name"
+              fullWidth
+              value={areaRenameValue}
+              onChange={(e) => setAreaRenameValue(e.target.value)}
+              disabled={areaRenameSaving}
+              inputProps={{ maxLength: 512 }}
+              variant="outlined"
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeAreaRenameDialog} disabled={areaRenameSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAreaRenameSubmit}
+              variant="contained"
+              disabled={areaRenameSaving}
+            >
+              {areaRenameSaving ? "Saving..." : "Save"}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Area Settings Dialog */}
         <AreaSettingsDialog
