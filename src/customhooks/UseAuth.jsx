@@ -73,6 +73,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Sensors",
         "Manage Modules",
         "Alerts",
+        "Processors",
         "Help",
     ];
 
@@ -88,6 +89,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Sensors": "/manage-sensors",
         "Manage Modules": "/manage-modules",
         "Alerts": "/alerts",
+        "Processors": "/processors",
         "Help": "/create-help/",
     };
 
@@ -111,6 +113,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Floor' && 
             item !== 'Help' &&
             item !== 'Alerts' &&
+            item !== 'Processors' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
         );
@@ -135,6 +138,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Floor' && 
                 item !== 'Help' &&
                 item !== 'Alerts' &&
+                item !== 'Processors' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
             );
@@ -154,6 +158,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Floor' && 
                 item !== 'Help' &&
                 item !== 'Alerts' &&
+                item !== 'Processors' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
             );
@@ -175,6 +180,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Floor' &&
             item !== 'Help' &&
             item !== 'Alerts' &&
+            item !== 'Processors' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
         );

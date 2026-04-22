@@ -401,7 +401,9 @@ export default function TopbarComponent() {
                       location.pathname === "/manage-sensors" ||
                       location.pathname.startsWith("/manage-sensors/") ||
                       location.pathname === "/manage-modules" ||
-                      location.pathname.startsWith("/manage-modules/")
+                      location.pathname.startsWith("/manage-modules/") ||
+                      location.pathname === "/processors" ||
+                      location.pathname.startsWith("/processors/")
                     ));
                   return (
                     <Typography
@@ -830,7 +832,9 @@ export default function TopbarComponent() {
                 location.pathname === "/manage-sensors" ||
                 location.pathname.startsWith("/manage-sensors/") ||
                 location.pathname === "/manage-modules" ||
-                location.pathname.startsWith("/manage-modules/")
+                location.pathname.startsWith("/manage-modules/") ||
+                location.pathname === "/processors" ||
+                location.pathname.startsWith("/processors/")
               ));
             
             return (

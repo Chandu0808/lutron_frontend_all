@@ -10,6 +10,7 @@ export const SidebarItems = [
   "Manage Sensors",
   "Manage Modules",
   "Alerts",
+  "Processors",
   "Help",
 ];
 
@@ -26,6 +27,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       i !== 'Floor' && 
       i !== 'Help' &&
       i !== 'Alerts' &&
+      i !== 'Processors' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'
     );
@@ -45,6 +47,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
         i !== 'Floor' && 
         i !== 'Help' &&
         i !== 'Alerts' &&
+        i !== 'Processors' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
       );
@@ -59,6 +62,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
         i !== 'Floor' && 
         i !== 'Help' &&
         i !== 'Alerts' &&
+        i !== 'Processors' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
       );
@@ -74,6 +78,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       i !== 'Floor' && 
       i !== 'Help' &&
       i !== 'Alerts' &&
+      i !== 'Processors' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'
     );
