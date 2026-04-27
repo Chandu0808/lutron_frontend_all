@@ -53,10 +53,12 @@ const isSwitched = (type) => (type || '').toLowerCase() === 'switched';
 export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAreaStatus, canModifyDeviceSettings, canViewAreaSettings, canEditScene, currentUserRole, userProfile, selectedFloorId }) {
   const dispatch = useDispatch();
   const theme = useTheme();
-  const isSuperAdmin = typeof currentUserRole === 'string' && (
-    currentUserRole.toLowerCase().trim() === 'superadmin' ||
-    currentUserRole.toLowerCase().trim() === 'super admin'
-  );
+  const normalizedUserRole =
+    typeof currentUserRole === 'string' ? currentUserRole.toLowerCase().trim() : '';
+  const canAccessTuningSettings =
+    normalizedUserRole === 'superadmin' ||
+    normalizedUserRole === 'super admin' ||
+    normalizedUserRole === 'admin';
   
   // Responsive breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // < 600px
@@ -90,7 +92,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
   const [pendingOccupancy, setPendingOccupancy] = useState(false);
   const [justAppliedScene, setJustAppliedScene] = useState(false); // Flag to prevent re-initialization after save
 
-  // Tuning Settings (superadmin only): one selected zone + High End trim only
+  // Tuning Settings (superadmin and admin): one selected zone + High End trim only
   const [selectedTuningZoneId, setSelectedTuningZoneId] = useState(null);
   const [draftHighEndTrim, setDraftHighEndTrim] = useState('');
 
@@ -124,30 +126,30 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       setSelectedTuningZoneId(null);
       setDraftHighEndTrim('');
 
-      if (isSuperAdmin) {
+      if (canAccessTuningSettings) {
         dispatch(fetchTunningSettings(areaId));
       }
 
       setSelectedScene(null);
       setSceneZoneValues({});
     }
-  }, [open, areaId, dispatch, isSuperAdmin]);
+  }, [open, areaId, dispatch, canAccessTuningSettings]);
 
   // Pick a default zone once tuning data is loaded
   useEffect(() => {
-    if (!open || !isSuperAdmin) return;
+    if (!open || !canAccessTuningSettings) return;
     if (tuningZones && tuningZones.length > 0) {
       setSelectedTuningZoneId((prev) => prev ?? tuningZones[0].zone_id);
     }
-  }, [open, isSuperAdmin, tuningZones]);
+  }, [open, canAccessTuningSettings, tuningZones]);
 
   // Populate drafts when the user selects a zone
   useEffect(() => {
-    if (!open || !isSuperAdmin) return;
+    if (!open || !canAccessTuningSettings) return;
     const zone = tuningZones?.find((z) => Number(z.zone_id) === Number(selectedTuningZoneId));
     if (!zone) return;
     setDraftHighEndTrim(zone.high_end_trim ?? '');
-  }, [open, isSuperAdmin, tuningZones, selectedTuningZoneId]);
+  }, [open, canAccessTuningSettings, tuningZones, selectedTuningZoneId]);
 
   // Fetch and store area zones when the dialog opens.
   // This is important after backend reconciliation because `areaStatus.zones` can be temporarily stale.
@@ -912,7 +914,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
   };
 
   const handleSaveTuning = async () => {
-    if (!isSuperAdmin) return;
+    if (!canAccessTuningSettings) return;
     if (!selectedTuningZoneId) return;
 
     const trimmed = String(draftHighEndTrim ?? '').trim();
@@ -1298,8 +1300,8 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
               )}
             </Box>
 
-            {/* Tuning Settings (superadmin only): one selected zone + trim inputs */}
-            {isSuperAdmin && (
+            {/* Tuning Settings (superadmin and admin): one selected zone + trim inputs */}
+            {canAccessTuningSettings && (
               <Box sx={{ bgcolor: "#807864", borderRadius: "4px", p: "12px 12px", mt: 1 }}>
                 <Typography fontWeight={700} fontSize={15} mb={1} sx={{ color: "#fff" }}>
                   Tuning Settings
