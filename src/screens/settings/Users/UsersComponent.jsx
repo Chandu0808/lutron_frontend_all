@@ -25,7 +25,9 @@ import {
 import { useTheme } from "@mui/material/styles";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from "@mui/icons-material/Edit";
 import CreateUser from "../Users/CreateUser";
+import UpdateUser from "./UpdateUser";
 import {
   fetchUsers,
   deleteUser,
@@ -39,7 +41,6 @@ import {
 import { ConfirmDialog } from '../../../utils/FeedbackUI';
 import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems'
 import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../../customhooks/UseAuth'
-import { selectProfile } from '../../../redux/slice/auth/userlogin'
 
 export default function UsersComponent() {
   const theme = useTheme();
@@ -61,13 +62,14 @@ export default function UsersComponent() {
   const [displayUsers, setDisplayUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [openModal, setOpenModal] = useState(false);
+  const [editUser, setEditUser] = useState(null);
   
   // Add confirmation dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
 
-  // 3) Keep track of the previous value of openModal so we know "modal just closed"
-  const wasOpenRef = useRef(false);
+  const wasAnyModalOpenRef = useRef(false);
+  const anyUserModalOpen = openModal || Boolean(editUser);
 
   // 4) On mount, fetch users if we have a token
   useEffect(() => {
@@ -87,18 +89,17 @@ export default function UsersComponent() {
     }
   }, [apiUsers]);
 
-  // 6) Watch for "modal just closed → true→false" and re‐fetch users
+  // 6) When create or edit modal closes, refresh list (keeps permissions in sync with API)
   useEffect(() => {
-    // If previously open, now false: modal just closed
-    if (wasOpenRef.current && !openModal) {
+    if (wasAnyModalOpenRef.current && !anyUserModalOpen) {
       dispatch(fetchUsers());
     }
-    wasOpenRef.current = openModal;
-  }, [openModal, dispatch]);
+    wasAnyModalOpenRef.current = anyUserModalOpen;
+  }, [anyUserModalOpen, dispatch]);
 
   // 7) Filter users by searchTerm
   const filteredUsers = displayUsers.filter((u) =>
-    u.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (u.name || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Handle delete user
@@ -150,6 +151,9 @@ export default function UsersComponent() {
     // Only Superadmin and Admin can delete users
     return role === 'Superadmin' || role === 'Admin';
   };
+
+  const canUpdateUsers = () =>
+    role === "Superadmin" || role === "Admin";
   
   // Redirect if user doesn't have permission to view users - but wait for userProfile to load
   useEffect(() => {
@@ -327,6 +331,11 @@ export default function UsersComponent() {
               </Button>
 
               <CreateUser open={openModal} onClose={() => setOpenModal(false)} />
+              <UpdateUser
+                open={Boolean(editUser)}
+                user={editUser}
+                onClose={() => setEditUser(null)}
+              />
             </>
           )}
         </Box>
@@ -391,7 +400,7 @@ export default function UsersComponent() {
                   >
                     Assigned Floors
                   </TableCell>
-                  {canDeleteUsers() && (
+                  {canUpdateUsers() && (
                     <TableCell
                       sx={{
                         fontWeight: 600,
@@ -407,7 +416,7 @@ export default function UsersComponent() {
               <TableBody>
                 {filteredUsers.length === 0 ? (
                   <TableRow sx={{ backgroundColor: '#fff' }}>
-                    <TableCell colSpan={canDeleteUsers() ? 4 : 3} sx={{ textAlign: "center", py: 3 }}>
+                    <TableCell colSpan={canUpdateUsers() ? 4 : 3} sx={{ textAlign: "center", py: 3 }}>
                       <Typography sx={{ color: '#000' }}>
                         No users found.
                       </Typography>
@@ -487,30 +496,48 @@ export default function UsersComponent() {
                             );
                           })()}
                         </TableCell>
-                        {canDeleteUsers() && (
+                        {canUpdateUsers() && (
                           <TableCell sx={{ color: '#000', textAlign: 'center' }}>
-                            <Tooltip title="Delete User" arrow placement="top">
-                              <IconButton
-                                onClick={() => handleDeleteUser(user)}
-                                disabled={deleteLoading}
-                                sx={{
-                                  backgroundColor: '#1E1E1E',
-                                  color: '#fff',
-                                  borderRadius: '6px',
-                                  p: 1,
-                                  width: '34px',
-                                  height: '30px',
-                                  '&:hover': { backgroundColor: '#333' },
-                                  '&:disabled': { backgroundColor: '#666' }
-                                }}
-                              >
-                                {deleteLoading ? (
-                                  <CircularProgress size={16} color="inherit" />
-                                ) : (
-                                  <DeleteIcon />
-                                )}
-                              </IconButton>
-                            </Tooltip>
+                            <Box sx={{ display: 'inline-flex', gap: 1, justifyContent: 'center' }}>
+                              <Tooltip title="Edit User" arrow placement="top">
+                                <IconButton
+                                  onClick={() => setEditUser(user)}
+                                  sx={{
+                                    backgroundColor: '#1E1E1E',
+                                    color: '#fff',
+                                    borderRadius: '6px',
+                                    p: 1,
+                                    width: '34px',
+                                    height: '30px',
+                                    '&:hover': { backgroundColor: '#333' },
+                                  }}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete User" arrow placement="top">
+                                <IconButton
+                                  onClick={() => handleDeleteUser(user)}
+                                  disabled={deleteLoading}
+                                  sx={{
+                                    backgroundColor: '#1E1E1E',
+                                    color: '#fff',
+                                    borderRadius: '6px',
+                                    p: 1,
+                                    width: '34px',
+                                    height: '30px',
+                                    '&:hover': { backgroundColor: '#333' },
+                                    '&:disabled': { backgroundColor: '#666' }
+                                  }}
+                                >
+                                  {deleteLoading ? (
+                                    <CircularProgress size={16} color="inherit" />
+                                  ) : (
+                                    <DeleteIcon />
+                                  )}
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
                           </TableCell>
                         )}
                       </TableRow>

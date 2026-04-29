@@ -2,6 +2,7 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { BaseUrl } from "../../../BaseUrl";
+import { formatApiError } from "./user/usersSlice";
 
 // Thunk: create a new user 
 //   Expects payload: 
@@ -29,12 +30,7 @@ export const createUser = createAsyncThunk(
 
       return response.data;
     } catch (err) {
-      // 3) Bubble up the backend’s 422 or other error message
-      return rejectWithValue(
-        err.response?.data?.message ||
-        err.response?.statusText ||
-        err.message
-      );
+      return rejectWithValue(formatApiError(err));
     }
   }
 );

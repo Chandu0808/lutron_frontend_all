@@ -83,6 +83,40 @@ export const deleteUser = createAsyncThunk(
   }
 );
 
+export function formatApiError(err) {
+  const data = err.response?.data;
+  const detail = data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
+  }
+  if (typeof detail === "string") {
+    return detail;
+  }
+  return data?.message || err.response?.statusText || err.message;
+}
+
+export const updateUser = createAsyncThunk(
+  "users/updateUser",
+  async ({ userId, body }, { rejectWithValue }) => {
+    if (!userId || isNaN(Number(userId))) {
+      return rejectWithValue("Invalid user ID");
+    }
+    const token = localStorage.getItem("lutron");
+    if (!token) {
+      return rejectWithValue("Not logged in");
+    }
+    try {
+      const response = await BaseUrl.patch(`/users/${userId}`, body, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = response.data?.data ?? response.data;
+      return payload;
+    } catch (err) {
+      return rejectWithValue(formatApiError(err));
+    }
+  }
+);
+
 const usersSlice = createSlice({
   name: "users",
   initialState: {
@@ -92,12 +126,17 @@ const usersSlice = createSlice({
     error:     null,
     deleteLoading: false,
     deleteError: null,
+    updateLoading: false,
+    updateError: null,
 
   },
   reducers: {
     // Clear delete error
     clearDeleteError: (state) => {
       state.deleteError = null;
+    },
+    clearUpdateError: (state) => {
+      state.updateError = null;
     },
   },
   extraReducers: (builder) => {
@@ -134,11 +173,29 @@ const usersSlice = createSlice({
         state.deleteLoading = false;
         state.deleteError = action.payload || action.error.message;
 
+      })
+      .addCase(updateUser.pending, (state) => {
+        state.updateLoading = true;
+        state.updateError = null;
+      })
+      .addCase(updateUser.fulfilled, (state, action) => {
+        state.updateLoading = false;
+        const updated = action.payload;
+        if (updated && updated.id != null) {
+          const idx = state.usersList.findIndex((u) => u.id === updated.id);
+          if (idx >= 0) {
+            state.usersList[idx] = { ...state.usersList[idx], ...updated };
+          }
+        }
+      })
+      .addCase(updateUser.rejected, (state, action) => {
+        state.updateLoading = false;
+        state.updateError = action.payload || action.error.message;
       });
   },
 });
 
-export const { clearDeleteError } = usersSlice.actions;
+export const { clearDeleteError, clearUpdateError } = usersSlice.actions;
 export default usersSlice.reducer;
 
 // Selectors so components can read exactly what they need:
@@ -148,4 +205,6 @@ export const selectUsersLoading = (state) => state.users.loading;
 export const selectUsersError   = (state) => state.users.error;
 export const selectDeleteLoading = (state) => state.users.deleteLoading;
 export const selectDeleteError = (state) => state.users.deleteError;
+export const selectUpdateLoading = (state) => state.users.updateLoading;
+export const selectUpdateError = (state) => state.users.updateError;
 
