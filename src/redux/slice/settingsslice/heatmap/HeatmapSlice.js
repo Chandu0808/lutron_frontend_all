@@ -2,6 +2,12 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { BaseUrl } from "../../../../BaseUrl";
+import {
+  areaIdsMatch,
+  deriveLightStatusFromZoneUpdates,
+  normalizeLightStatus,
+  patchAreasLightStatus,
+} from "./heatmapMapSync";
 
 // Async Thunks
 export const fetchFloorMapData = createAsyncThunk(
@@ -332,16 +338,19 @@ const heatmapSlice = createSlice({
         state.areaStatusLoading = false;
         state.areaStatus = action.payload;
 
-        // Update all relevant fields for the area in the map
-        if (action.payload && action.payload.area_id && state.heatmapData.areas) {
-          state.heatmapData.areas = state.heatmapData.areas.map(area =>
-            area.area_id === action.payload.area_id
+        const payloadAreaId = action.payload?.area_id;
+        const mapLight = normalizeLightStatus(action.payload?.light_status);
+        if (payloadAreaId != null && state.heatmapData?.areas) {
+          state.heatmapData.areas = state.heatmapData.areas.map((area) =>
+            areaIdsMatch(area, payloadAreaId)
               ? {
                   ...area,
-                  occupancy_status: (action.payload.occupancy_status || '').toLowerCase().trim(),
-                  light_status: action.payload.light_status,
-                  // Only update energy_status if it's not already set from energy API
-                  energy_status: area.energy_status !== undefined ? area.energy_status : action.payload.energy_status,
+                  occupancy_status: (action.payload.occupancy_status || "").toLowerCase().trim(),
+                  light_status: mapLight ?? area.light_status,
+                  energy_status:
+                    area.energy_status !== undefined
+                      ? area.energy_status
+                      : action.payload.energy_status,
                   energy_consumption: action.payload.consumption,
                   energy_savings: action.payload.savings,
                 }
@@ -367,16 +376,16 @@ const heatmapSlice = createSlice({
           state.areaStatus.light_status = action.payload.light_status || state.areaStatus.light_status;
         }
         // Update heatmapData areas if they exist
-        if (state.heatmapData && state.heatmapData.areas) {
-          state.heatmapData.areas = state.heatmapData.areas.map(area => {
-            if (action.payload && action.payload.area_id === (area.area_id || area.id)) {
-              return {
-                ...area,
-                light_status: action.payload.light_status || area.light_status,
-              };
-            }
-            return area;
-          });
+        const toggleAreaId = action.meta?.arg?.areaId;
+        const toggleLight =
+          normalizeLightStatus(action.meta?.arg?.action) ||
+          normalizeLightStatus(action.payload?.light_status);
+        if (toggleAreaId != null && state.heatmapData?.areas && toggleLight) {
+          state.heatmapData.areas = patchAreasLightStatus(
+            state.heatmapData.areas,
+            toggleAreaId,
+            toggleLight
+          );
         }
       })
       .addCase(toggleAllZonesInArea.rejected, (state, action) => {
@@ -395,16 +404,14 @@ const heatmapSlice = createSlice({
           state.areaStatus.light_status = action.payload.light_status || state.areaStatus.light_status;
         }
         // Update heatmapData areas if they exist
-        if (state.heatmapData && state.heatmapData.areas) {
-          state.heatmapData.areas = state.heatmapData.areas.map(area => {
-            if (action.payload && action.payload.area_id === (area.area_id || area.id)) {
-              return {
-                ...area,
-                light_status: action.payload.light_status || area.light_status,
-              };
-            }
-            return area;
-          });
+        const lightAreaId = action.payload?.area_id;
+        const lightStatus = normalizeLightStatus(action.payload?.light_status);
+        if (lightAreaId != null && state.heatmapData?.areas && lightStatus) {
+          state.heatmapData.areas = patchAreasLightStatus(
+            state.heatmapData.areas,
+            lightAreaId,
+            lightStatus
+          );
         }
       })
       .addCase(updateAreaLightStatus.rejected, (state, action) => {
@@ -460,25 +467,19 @@ const heatmapSlice = createSlice({
         // Set loading state if needed
       })
       .addCase(updateZonesByArea.fulfilled, (state, action) => {
-        // Update areaStatus if it exists and matches the updated area
-        if (state.areaStatus && action.payload && action.payload.area_id === state.areaStatus.area_id) {
-          // Update zones in areaStatus if the response includes updated zones
-          if (action.payload.zones) {
+        const { areaId, zones } = action.meta?.arg || {};
+        if (state.areaStatus && areaId != null && state.areaStatus.area_id === areaId) {
+          if (action.payload?.zones) {
             state.areaStatus.zones = action.payload.zones;
           }
         }
-        // Update heatmapData areas if they exist
-        if (state.heatmapData && state.heatmapData.areas) {
-          state.heatmapData.areas = state.heatmapData.areas.map(area => {
-            if (action.payload && action.payload.area_id === (area.area_id || area.id)) {
-              return {
-                ...area,
-                // Update any relevant fields from the response
-                ...action.payload,
-              };
-            }
-            return area;
-          });
+        const optimistic = deriveLightStatusFromZoneUpdates(zones);
+        if (areaId != null && state.heatmapData?.areas && optimistic) {
+          state.heatmapData.areas = patchAreasLightStatus(
+            state.heatmapData.areas,
+            areaId,
+            optimistic
+          );
         }
       })
       .addCase(updateZonesByArea.rejected, (state, action) => {

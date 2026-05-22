@@ -53,6 +53,7 @@ import {
 } from '../../redux/slice/settingsslice/heatmap/HeatmapSlice';
 import { fetchActiveAlerts, selectAlerts } from '../../redux/slice/dashboard/alertsSlice';
 import { fetchSceneStatus } from '../../redux/slice/settingsslice/heatmap/areaSettingsSlice';
+import { maxFadeDelayMs } from '../../redux/slice/settingsslice/heatmap/heatmapMapSync';
 import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import { BaseUrl } from '../../BaseUrl'
 import CloseIcon from "@mui/icons-material/Close";
@@ -74,6 +75,11 @@ import { fetchApplicationTheme, fetchHeatMapTheme, selectApplicationTheme, selec
 import { UseAuth } from '../../customhooks/UseAuth'; // Add this import
 
 import { interpolateHexColor, arraylargest } from '../../utils/colorScale';
+import FOFPOverlay, { FOFPOverlayBoundary } from './FOFPOverlay';
+import {
+  findFofpZoneIndexInPanelList,
+  isFofpZonePanelHighlighted,
+} from './fofpZoneInteraction';
 
 
 const normalizeZoneType = (type) =>
@@ -286,6 +292,8 @@ const HeatMap = () => {
     return result;
   };
   const [selectedAreaId, setSelectedAreaId] = useState(null);
+  /** FOFP marker selection for sidebar zone highlight (zoneName matches panel zones). */
+  const [highlightedFofpZone, setHighlightedFofpZone] = useState(null);
   const [scenePage, setScenePage] = useState(0);
   const SCENES_PER_PAGE = isMobile ? 6 : isTablet ? 8 : 9;
   const [lightOn, setLightOn] = useState(areaStatus && areaStatus.light_status === "On");
@@ -314,6 +322,11 @@ const HeatMap = () => {
     setAreaRenameOpen(false);
     setAreaRenameError("");
   }, [selectedAreaId]);
+
+  const closeAreaPanel = () => {
+    setSelectedAreaId(null);
+    setHighlightedFofpZone(null);
+  };
   const [fitScale, setFitScale] = useState(1.0); // Default fit scale - will be calculated
   const [filteredAreas, setFilteredAreas] = useState(heatmapData.areas || []);
 
@@ -1004,6 +1017,30 @@ const HeatMap = () => {
     }
   }, [areaStatus, selectedAreaId, dispatch]);
 
+  // After FOFP click, jump zone pagination to the highlighted zone card.
+  useEffect(() => {
+    if (!highlightedFofpZone || !areaStatus?.zones?.length) return;
+    if (Number(areaStatus.area_id) !== Number(highlightedFofpZone.areaId)) return;
+
+    let zonesPerPage = ZONES_PER_PAGE;
+    if (is1440Screen || isUltraWide || is2560Screen) {
+      zonesPerPage = 4;
+    } else {
+      zonesPerPage = 2;
+    }
+
+    const idx = findFofpZoneIndexInPanelList(areaStatus.zones, highlightedFofpZone);
+    if (idx >= 0) {
+      setZonePage(Math.floor(idx / zonesPerPage));
+    }
+  }, [
+    areaStatus,
+    highlightedFofpZone,
+    is1440Screen,
+    isUltraWide,
+    is2560Screen,
+  ]);
+
   useEffect(() => {
     setZonePage(0);
   }, [selectedAreaId, areaStatus?.zones?.length]);
@@ -1212,7 +1249,47 @@ const HeatMap = () => {
     // Note: The useEffect will handle data fetching when selectedFloorId changes
   };
 
+  const handleFofpZoneClick = React.useCallback(
+    ({ zoneId, areaId, zoneName, lightLevel }) => {
+      if (areaId == null) return;
+      const highlight = {
+        areaId: Number(areaId),
+        zoneId: zoneId != null ? Number(zoneId) : null,
+        zoneName: zoneName || "",
+        lightLevel: lightLevel ?? null,
+      };
+      setHighlightedFofpZone(highlight);
+      setSelectedAreaId(Number(areaId));
+
+      const jumpToZonePage = (zones) => {
+        if (!zones?.length) return;
+        let zonesPerPage = ZONES_PER_PAGE;
+        if (is1440Screen || isUltraWide || is2560Screen) {
+          zonesPerPage = 4;
+        } else {
+          zonesPerPage = 2;
+        }
+        const idx = findFofpZoneIndexInPanelList(zones, highlight);
+        if (idx >= 0) {
+          setZonePage(Math.floor(idx / zonesPerPage));
+        }
+      };
+
+      if (
+        areaStatus?.area_id != null &&
+        Number(areaStatus.area_id) === highlight.areaId &&
+        areaStatus.zones?.length
+      ) {
+        jumpToZonePage(areaStatus.zones);
+      }
+
+      dispatch(fetchAreaStatus(Number(areaId)));
+    },
+    [dispatch, areaStatus, is1440Screen, isUltraWide, is2560Screen]
+  );
+
   const handleAreaClick = (area) => {
+    setHighlightedFofpZone(null);
     setSelectedAreaId(area.area_id || area.id);
     if (!area.area_id) {
       return;
@@ -1285,9 +1362,9 @@ const HeatMap = () => {
     const newStatus = areaStatus.light_status === 'On' ? 'Off' : 'On';
     try {
       await dispatch(toggleAllZonesInArea({ areaId: areaStatus.area_id, action: newStatus })).unwrap();
-      // Only refresh the specific area status since we're toggling all zones in this area
-      // This prevents other areas from showing as "updated" in logs
-      await dispatch(fetchAreaStatus(areaStatus.area_id));
+      await refreshMapLightAfterControlChange(areaStatus.area_id, [
+        { zone_type: 'Switched', switched_state: newStatus },
+      ]);
       await dispatch(fetchProcessors());
     } catch (e) {
       // Optionally show error
@@ -1335,6 +1412,19 @@ const HeatMap = () => {
       setInitialZoneValues(initial);
     }
   }, [areaStatus?.area_id]); // Only update when area changes
+
+  /** Re-fetch area + floor light_status so floorplan polygons match the control panel. */
+  async function refreshMapLightAfterControlChange(areaId, zoneUpdates = []) {
+    if (areaId == null) return;
+    const delayMs = maxFadeDelayMs(zoneUpdates);
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    await dispatch(fetchAreaStatus(areaId));
+    if (selectedFloorId && displayMode === 'Light') {
+      await dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
+    }
+  }
 
   async function handleApplyZones() {
     // Check if user has permission to update area status
@@ -1448,9 +1538,7 @@ const HeatMap = () => {
         zones: zonesToUpdate,
       })).unwrap();
 
-      // Only refresh the specific area status, not all heatmap data
-      // This prevents all zones from showing as "updated" in logs
-      await dispatch(fetchAreaStatus(selectedAreaId));
+      await refreshMapLightAfterControlChange(selectedAreaId, zonesToUpdate);
 
       // Update initial values after successful apply to track new baseline
       setInitialZoneValues(prev => {
@@ -1604,9 +1692,7 @@ const HeatMap = () => {
         zones: shadesToUpdate,
       })).unwrap();
 
-      // Only refresh the specific area status, not all heatmap data
-      // This prevents all zones from showing as "updated" in logs
-      await dispatch(fetchAreaStatus(areaStatus.area_id));
+      await refreshMapLightAfterControlChange(areaStatus.area_id, shadesToUpdate);
     } catch (e) {
       // Optionally show error
     } finally {
@@ -1870,7 +1956,11 @@ const HeatMap = () => {
                 hasActiveAlert={hasActiveAlert}
                 findAlertForArea={findAlertForArea}
                 navigate={navigate}
-
+                fofpEnabled={heatmapData?.fofp_enabled === true}
+                fofpPositions={heatmapData?.fofp_positions}
+                fofpConfig={heatmapData?.fofp_config}
+                onFofpZoneClick={handleFofpZoneClick}
+                highlightedFofpZone={highlightedFofpZone}
               />
             </Box>
 
@@ -2189,7 +2279,7 @@ const HeatMap = () => {
                 )}
                 <IconButton
                   size="small"
-                  onClick={() => setSelectedAreaId(null)}
+                  onClick={closeAreaPanel}
                   sx={{
                     fontSize: { xs: 12, sm: 14, md: 16, lg: 18 }, // Reduced icon sizes
                     p: { xs: 0.2, sm: 0.3, md: 0.4, lg: 0.5 } // Reduced padding
@@ -2445,8 +2535,7 @@ const HeatMap = () => {
                                     });
                                   }
 
-                                  // Refresh area status to update brightness/temperature values
-                                  await dispatch(fetchAreaStatus(areaStatus.area_id));
+                                  await refreshMapLightAfterControlChange(areaStatus.area_id);
                                 } catch (e) {
                                   console.error("Error activating scene:", e);
                                 }
@@ -2549,6 +2638,11 @@ const HeatMap = () => {
                                     key={zone.id}
                                     zone={zone}
                                     values={values}
+                                    highlighted={isFofpZonePanelHighlighted(
+                                      zone,
+                                      highlightedFofpZone,
+                                      areaStatus?.zones
+                                    )}
                                     onChange={(changed) => handleZoneValueChange(zone.id, changed)}
                                     disabled={zoneUpdating || !canUpdateAreaStatus()}
                                     isMobile={isMobile}
@@ -3104,7 +3198,13 @@ function MainAreaToggle({ isOn, onClick, isMobile, disabled = false, backgroundC
   );
 }
 
-function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet, isDesktop, isLargeScreen, is1440Screen, isUltraWide, is2560Screen, backgroundColor, contentColor, buttonColor }) {
+function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false, isMobile, isTablet, isDesktop, isLargeScreen, is1440Screen, isUltraWide, is2560Screen, backgroundColor, contentColor, buttonColor }) {
+  const highlightSx = highlighted
+    ? {
+        outline: "2px solid #1976d2",
+        boxShadow: "0 0 0 3px rgba(25, 118, 210, 0.35)",
+      }
+    : {};
   const isSwitchType = isSwitched(zone.type);
   const isWhitetuneType = isWhitening(zone.type);
   const isDimmedType = isDimmed(zone.type);
@@ -3132,6 +3232,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
           mb: 0.5,
           justifyContent: 'flex-start',
           boxSizing: 'border-box',
+          ...highlightSx,
         }}
       >
         <Typography
@@ -3224,6 +3325,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
           justifyContent: 'flex-start',
           position: 'relative',
           overflow: 'hidden',
+          ...highlightSx,
         }}>
           <Box sx={{
             display: 'flex',
@@ -3421,7 +3523,8 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
           maxWidth: { xs: 140, sm: 150, md: 160 },
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'flex-start'
+          justifyContent: 'flex-start',
+          ...highlightSx,
         }}>
           <Box sx={{
             display: 'flex',
@@ -3593,7 +3696,12 @@ function HeatmapPdfSvgViewer({
   highlightedAreaId,
   hasActiveAlert,
   findAlertForArea,
-  navigate
+  navigate,
+  fofpEnabled = false,
+  fofpPositions = null,
+  fofpConfig = null,
+  onFofpZoneClick = null,
+  highlightedFofpZone = null,
 }) {
 
 
@@ -4131,6 +4239,22 @@ function HeatmapPdfSvgViewer({
               );
             })}
           </svg>
+          {/* FOFP read-only overlay — props passed from HeatMap (heatmapData is not in scope here). */}
+          {fofpEnabled === true &&
+            Array.isArray(fofpPositions) &&
+            fofpPositions.length > 0 && (
+              <FOFPOverlayBoundary>
+                <FOFPOverlay
+                  enabled={fofpEnabled}
+                  positions={fofpPositions}
+                  config={fofpConfig}
+                  width={pageDims ? pageDims.width : A4_WIDTH}
+                  height={pageDims ? pageDims.height : A4_HEIGHT}
+                  onZoneClick={onFofpZoneClick}
+                  highlightedFofpZone={highlightedFofpZone}
+                />
+              </FOFPOverlayBoundary>
+            )}
         </Box>
       </Box>
     </Box>

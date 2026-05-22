@@ -197,6 +197,9 @@ BaseUrl.interceptors.response.use(
     
     // Don't redirect for change_password endpoint errors (let the component handle it)
     const isChangePasswordEndpoint = error.config?.url && error.config.url.includes('/auth/change_password');
+
+    // FOFP admin APIs: show errors in the settings UI instead of forcing login redirect
+    const isFofpEndpoint = error.config?.url && error.config.url.includes('/fofp/');
     
     // Don't redirect if we're already on the login page or change password page
     const isOnLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
@@ -214,7 +217,7 @@ BaseUrl.interceptors.response.use(
       error.response?.data?.message?.toLowerCase().includes('forbidden');
     
     // For Token-specific errors on protected endpoints, redirect IMMEDIATELY to login
-    if (isTokenError && !isPublicEndpoint && !isLoginEndpoint && !isChangePasswordEndpoint && !isOnLoginPage && !isOnChangePasswordPage) {
+    if (isTokenError && !isPublicEndpoint && !isLoginEndpoint && !isChangePasswordEndpoint && !isFofpEndpoint && !isOnLoginPage && !isOnChangePasswordPage) {
       // Redirect IMMEDIATELY on token failure
       redirectToLogin();
       // Return immediately to stop processing

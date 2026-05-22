@@ -53,6 +53,7 @@ import ProcessorsSettings from './screens/settings/processors/ProcessorsSettings
 
 
 const HeatMap = lazy(() => import('./screens/heatmap/HeatMap'));
+const FOFPComponent = lazy(() => import('./screens/settings/fofp/FOFPComponent'));
 const App = () => {
   const { theme } = useContext(ThemeContext);
   const dispatch = useDispatch();
@@ -150,6 +151,16 @@ const App = () => {
             <Route path="/manage-modules" element={<AuthGuard allowedRoles={["Superadmin"]}><ManageModules /></AuthGuard>} />
             <Route path="/alerts" element={<AuthGuard allowedRoles={["Superadmin"]}><AlertsComponent /></AuthGuard>} />
             <Route path="/processors" element={<AuthGuard allowedRoles={["Superadmin"]}><ProcessorsSettings /></AuthGuard>} />
+            <Route
+              path="/fofp"
+              element={
+                <AuthGuard allowedRoles={["Superadmin"]}>
+                  <Suspense fallback={<Box sx={{ display: 'flex', height: '50vh', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>}>
+                    <FOFPComponent />
+                  </Suspense>
+                </AuthGuard>
+              }
+            />
 
 
           </Route>

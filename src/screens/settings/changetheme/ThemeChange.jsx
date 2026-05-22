@@ -20,6 +20,17 @@ import { Snackbar, Alert } from '@mui/material';
 import { ThemeContext } from '../theme/ThemeContext';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
+import {
+    fetchFofpConfig,
+    updateFofpConfig,
+    selectFofpConfig,
+    selectFofpConfigError,
+} from '../../../redux/slice/fofp/fofpSlice';
+import {
+    DEFAULT_FOFP_MARKER_COLOR,
+    normalizeFofpHex,
+    resolveFofpThemePickerColor,
+} from '../../heatmap/fofpColorUtils';
 
 const ThemeChange = () => {
     const normalizeColor = (color) => {
@@ -88,6 +99,13 @@ const ThemeChange = () => {
     
     const [activeThemeTab, setActiveThemeTab] = useState('Background');
     const [activeHeatmapTab, setActiveHeatmapTab] = useState('Light');
+    const [activeFofpTab, setActiveFofpTab] = useState('FOFP');
+    const fofpConfig = useSelector(selectFofpConfig);
+    const fofpConfigError = useSelector(selectFofpConfigError);
+    const [fofpColorMap, setFofpColorMap] = useState({
+        FOFP: DEFAULT_FOFP_MARKER_COLOR,
+    });
+    const [selectedFofpColor, setSelectedFofpColor] = useState(DEFAULT_FOFP_MARKER_COLOR);
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
         dispatch(getLutronDataClient());
@@ -109,7 +127,10 @@ const ThemeChange = () => {
         if (!apibgImage || !apibgImage.background_image) {
             dispatch(fetchBackgroundImage());
         }
-    }, [dispatch, appTheme, heatMapTheme, apibgImage]);
+        if (!fofpConfig) {
+            dispatch(fetchFofpConfig());
+        }
+    }, [dispatch, appTheme, heatMapTheme, apibgImage, fofpConfig]);
     useEffect(() => {
         if (appTheme?.application_theme) {
             const { background, content, button } = appTheme.application_theme;
@@ -135,6 +156,14 @@ const ThemeChange = () => {
             setSelectedHeatmapColor(normalizedHeatmap[activeHeatmapTab] || '#ffffff');
         }
     }, [appTheme, heatMapTheme]);
+
+    useEffect(() => {
+        if (fofpConfig?.marker_color) {
+            const hex = normalizeFofpHex(fofpConfig.marker_color);
+            setFofpColorMap({ FOFP: hex });
+            setSelectedFofpColor(hex);
+        }
+    }, [fofpConfig?.marker_color]);
     useEffect(() => {
         if (apibgImage) {
             setBackgroundImage(apibgImage.background_image);
@@ -169,6 +198,21 @@ const ThemeChange = () => {
             }
         } catch (error) {
             // Optionally handle error feedback here
+        }
+    };
+
+    const handleFofpColorSave = async () => {
+        const color = resolveFofpThemePickerColor(fofpColorMap.FOFP);
+        try {
+            const saved = await dispatch(updateFofpConfig({ marker_color: color })).unwrap();
+            const hex = normalizeFofpHex(saved?.marker_color || color);
+            setFofpColorMap({ FOFP: hex });
+            setSelectedFofpColor(hex);
+            setSnackbarMessage('FOFP marker color saved successfully.');
+            setSnackbarOpen(true);
+        } catch {
+            setSnackbarMessage('Failed to save FOFP marker color.');
+            setSnackbarOpen(true);
         }
     };
 
@@ -456,6 +500,60 @@ const ThemeChange = () => {
                                     className="save-button"
                                     onClick={handleHeatmapSave}
                                     sx={{ backgroundColor: dynamicButtonColor, color: '#fff', fontWeight: 'bold', px: 4, py: 1, borderRadius: 1 }}
+                                >
+                                    Save
+                                </Button>
+                            </Box>
+                        </Box>
+                    </Grid>
+
+                    {/* FOFP marker color (global overlay) */}
+                    <Grid size={{ xs: 12, md: 5 }} sx={{ ml: 2 }}>
+                        <Box
+                            className="color-picker-card"
+                            sx={{ backgroundColor: 'white', padding: '1em', borderRadius: '1em' }}
+                            data-testid="fofp-theme-color-card"
+                        >
+                            {renderTabs(
+                                ['FOFP'],
+                                activeFofpTab,
+                                setActiveFofpTab,
+                                fofpColorMap,
+                                setSelectedFofpColor
+                            )}
+                            {fofpConfigError && (
+                                <Typography
+                                    variant="caption"
+                                    color="error"
+                                    sx={{ display: 'block', mb: 1 }}
+                                    data-testid="fofp-theme-config-error"
+                                >
+                                    {fofpConfigError}
+                                </Typography>
+                            )}
+                            <HexColorPicker
+                                colorMap={fofpColorMap}
+                                setColorMap={setFofpColorMap}
+                                selectedColor={selectedFofpColor}
+                                setSelectedColor={setSelectedFofpColor}
+                                activeTarget={activeFofpTab}
+                                width={200}
+                                height={220}
+                                hexRadius={8}
+                            />
+                            <Box mt={2} display="flex" justifyContent="center">
+                                <Button
+                                    className="save-button"
+                                    onClick={handleFofpColorSave}
+                                    data-testid="fofp-theme-color-save"
+                                    sx={{
+                                        backgroundColor: dynamicButtonColor,
+                                        color: '#fff',
+                                        fontWeight: 'bold',
+                                        px: 4,
+                                        py: 1,
+                                        borderRadius: 1,
+                                    }}
                                 >
                                     Save
                                 </Button>

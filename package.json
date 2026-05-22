@@ -54,6 +54,12 @@
       "react-app/jest"
     ]
   },
+  "jest": {
+    "moduleNameMapper": {
+      "^canvas$": "<rootDir>/__mocks__/canvas.js",
+      "^canvas/(.*)$": "<rootDir>/__mocks__/canvas.js"
+    }
+  },
   "browserslist": {
     "production": [
       ">0.2%",

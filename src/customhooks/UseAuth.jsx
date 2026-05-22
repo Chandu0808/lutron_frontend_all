@@ -74,6 +74,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Modules",
         "Alerts",
         "Processors",
+        "FOFP",
         "Help",
     ];
 
@@ -90,6 +91,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Modules": "/manage-modules",
         "Alerts": "/alerts",
         "Processors": "/processors",
+        "FOFP": "/fofp",
         "Help": "/create-help/",
     };
 
@@ -107,13 +109,14 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         return result;
     } else if (role === 'Admin') {
         // Admin can see Home, Theme, Manage Area Groups, Area Size & Load, Email Server, Users
-        // Cannot see: Rename Widget, Floor, Help, Manage Sensors, Manage Modules, Alerts
+        // Cannot see: Rename Widget, Floor, Help, FOFP, Manage Sensors, Manage Modules, Alerts
         const adminItems = allSidebarItems.filter(item => 
             item !== 'Rename Widget' && 
             item !== 'Floor' && 
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
         );
@@ -129,7 +132,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         
         if (hasMonitorControlEdit) {
             // Operator-Monitor-Control-and-Edit: Can see Manage Area Groups, Area Size & Load, Users
-            // Hidden: Home, Theme, Rename Widget, Email Server, Floor, Help, Manage Sensors, Manage Modules, Alerts
+            // Hidden: Home, Theme, Rename Widget, Email Server, Floor, Help, FOFP, Manage Sensors, Manage Modules, Alerts
             const operatorItems = allSidebarItems.filter(item => 
                 item !== 'Home' && 
                 item !== 'Theme' && 
@@ -139,6 +142,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
             );
@@ -149,7 +153,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             return result;
         } else {
             // Other Operators: Can only see Manage Area Groups, Area Size & Load, Users
-            // Hidden: Home, Theme, Rename Widget, Email Server, Floor, Help, Manage Sensors, Manage Modules, Alerts
+            // Hidden: Home, Theme, Rename Widget, Email Server, Floor, Help, FOFP, Manage Sensors, Manage Modules, Alerts
             const operatorItems = allSidebarItems.filter(item => 
                 item !== 'Home' && 
                 item !== 'Theme' && 
@@ -159,6 +163,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
             );
@@ -171,7 +176,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
     } else {
         // Default: Operator (any type) can only see restricted items based on RBAC definitions
         // From image: Operators can see Manage Area Groups, Area Size & Load, Users, Help
-        // Hidden: Home, Theme, Rename Widget, Email Server, Floor, Manage Sensors, Manage Modules, Alerts
+        // Hidden: Home, Theme, Rename Widget, Email Server, Floor, FOFP, Manage Sensors, Manage Modules, Alerts
         const operatorItems = allSidebarItems.filter(item => 
             item !== 'Home' && 
             item !== 'Theme' && 
@@ -181,6 +186,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
         );
