@@ -18,3 +18,14 @@ export {
   getRingCentroid,
   clampPointToRings,
 } from "./containment";
+export {
+  getMarkerOutlinePoints,
+  isMarkerContainedInRings,
+  isMarkerSizeContained,
+  clampHalfAxesToArea,
+  clampMarkerSizePatchToArea,
+  clampMarkerSizeForShapeChange,
+  findLargestContainedHalfAxes,
+  hasValidAreaRings,
+  sampleEllipseBoundary,
+} from "./markerContainment";

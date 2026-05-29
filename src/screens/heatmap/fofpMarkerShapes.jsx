@@ -26,11 +26,31 @@ export const resolveFofpShape = (shape) => {
   return FOFP_KNOWN_SHAPES.has(trimmed) ? trimmed : FOFP_FALLBACK_SHAPE;
 };
 
-export const clampFofpMarkerSize = (raw, fallback = FOFP_DEFAULT_MARKER_SIZE) => {
+/** Per-zone / layout sizes: minimum only (no global max). */
+export const clampFofpMarkerSizeMin = (
+  raw,
+  fallback = FOFP_DEFAULT_MARKER_SIZE
+) => {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
-  return Math.max(FOFP_MIN_MARKER_SIZE, Math.min(FOFP_MAX_MARKER_SIZE, Math.round(n)));
+  return Math.max(FOFP_MIN_MARKER_SIZE, Math.round(n));
 };
+
+/** Global config default marker_size: keeps legacy 4–20 cap. */
+export const clampFofpMarkerConfigSize = (
+  raw,
+  fallback = FOFP_DEFAULT_MARKER_SIZE
+) => {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(
+    FOFP_MIN_MARKER_SIZE,
+    Math.min(FOFP_MAX_MARKER_SIZE, Math.round(n))
+  );
+};
+
+/** @deprecated Use clampFofpMarkerSizeMin for layout; clampFofpMarkerConfigSize for config. */
+export const clampFofpMarkerSize = clampFofpMarkerSizeMin;
 
 export const calculateFofpFinalMarkerSize = (
   markerShapeSize,
@@ -39,10 +59,10 @@ export const calculateFofpFinalMarkerSize = (
   const markerSize =
     markerShapeSize == null
       ? FOFP_DEFAULT_MARKER_SIZE
-      : clampFofpMarkerSize(markerShapeSize);
-  const globalSize = clampFofpMarkerSize(globalMarkerSize);
+      : clampFofpMarkerSizeMin(markerShapeSize);
+  const globalSize = clampFofpMarkerConfigSize(globalMarkerSize);
   const globalScale = globalSize / FOFP_DEFAULT_MARKER_SIZE;
-  return clampFofpMarkerSize(markerSize * globalScale);
+  return clampFofpMarkerSizeMin(markerSize * globalScale);
 };
 
 /** Per-zone shape: use stored marker_shape when set, else global default. */
@@ -113,9 +133,9 @@ export const resolveFofpMarkerSize = (
   globalMarkerSize = FOFP_DEFAULT_MARKER_SIZE
 ) => {
   if (positionSize != null && Number.isFinite(Number(positionSize))) {
-    return clampFofpMarkerSize(positionSize);
+    return clampFofpMarkerSizeMin(positionSize);
   }
-  return clampFofpMarkerSize(globalMarkerSize);
+  return clampFofpMarkerConfigSize(globalMarkerSize);
 };
 
 /**
@@ -132,11 +152,11 @@ export const FOFPMarkerShape = React.memo(function FOFPMarkerShape({
 }) {
   const rawRx = Number(size);
   const rx = Number.isFinite(rawRx) && rawRx > 0
-    ? clampFofpMarkerSize(rawRx)
+    ? clampFofpMarkerSizeMin(rawRx)
     : FOFP_DEFAULT_MARKER_SIZE;
   const rawRy = sizeY != null ? Number(sizeY) : rx;
   const ry = Number.isFinite(rawRy) && rawRy > 0
-    ? clampFofpMarkerSize(rawRy)
+    ? clampFofpMarkerSizeMin(rawRy)
     : rx;
   const resolved = resolveFofpShape(shape);
 

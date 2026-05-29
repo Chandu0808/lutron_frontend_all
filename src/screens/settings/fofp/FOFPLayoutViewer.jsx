@@ -16,7 +16,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import { Document, Page, pdfjs } from "react-pdf";
 import {
-  clampFofpMarkerSize,
+  clampFofpMarkerConfigSize,
   FOFPMarkerShape,
   FOFP_DEFAULT_MARKER_SIZE,
   resolveFofpMarkerShape,
@@ -135,7 +135,7 @@ const FOFPLayoutViewer = ({
   const areaStroke = alpha(theme.palette.primary.main, 0.6);
   const areaFill = alpha(theme.palette.primary.main, 0.06);
   const resolvedShape = resolveFofpShape(markerShape);
-  const resolvedSize = clampFofpMarkerSize(markerSize);
+  const resolvedSize = clampFofpMarkerConfigSize(markerSize);
   const previewBaseColor = normalizeFofpHex(
     markerBaseColor || DEFAULT_FOFP_MARKER_COLOR
   );
@@ -146,6 +146,7 @@ const FOFPLayoutViewer = ({
   const [isPanning, setIsPanning] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [resizingZoneId, setResizingZoneId] = useState(null);
+  const [liveResizePatch, setLiveResizePatch] = useState(null);
   const [cullRevision, setCullRevision] = useState(0);
 
   const svgRef = useRef(null);
@@ -253,14 +254,18 @@ const FOFPLayoutViewer = ({
   });
 
   const {
-    registerResizeOverlay,
     handleResizeHandlePointerDown,
     endResizeMode,
+    clampStylePatchToArea,
+    canResizeZone,
   } = useMarkerResizeSession({
     isEditing,
+    areaRingsById,
     positionsByZoneId,
     resolvedSize,
+    resolvedShape,
     onMarkerStyleChange,
+    onLiveResizePatch: setLiveResizePatch,
     clientPointToSvg,
     resizingZoneId,
     setResizingZoneId,
@@ -352,20 +357,25 @@ const FOFPLayoutViewer = ({
     ? positionsByZoneId.get(Number(contextMenu.zoneId))
     : null;
 
-  const resizingPosition =
+  const resizingPositionRaw =
     resizingZoneId != null
       ? positionsByZoneId.get(Number(resizingZoneId))
       : null;
+  const resizingPosition =
+    resizingPositionRaw && liveResizePatch
+      ? { ...resizingPositionRaw, ...liveResizePatch }
+      : resizingPositionRaw;
 
   const handleStartResize = useCallback(
     (zoneId) => {
       const id = zoneId ?? contextMenu?.zoneId;
       if (id == null) return;
+      if (!canResizeZone(id)) return;
       setResizingZoneId(Number(id));
       setContextMenu(null);
       if (typeof onZoneSelect === "function") onZoneSelect(id);
     },
-    [contextMenu?.zoneId, onZoneSelect]
+    [canResizeZone, contextMenu?.zoneId, onZoneSelect]
   );
 
   const handlePdfLoadSuccess = useCallback((page) => {
@@ -653,7 +663,10 @@ const FOFPLayoutViewer = ({
 
             {resizingPosition && isEditing ? (() => {
               const p = resizingPosition;
-              const { halfX, halfY } = resolveFofpMarkerHalfAxes(p, resolvedSize);
+              const { halfX, halfY } = resolveFofpMarkerHalfAxes(
+                p,
+                resolvedSize
+              );
               const markerShape = resolveFofpMarkerShape(
                 p.marker_shape,
                 resolvedShape
@@ -665,7 +678,6 @@ const FOFPLayoutViewer = ({
               });
               return (
                 <g
-                  ref={registerResizeOverlay}
                   data-fofp-resize-chrome
                   data-testid={`fofp-marker-${p.zone_id}-resize-top`}
                 >
@@ -732,9 +744,14 @@ const FOFPLayoutViewer = ({
         markerShape={contextTarget?.marker_shape ?? resolvedShape}
         onClose={() => setContextMenu(null)}
         onShapeChange={(shape) => {
-          if (contextMenu?.zoneId != null && onMarkerStyleChange) {
-            onMarkerStyleChange(contextMenu.zoneId, { marker_shape: shape });
-          }
+          if (contextMenu?.zoneId == null || !onMarkerStyleChange) return;
+          const patch = clampStylePatchToArea(contextMenu.zoneId, {
+            marker_shape: shape,
+          });
+          onMarkerStyleChange(contextMenu.zoneId, {
+            marker_shape: shape,
+            ...patch,
+          });
         }}
         onStartResize={handleStartResize}
       />

@@ -1,9 +1,9 @@
 import {
-  clampFofpMarkerSize,
+  clampFofpMarkerSizeMin,
   FOFP_MIN_MARKER_SIZE,
-  FOFP_MAX_MARKER_SIZE,
 } from "../../heatmap/fofpMarkerShapes";
 import { buildMarkerSizePatch } from "../../heatmap/fofpMarkerDimensions";
+import { clampMarkerSizePatchToArea } from "../../../features/fofp/geometry/markerContainment";
 
 /** Corner handles: uniform scale (preserve aspect). */
 export const FOFP_CORNER_HANDLES = ["nw", "ne", "sw", "se"];
@@ -20,7 +20,7 @@ export const isStretchResizeHandle = (id) => FOFP_STRETCH_HANDLES.includes(id);
 /** Extra space between marker shape and dashed resize box (SVG units). */
 export const RESIZE_CHROME_PADDING = 10;
 
-const clampHalf = (v) => clampFofpMarkerSize(v);
+const clampHalf = (v) => clampFofpMarkerSizeMin(v);
 
 /**
  * Uniform resize from corner: scale both axes by the same factor (aspect preserved).
@@ -110,9 +110,9 @@ export const markerStretchFromEdge = (
 };
 
 /**
- * Apply resize drag for any handle id.
+ * Raw resize from handle (min size only; no area clamp).
  */
-export const markerResizeFromHandle = (
+export const markerResizeFromHandleRaw = (
   handleId,
   svgX,
   svgY,
@@ -144,6 +144,44 @@ export const markerResizeFromHandle = (
     );
   }
   return buildMarkerSizePatch(halfW, halfH);
+};
+
+/**
+ * Resize from handle with polygon containment (binary-search clamp).
+ */
+export const markerResizeFromHandle = (
+  handleId,
+  svgX,
+  svgY,
+  centerX,
+  centerY,
+  halfW,
+  halfH,
+  {
+    shape,
+    rings,
+    lastValidHalfX,
+    lastValidHalfY,
+  } = {}
+) => {
+  const rawPatch = markerResizeFromHandleRaw(
+    handleId,
+    svgX,
+    svgY,
+    centerX,
+    centerY,
+    halfW,
+    halfH
+  );
+  return clampMarkerSizePatchToArea({
+    shape,
+    cx: centerX,
+    cy: centerY,
+    patch: rawPatch,
+    lastValidHalfX,
+    lastValidHalfY,
+    rings,
+  });
 };
 
 /** Padding around marker so handles sit outside the visible shape. */
@@ -214,4 +252,4 @@ export const RESIZE_HANDLE_HIT_SIZE = 10;
 /** Screen offset for context menu below-right of anchor point. */
 export const CONTEXT_MENU_OFFSET_PX = 14;
 
-export { FOFP_MIN_MARKER_SIZE, FOFP_MAX_MARKER_SIZE };
+export { FOFP_MIN_MARKER_SIZE };

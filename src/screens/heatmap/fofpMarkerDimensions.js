@@ -3,7 +3,7 @@
  */
 
 import {
-  clampFofpMarkerSize,
+  clampFofpMarkerSizeMin,
   FOFP_DEFAULT_MARKER_SIZE,
 } from "./fofpMarkerShapes";
 
@@ -12,13 +12,13 @@ export const resolveFofpMarkerHalfAxes = (
   position,
   globalMarkerSize = FOFP_DEFAULT_MARKER_SIZE
 ) => {
-  const base = clampFofpMarkerSize(
+  const base = clampFofpMarkerSizeMin(
     position?.shape_size != null ? position.shape_size : globalMarkerSize
   );
-  const halfX = clampFofpMarkerSize(
+  const halfX = clampFofpMarkerSizeMin(
     position?.shape_size_x != null ? position.shape_size_x : base
   );
-  const halfY = clampFofpMarkerSize(
+  const halfY = clampFofpMarkerSizeMin(
     position?.shape_size_y != null ? position.shape_size_y : base
   );
   return {
@@ -30,8 +30,8 @@ export const resolveFofpMarkerHalfAxes = (
 
 /** Patch object for onMarkerStyleChange after resize. */
 export const buildMarkerSizePatch = (halfX, halfY) => {
-  const hx = clampFofpMarkerSize(halfX);
-  const hy = clampFofpMarkerSize(halfY);
+  const hx = clampFofpMarkerSizeMin(halfX);
+  const hy = clampFofpMarkerSizeMin(halfY);
   return {
     shape_size_x: hx,
     shape_size_y: hy,

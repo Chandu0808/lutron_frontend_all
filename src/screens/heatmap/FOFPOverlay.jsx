@@ -17,7 +17,7 @@ import {
 } from "./fofpStatusStyles";
 import { resolveFofpMarkerHalfAxes } from "./fofpMarkerDimensions";
 import {
-  clampFofpMarkerSize,
+  clampFofpMarkerConfigSize,
   FOFPMarkerShape,
   FOFP_DEFAULT_MARKER_SIZE,
   FOFP_FALLBACK_SHAPE,
@@ -279,7 +279,7 @@ const FOFPOverlay = ({
   if (!isFiniteNum(w) || !isFiniteNum(h) || w <= 0 || h <= 0) return null;
 
   const configShape = resolveFofpShape(config && config.shape);
-  const globalMarkerSize = clampFofpMarkerSize(
+  const globalMarkerSize = clampFofpMarkerConfigSize(
     config && config.marker_size,
     FOFP_DEFAULT_MARKER_SIZE
   );

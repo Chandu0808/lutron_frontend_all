@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useRef } from "react";
 import { markerResizeFromHandle } from "../../../../screens/settings/fofp/fofpMarkerResize";
 import { resolveFofpMarkerHalfAxes } from "../../../../screens/heatmap/fofpMarkerDimensions";
+import { resolveFofpMarkerShape } from "../../../../screens/heatmap/fofpMarkerShapes";
+import {
+  clampMarkerSizeForShapeChange,
+  clampMarkerSizePatchToArea,
+  hasValidAreaRings,
+} from "../../geometry/markerContainment";
 
 /**
- * Ephemeral resize: RAF-batched DOM preview, commit patch on pointerup.
+ * Ephemeral resize: RAF-batched preview, commit patch on pointerup.
  */
 export const useMarkerResizeSession = ({
   isEditing,
+  areaRingsById,
   positionsByZoneId,
   resolvedSize,
+  resolvedShape,
   onMarkerStyleChange,
+  onLiveResizePatch,
   clientPointToSvg,
   resizingZoneId,
   setResizingZoneId,
@@ -17,45 +26,6 @@ export const useMarkerResizeSession = ({
   const resizeDragRef = useRef(null);
   const livePatchRef = useRef(null);
   const resizeRafRef = useRef(null);
-  const resizeOverlayRef = useRef(null);
-
-  const registerResizeOverlay = useCallback((el) => {
-    resizeOverlayRef.current = el;
-  }, []);
-
-  const applyResizeOverlayPatch = useCallback((pos, patch) => {
-    const root = resizeOverlayRef.current;
-    if (!root || !pos || !patch) return;
-    const cx = Number(pos.x);
-    const cy = Number(pos.y);
-    const halfX =
-      patch.shape_size_x != null ? Number(patch.shape_size_x) : null;
-    const halfY =
-      patch.shape_size_y != null ? Number(patch.shape_size_y) : null;
-    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
-    const shape = root.querySelector("[data-fofp-resize-shape]");
-    const ring = root.querySelector("[data-fofp-resize-ring]");
-    if (shape && halfX != null && halfY != null) {
-      const tag = shape.tagName?.toLowerCase();
-      if (tag === "circle") {
-        shape.setAttribute("r", String(Math.max(halfX, halfY)));
-      } else if (tag === "ellipse") {
-        shape.setAttribute("rx", String(halfX));
-        shape.setAttribute("ry", String(halfY));
-      } else if (tag === "rect") {
-        shape.setAttribute("x", String(cx - halfX));
-        shape.setAttribute("y", String(cy - halfY));
-        shape.setAttribute("width", String(halfX * 2));
-        shape.setAttribute("height", String(halfY * 2));
-      }
-    }
-    if (ring && halfX != null && halfY != null) {
-      ring.setAttribute("cx", String(cx));
-      ring.setAttribute("cy", String(cy));
-      ring.setAttribute("rx", String(halfX + 3));
-      ring.setAttribute("ry", String(halfY + 3));
-    }
-  }, []);
 
   const endResizeMode = useCallback(() => {
     resizeDragRef.current = null;
@@ -64,8 +34,11 @@ export const useMarkerResizeSession = ({
       window.cancelAnimationFrame(resizeRafRef.current);
       resizeRafRef.current = null;
     }
+    if (typeof onLiveResizePatch === "function") {
+      onLiveResizePatch(null);
+    }
     setResizingZoneId(null);
-  }, [setResizingZoneId]);
+  }, [onLiveResizePatch, setResizingZoneId]);
 
   /** End active handle drag only; keep resize chrome until user clicks away. */
   const commitResize = useCallback(() => {
@@ -77,10 +50,13 @@ export const useMarkerResizeSession = ({
       window.cancelAnimationFrame(resizeRafRef.current);
       resizeRafRef.current = null;
     }
+    if (typeof onLiveResizePatch === "function") {
+      onLiveResizePatch(null);
+    }
     if (drag && patch && typeof onMarkerStyleChange === "function") {
       onMarkerStyleChange(drag.zoneId, patch);
     }
-  }, [onMarkerStyleChange]);
+  }, [onLiveResizePatch, onMarkerStyleChange]);
 
   useEffect(() => {
     const onPointerMove = (e) => {
@@ -96,6 +72,8 @@ export const useMarkerResizeSession = ({
         const pos = positionsByZoneId.get(Number(active.zoneId));
         if (!pos) return;
         const { halfX, halfY } = resolveFofpMarkerHalfAxes(pos, resolvedSize);
+        const rings = areaRingsById?.get(Number(pos.area_id));
+        const shape = resolveFofpMarkerShape(pos.marker_shape, resolvedShape);
         const patch = markerResizeFromHandle(
           active.handleId,
           pt.x,
@@ -103,13 +81,20 @@ export const useMarkerResizeSession = ({
           pos.x,
           pos.y,
           halfX,
-          halfY
+          halfY,
+          {
+            shape,
+            rings,
+            lastValidHalfX: active.lastValidHalfX,
+            lastValidHalfY: active.lastValidHalfY,
+          }
         );
+        active.lastValidHalfX = patch.shape_size_x;
+        active.lastValidHalfY = patch.shape_size_y;
         livePatchRef.current = patch;
-        applyResizeOverlayPatch(
-          { ...pos, ...patch },
-          patch
-        );
+        if (typeof onLiveResizePatch === "function") {
+          onLiveResizePatch(patch);
+        }
       });
     };
 
@@ -128,10 +113,12 @@ export const useMarkerResizeSession = ({
       if (resizeRafRef.current != null) window.cancelAnimationFrame(resizeRafRef.current);
     };
   }, [
-    applyResizeOverlayPatch,
+    areaRingsById,
     clientPointToSvg,
     commitResize,
+    onLiveResizePatch,
     positionsByZoneId,
+    resolvedShape,
     resolvedSize,
   ]);
 
@@ -140,6 +127,9 @@ export const useMarkerResizeSession = ({
       if (!isEditing || resizingZoneId == null) return;
       e.preventDefault();
       e.stopPropagation();
+      const pos = positionsByZoneId.get(Number(resizingZoneId));
+      if (!pos) return;
+      const { halfX, halfY } = resolveFofpMarkerHalfAxes(pos, resolvedSize);
       const target = e.currentTarget;
       if (target?.setPointerCapture) {
         try {
@@ -153,15 +143,54 @@ export const useMarkerResizeSession = ({
         zoneId: resizingZoneId,
         handleId,
         pointerId: e.pointerId,
+        lastValidHalfX: halfX,
+        lastValidHalfY: halfY,
       };
     },
-    [isEditing, resizingZoneId]
+    [isEditing, positionsByZoneId, resolvedSize, resizingZoneId]
+  );
+
+  const canResizeZone = useCallback(
+    (zoneId) => {
+      const pos = positionsByZoneId.get(Number(zoneId));
+      if (!pos) return false;
+      return hasValidAreaRings(areaRingsById?.get(Number(pos.area_id)));
+    },
+    [areaRingsById, positionsByZoneId]
+  );
+
+  const clampStylePatchToArea = useCallback(
+    (zoneId, patch) => {
+      const pos = positionsByZoneId.get(Number(zoneId));
+      if (!pos || !patch) return patch;
+      const rings = areaRingsById?.get(Number(pos.area_id));
+      if (!hasValidAreaRings(rings)) return patch;
+      const shape = resolveFofpMarkerShape(
+        patch.marker_shape != null ? patch.marker_shape : pos.marker_shape,
+        resolvedShape
+      );
+      const { halfX, halfY } = resolveFofpMarkerHalfAxes(
+        { ...pos, ...patch },
+        resolvedSize
+      );
+      const sizePatch = clampMarkerSizeForShapeChange({
+        shape,
+        cx: pos.x,
+        cy: pos.y,
+        halfX,
+        halfY,
+        rings,
+      });
+      return { ...patch, ...sizePatch };
+    },
+    [areaRingsById, positionsByZoneId, resolvedShape, resolvedSize]
   );
 
   return {
-    registerResizeOverlay,
     handleResizeHandlePointerDown,
     endResizeMode,
     resizeDragRef,
+    clampStylePatchToArea,
+    canResizeZone,
   };
 };
