@@ -2,11 +2,18 @@
  * Helpers for FOFP marker hover labels and sidebar zone highlight matching.
  */
 
-/** @param {string|null|undefined} zoneName @param {number|null|undefined} lightLevel */
-export function formatFofpMarkerTooltip(zoneName, lightLevel) {
+/**
+ * @param {string|null|undefined} zoneName
+ * @param {number|null|undefined} lightLevel
+ * @param {{ driverAlert?: boolean }} [options]
+ */
+export function formatFofpMarkerTooltip(zoneName, lightLevel, options = {}) {
   const name = typeof zoneName === "string" && zoneName.trim()
     ? zoneName.trim()
     : "Zone";
+  if (options.driverAlert === true) {
+    return `${name} — Driver fault`;
+  }
   if (lightLevel == null || !Number.isFinite(Number(lightLevel))) {
     return `${name} — —`;
   }

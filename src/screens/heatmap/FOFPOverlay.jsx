@@ -103,7 +103,14 @@ const sanitizePosition = (
     globalMarkerSize
   );
   const markerShape = resolveFofpMarkerShape(raw.marker_shape, configShape);
-  const lightLevel = sanitizeLightLevel(raw.light_level);
+  const driverAlert =
+    raw.driver_alert === true || raw.alert_color === "red";
+  const lightLevel = driverAlert
+    ? null
+    : sanitizeLightLevel(raw.light_level);
+  const lightStatus = driverAlert
+    ? null
+    : sanitizeTriState(raw.light_status);
   return {
     zoneId,
     areaId,
@@ -115,9 +122,11 @@ const sanitizePosition = (
     halfY,
     shapeSize: raw.shape_size,
     markerShape,
+    driverAlert,
+    alertColor: raw.alert_color,
     lightLevel,
-    lightStatus: sanitizeTriState(raw.light_status),
-    tooltip: formatFofpMarkerTooltip(zoneName, lightLevel),
+    lightStatus,
+    tooltip: formatFofpMarkerTooltip(zoneName, lightLevel, { driverAlert }),
   };
 };
 
@@ -160,6 +169,8 @@ const FOFPMarkerInteractive = React.memo(
     onZoneClick,
   }) {
     const style = getMarkerStyle({
+      driverAlert: p.driverAlert,
+      alertColor: p.alertColor,
       lightLevel: p.lightLevel,
       lightStatus: p.lightStatus,
       baseColor,

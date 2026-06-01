@@ -7,6 +7,7 @@
 // Status convention from the backend:
 //   light_level:  0-100 (sole visualization driver for brightness)
 //   marker_color: #RRGGBB base hue (brightness modulates S/L above zero)
+//   driver_alert: when true, solid fault red (light_level / light_status are null)
 
 import {
   DEFAULT_FOFP_MARKER_COLOR,
@@ -21,7 +22,8 @@ export const FOFP_COLORS = Object.freeze({
   lightFull: "#fdd835",
   // border/outline
   outline: "#ffffff",
-  outlineAlert: "#d32f2f", // red border when alerting
+  alertFill: "#d32f2f", // solid fill for active driver faults
+  outlineAlert: "#d32f2f",
   // glow tints (used as feFlood fill in the SVG filter)
   glowLight: "#ffee58",
 });
@@ -69,13 +71,33 @@ export const computeGlowFilterSpec = (bucketLevel, baseColorHex) => {
   };
 };
 
-// Per-marker visual descriptor. Only light_level drives fill brightness;
-// marker_color sets hue when level > 0; level 0 is fully off (grey).
+/** True when backend reports an active driver fault for this zone marker. */
+export const isFofpDriverAlert = ({ driverAlert, alertColor }) =>
+  driverAlert === true || alertColor === "red";
+
+/** Solid red marker — no dimming gradient or glow. */
+export const getDriverAlertMarkerStyle = () => ({
+  lightLevel: null,
+  fill: FOFP_COLORS.alertFill,
+  stroke: FOFP_COLORS.outline,
+  strokeWidth: 1,
+  opacity: 1,
+  glowFilterId: null,
+});
+
+// Per-marker visual descriptor. Driver alert wins over light_level / light_status.
+// Otherwise light_level drives fill brightness; marker_color sets hue when level > 0.
 export const getMarkerStyle = ({
+  driverAlert,
+  alertColor,
   lightLevel,
   lightStatus,
   baseColor,
 }) => {
+  if (isFofpDriverAlert({ driverAlert, alertColor })) {
+    return getDriverAlertMarkerStyle();
+  }
+
   const level =
     lightLevel == null
       ? lightStatus === true
