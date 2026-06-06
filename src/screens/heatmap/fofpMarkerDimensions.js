@@ -38,3 +38,15 @@ export const buildMarkerSizePatch = (halfX, halfY) => {
     shape_size: Math.max(hx, hy),
   };
 };
+
+/** Size patch plus optional center move (edge-anchored stretch). */
+export const buildMarkerResizePatch = (halfX, halfY, x = null, y = null) => {
+  const patch = buildMarkerSizePatch(halfX, halfY);
+  if (x != null && Number.isFinite(Number(x))) {
+    patch.x = Math.round(Number(x));
+  }
+  if (y != null && Number.isFinite(Number(y))) {
+    patch.y = Math.round(Number(y));
+  }
+  return patch;
+};

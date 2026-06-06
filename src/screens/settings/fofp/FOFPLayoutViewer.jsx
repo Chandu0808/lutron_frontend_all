@@ -697,7 +697,8 @@ const FOFPLayoutViewer = ({
                       ry={halfY + 3}
                       fill="none"
                       stroke={accentStroke}
-                      strokeWidth={2}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.7}
                       vectorEffect="non-scaling-stroke"
                     />
                     <g data-fofp-resize-shape>

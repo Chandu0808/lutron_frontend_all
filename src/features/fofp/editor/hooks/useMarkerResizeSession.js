@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { markerResizeFromHandle } from "../../../../screens/settings/fofp/fofpMarkerResize";
+import { markerResizeFromHandle, computeStretchAnchorEdges, isStretchResizeHandle } from "../../../../screens/settings/fofp/fofpMarkerResize";
 import { resolveFofpMarkerHalfAxes } from "../../../../screens/heatmap/fofpMarkerDimensions";
 import { resolveFofpMarkerShape } from "../../../../screens/heatmap/fofpMarkerShapes";
 import {
@@ -71,26 +71,32 @@ export const useMarkerResizeSession = ({
         if (!pt) return;
         const pos = positionsByZoneId.get(Number(active.zoneId));
         if (!pos) return;
-        const { halfX, halfY } = resolveFofpMarkerHalfAxes(pos, resolvedSize);
+        const halfW = active.lastValidHalfX;
+        const halfH = active.lastValidHalfY;
         const rings = areaRingsById?.get(Number(pos.area_id));
         const shape = resolveFofpMarkerShape(pos.marker_shape, resolvedShape);
         const patch = markerResizeFromHandle(
           active.handleId,
           pt.x,
           pt.y,
-          pos.x,
-          pos.y,
-          halfX,
-          halfY,
+          active.lastValidX,
+          active.lastValidY,
+          halfW,
+          halfH,
           {
             shape,
             rings,
-            lastValidHalfX: active.lastValidHalfX,
-            lastValidHalfY: active.lastValidHalfY,
+            lastValidHalfX: halfW,
+            lastValidHalfY: halfH,
+            lastValidX: active.lastValidX,
+            lastValidY: active.lastValidY,
+            stretchAnchor: active.stretchAnchor,
           }
         );
         active.lastValidHalfX = patch.shape_size_x;
         active.lastValidHalfY = patch.shape_size_y;
+        if (patch.x != null) active.lastValidX = patch.x;
+        if (patch.y != null) active.lastValidY = patch.y;
         livePatchRef.current = patch;
         if (typeof onLiveResizePatch === "function") {
           onLiveResizePatch(patch);
@@ -139,12 +145,18 @@ export const useMarkerResizeSession = ({
         }
       }
       livePatchRef.current = null;
+      const stretchAnchor = isStretchResizeHandle(handleId)
+        ? computeStretchAnchorEdges(pos.x, pos.y, halfX, halfY)
+        : null;
       resizeDragRef.current = {
         zoneId: resizingZoneId,
         handleId,
         pointerId: e.pointerId,
         lastValidHalfX: halfX,
         lastValidHalfY: halfY,
+        lastValidX: pos.x,
+        lastValidY: pos.y,
+        stretchAnchor,
       };
     },
     [isEditing, positionsByZoneId, resolvedSize, resizingZoneId]

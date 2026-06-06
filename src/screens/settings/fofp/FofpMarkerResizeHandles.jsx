@@ -1,16 +1,21 @@
 /**
- * PPT-style resize border + corner handles for a FOFP marker (SVG).
+ * PPT-style resize border + circular handles for a FOFP marker (SVG).
  */
 
 import React from "react";
-import { useTheme } from "@mui/material";
+import { alpha, useTheme } from "@mui/material";
 import {
-  FOFP_RESIZE_HANDLES,
+  FOFP_CORNER_HANDLES,
+  FOFP_STRETCH_HANDLES,
   getMarkerResizeBounds,
   getResizeHandleHitSize,
   getResizeHandlePositions,
   getResizeHandleCursor,
+  isStretchResizeHandle,
 } from "./fofpMarkerResize";
+
+const CORNER_HANDLE_RADIUS = 4;
+const EDGE_HANDLE_RADIUS = 3.25;
 
 const FofpMarkerResizeHandles = ({
   centerX,
@@ -24,8 +29,43 @@ const FofpMarkerResizeHandles = ({
   const handleStroke = theme.palette.primary.main;
   const bounds = getMarkerResizeBounds(centerX, centerY, halfW, halfH);
   const handles = getResizeHandlePositions(bounds);
-  const hitSize = getResizeHandleHitSize(halfW, halfH);
-  const halfHit = hitSize / 2;
+
+  const renderHandle = (id) => {
+    const pos = handles[id];
+    const hitSize = getResizeHandleHitSize(halfW, halfH, id);
+    const hitRadius = hitSize / 2;
+    const visibleRadius = isStretchResizeHandle(id)
+      ? EDGE_HANDLE_RADIUS
+      : CORNER_HANDLE_RADIUS;
+
+    return (
+      <g
+        key={id}
+        data-fofp-resize-handle={id}
+        data-testid={`fofp-resize-handle-${id}`}
+        style={{ cursor: getResizeHandleCursor(id) }}
+      >
+        <circle
+          cx={pos.x}
+          cy={pos.y}
+          r={hitRadius}
+          fill="transparent"
+          pointerEvents="auto"
+          onPointerDown={(e) => onHandlePointerDown(e, id)}
+        />
+        <circle
+          cx={pos.x}
+          cy={pos.y}
+          r={visibleRadius}
+          fill={handleFill}
+          stroke={alpha(handleStroke, 0.85)}
+          strokeWidth={1.25}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      </g>
+    );
+  };
 
   return (
     <g
@@ -39,33 +79,14 @@ const FofpMarkerResizeHandles = ({
         width={bounds.width}
         height={bounds.height}
         fill="none"
-        stroke={handleStroke}
-        strokeWidth={1.5}
-        strokeDasharray="5 4"
+        stroke={alpha(handleStroke, 0.55)}
+        strokeWidth={1}
+        strokeDasharray="4 3"
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />
-      {FOFP_RESIZE_HANDLES.map((id) => {
-        const pos = handles[id];
-        return (
-          <rect
-            key={id}
-            data-fofp-resize-handle={id}
-            data-testid={`fofp-resize-handle-${id}`}
-            x={pos.x - halfHit}
-            y={pos.y - halfHit}
-            width={hitSize}
-            height={hitSize}
-            fill={handleFill}
-            stroke={handleStroke}
-            strokeWidth={1.5}
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="auto"
-            style={{ cursor: getResizeHandleCursor(id) }}
-            onPointerDown={(e) => onHandlePointerDown(e, id)}
-          />
-        );
-      })}
+      {FOFP_CORNER_HANDLES.map(renderHandle)}
+      {FOFP_STRETCH_HANDLES.map(renderHandle)}
     </g>
   );
 };

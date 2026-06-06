@@ -2,7 +2,6 @@ import React from "react";
 import {
   FOFPMarkerShape,
   FofpGlowingDotShape,
-  FOFP_GLOWING_DOT_HALO_COLOR,
 } from "../../heatmap/fofpMarkerShapes";
 
 const PREVIEW_FILL = "#4fc3f7";
@@ -32,8 +31,6 @@ const FofpShapeMenuIcon = React.memo(function FofpShapeMenuIcon({ shape }) {
           fill={PREVIEW_FILL}
           stroke={PREVIEW_STROKE}
           strokeWidth={1}
-          haloColor={FOFP_GLOWING_DOT_HALO_COLOR}
-          haloOpacity={0.55}
         />
       ) : (
         <FOFPMarkerShape

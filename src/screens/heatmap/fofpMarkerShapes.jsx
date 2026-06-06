@@ -4,6 +4,7 @@
  */
 
 import React from "react";
+import { hexToGlowColor, normalizeFofpHex } from "./fofpColorUtils";
 
 export const FOFP_KNOWN_SHAPES = new Set([
   "circle",
@@ -74,9 +75,22 @@ export const resolveFofpMarkerShape = (positionShape, globalShape) => {
 };
 
 /** Halo scale vs core half-axis for glowing_dot (reads as dot + glow, not a solid circle). */
-export const FOFP_GLOWING_DOT_HALO_SCALE = 1.5;
-export const FOFP_GLOWING_DOT_CORE_SCALE = 0.58;
+export const FOFP_GLOWING_DOT_HALO_SCALE = 1.35;
+export const FOFP_GLOWING_DOT_CORE_SCALE = 0.62;
 export const FOFP_GLOWING_DOT_HALO_COLOR = "#ffee58";
+export const FOFP_GLOWING_DOT_HALO_OPACITY = 0.38;
+
+const resolveGlowingDotHaloColor = (fill, haloColor) => {
+  if (haloColor != null && String(haloColor).trim()) return haloColor;
+  if (fill != null && String(fill).trim()) {
+    try {
+      return hexToGlowColor(normalizeFofpHex(fill));
+    } catch {
+      return FOFP_GLOWING_DOT_HALO_COLOR;
+    }
+  }
+  return FOFP_GLOWING_DOT_HALO_COLOR;
+};
 
 /**
  * Glowing dot: soft outer halo + smaller bright core.
@@ -89,8 +103,8 @@ export const FofpGlowingDotShape = React.memo(function FofpGlowingDotShape({
   fill,
   stroke,
   strokeWidth = 1,
-  haloColor = FOFP_GLOWING_DOT_HALO_COLOR,
-  haloOpacity = 0.5,
+  haloColor = null,
+  haloOpacity = FOFP_GLOWING_DOT_HALO_OPACITY,
   filter,
   transition,
   opacity = 1,
@@ -99,6 +113,7 @@ export const FofpGlowingDotShape = React.memo(function FofpGlowingDotShape({
   const coreRy = ry * FOFP_GLOWING_DOT_CORE_SCALE;
   const haloRx = rx * FOFP_GLOWING_DOT_HALO_SCALE;
   const haloRy = ry * FOFP_GLOWING_DOT_HALO_SCALE;
+  const resolvedHaloColor = resolveGlowingDotHaloColor(fill, haloColor);
   const groupStyle = transition ? { transition } : undefined;
 
   return (
@@ -108,7 +123,7 @@ export const FofpGlowingDotShape = React.memo(function FofpGlowingDotShape({
         cy={y}
         rx={haloRx}
         ry={haloRy}
-        fill={haloColor}
+        fill={resolvedHaloColor}
         opacity={haloOpacity}
         stroke="none"
         vectorEffect="non-scaling-stroke"

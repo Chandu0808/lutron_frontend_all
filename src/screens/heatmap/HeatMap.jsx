@@ -80,6 +80,14 @@ import {
   findFofpZoneIndexInPanelList,
   isFofpZonePanelHighlighted,
 } from './fofpZoneInteraction';
+import {
+  ZONE_CONTROL_CARD_WIDTH_SX,
+  ZONE_CONTROL_SLIDER_WRAP_SX,
+  HEATMAP_STATUS_PANEL_OVERFLOW_SX,
+  HEATMAP_SIDEBAR_MAIN_SCROLL_SX,
+  HEATMAP_ZONES_SECTION_SX,
+  HEATMAP_ZONES_LIST_SCROLL_SX,
+} from './zoneControlCardLayout';
 
 
 const normalizeZoneType = (type) =>
@@ -2159,11 +2167,10 @@ const HeatMap = () => {
               height: '100%', // Same height as floorplan
               display: 'flex',
               flexDirection: 'column',
-              overflowY: 'auto',
               minHeight: 0,
               boxShadow: '-2px 0 8px rgba(0,0,0,0.10)',
               background: '#a89e87',
-              overflow: 'hidden',
+              ...HEATMAP_STATUS_PANEL_OVERFLOW_SX,
               p: 0,
               m: 0,
               boxSizing: 'border-box',
@@ -2290,17 +2297,15 @@ const HeatMap = () => {
               </Box>
             </Box>
 
-            {/* Main Content - Full height without scrolling */}
+            {/* Main Content - scroll when sections exceed sidebar height */}
             <Box sx={{
-              flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              minHeight: 0,
               gap: { xs: 0.1, sm: 0.15, md: 0.2, lg: 0.25 },
               p: { xs: 0.5, sm: 0.75, md: 1 },
               boxSizing: 'border-box',
               position: 'relative',
-              overflowY: 'auto'
+              ...HEATMAP_SIDEBAR_MAIN_SCROLL_SX,
             }}>
               {areaStatusLoading ? (
                 <Box sx={{
@@ -2581,10 +2586,10 @@ const HeatMap = () => {
                       lg: 95,   // Large screen - reduced
                       xl: 120   // Ultra-wide screen - reduced
                     },
-                    flexShrink: 0,
                     p: 0,
                     m: 0,
                     boxSizing: 'border-box',
+                    ...HEATMAP_ZONES_SECTION_SX,
                   }}>
                     <Box sx={{
                       writingMode: 'vertical-rl',
@@ -2609,7 +2614,7 @@ const HeatMap = () => {
                       flex: 1,
                       display: 'flex',
                       flexDirection: 'row',
-                      alignItems: 'center',
+                      alignItems: 'stretch',
                       p: { xs: 0.3, md: 0.5 },
                       minHeight: 0,
                       position: 'relative',
@@ -2619,17 +2624,23 @@ const HeatMap = () => {
                       <Box sx={{
                         flex: 1,
                         display: 'flex',
-                        flexDirection: 'column', // Always use column layout to utilize full height
-                        gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 }, // Reduced gap
+                        flexDirection: 'column',
                         justifyContent: 'flex-start',
-                        alignItems: 'center',
-                        minHeight: 0,
-                        overflow: 'hidden',
-
+                        alignItems: 'stretch',
+                        width: '100%',
+                        minWidth: 0,
                       }}>
                         {zonesToShow.length > 0 ? (
                           <>
-                            {zonesToShow
+                            <Box sx={{
+                              ...HEATMAP_ZONES_LIST_SCROLL_SX,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 },
+                              alignItems: 'stretch',
+                              width: '100%',
+                            }}>
+                              {zonesToShow
                               .slice(zonePage * zonesPerPage, (zonePage + 1) * zonesPerPage)
                               .map((zone, idx) => {
                                 const values = zoneLocalValues[zone.id] || getDefaultZoneValues(zone);
@@ -2658,11 +2669,13 @@ const HeatMap = () => {
                                   />
                                 );
                               })}
+                            </Box>
                             <Box sx={{
                               display: 'flex',
                               justifyContent: 'flex-end',
                               width: '100%',
-                              mt: 0.5
+                              mt: 0.5,
+                              flexShrink: 0,
                             }}>
                               <Button
                                 size="small"
@@ -3222,16 +3235,13 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
           pb: 0.5,
           pl: 0.5,
           pr: 0.5,
-          width: { xs: 140, sm: 150, md: 160 },
-          minWidth: { xs: 140, sm: 150, md: 160 },
-          maxWidth: { xs: 140, sm: 150, md: 160 },
+          ...ZONE_CONTROL_CARD_WIDTH_SX,
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
           gap: 1,
           mb: 0.5,
           justifyContent: 'flex-start',
-          boxSizing: 'border-box',
           ...highlightSx,
         }}
       >
@@ -3311,15 +3321,13 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
     const cctMax = zone.cct_max !== undefined ? zone.cct_max : 7000;
 
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX }}>
         <Box sx={{
           flex: 1,
+          minWidth: 0,
           bgcolor: '#fff',
           borderRadius: 0.5,
           p: { xs: 0.5, md: 1 },
-          width: { xs: 140, sm: 150, md: 160 },
-          minWidth: { xs: 140, sm: 150, md: 160 },
-          maxWidth: { xs: 140, sm: 150, md: 160 },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-start',
@@ -3367,8 +3375,8 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
             </Typography>
           </Box>
 
-          {/* Brightness Slider - Fixed positioning */}
-          <Box sx={{ position: 'relative', width: '85%', mt: 0.5, pl: { xs: 1, md: 2 } }}>
+          {/* Brightness Slider */}
+          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, position: 'relative', mt: 0.5 }}>
             <Slider
               min={brightnessMin}
               max={brightnessMax}
@@ -3396,8 +3404,8 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
             />
           </Box>
 
-          {/* CCT Slider - Fixed positioning */}
-          <Box sx={{ position: 'relative', width: '85%', mt: 0.8, pl: { xs: 1, md: 2 } }}>
+          {/* CCT Slider */}
+          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, position: 'relative', mt: 0.8 }}>
             <Slider
               min={cctMin}
               max={cctMax}
@@ -3458,7 +3466,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
         </Box>
 
         {/* Fade/Delay Time inputs */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 1 }, alignItems: 'flex-start', justifyContent: 'center', ml: 1, width: { xs: 80, sm: 90, md: 100 } }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 1 }, alignItems: 'flex-start', justifyContent: 'center', width: { xs: 80, sm: 90, md: 100 }, flexShrink: 0 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
             <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
@@ -3508,19 +3516,16 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
 
   if (isDimmedType) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX }}>
         <Box sx={{
           flex: 1,
+          minWidth: 0,
           bgcolor: '#fff',
           borderRadius: 0.5,
           pt: 0.5,
           pb: 0,
           pl: 0.5,
           pr: 0.5,
-          //p: { xs: 0.5, md: 0.6 },
-          width: { xs: 140, sm: 150, md: 160 },
-          minWidth: { xs: 140, sm: 150, md: 160 },
-          maxWidth: { xs: 140, sm: 150, md: 160 },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-start',
@@ -3565,7 +3570,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
               {safeValues.brightness}%
             </Typography>
           </Box>
-          <Box sx={{ position: 'relative', width: '85%', mt: 0.5, ml: { xs: 1, md: 2 } }}>
+          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, position: 'relative', mt: 0.5 }}>
             <Slider
               min={0}
               max={100}
@@ -3595,7 +3600,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
         </Box>
 
         {/* Fade/Delay Time inputs for dimmed */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, alignItems: 'flex-start', justifyContent: 'center', ml: 1, width: { xs: 80, sm: 90, md: 100 } }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, alignItems: 'flex-start', justifyContent: 'center', width: { xs: 80, sm: 90, md: 100 }, flexShrink: 0 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
             <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>

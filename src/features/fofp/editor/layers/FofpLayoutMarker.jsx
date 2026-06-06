@@ -6,6 +6,18 @@ import {
 import { resolveFofpMarkerHalfAxes } from "../../../../screens/heatmap/fofpMarkerDimensions";
 import { getMarkerStyle } from "../../../../screens/heatmap/fofpStatusStyles";
 
+/** Zone name only — used for native SVG hover tooltip in FOFP settings. */
+export function resolveFofpLayoutMarkerLabel(position) {
+  const name = position?.zone_name;
+  if (typeof name === "string" && name.trim()) {
+    return name.trim();
+  }
+  if (position?.zone_id != null) {
+    return `Zone ${position.zone_id}`;
+  }
+  return "Zone";
+}
+
 const FofpLayoutMarker = React.memo(function FofpLayoutMarker({
   p,
   resolvedShape,
@@ -60,6 +72,7 @@ const FofpLayoutMarker = React.memo(function FofpLayoutMarker({
       onPointerCancel={onPointerUp}
       onContextMenu={onContextMenu}
     >
+      <title>{resolveFofpLayoutMarkerLabel(p)}</title>
       {isSelected ? (
         <ellipse
           cx={p.x}

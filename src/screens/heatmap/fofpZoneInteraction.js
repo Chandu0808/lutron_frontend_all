@@ -5,14 +5,18 @@
 /**
  * @param {string|null|undefined} zoneName
  * @param {number|null|undefined} lightLevel
- * @param {{ driverAlert?: boolean }} [options]
+ * @param {{ driverAlert?: boolean, driverAlertType?: string }} [options]
  */
 export function formatFofpMarkerTooltip(zoneName, lightLevel, options = {}) {
   const name = typeof zoneName === "string" && zoneName.trim()
     ? zoneName.trim()
     : "Zone";
-  if (options.driverAlert === true) {
-    return `${name} — Driver fault`;
+  const alertType =
+    typeof options.driverAlertType === "string" && options.driverAlertType.trim()
+      ? options.driverAlertType.trim()
+      : null;
+  if (options.driverAlert === true || alertType) {
+    return `${name} — ${alertType || "Driver fault"}`;
   }
   if (lightLevel == null || !Number.isFinite(Number(lightLevel))) {
     return `${name} — —`;

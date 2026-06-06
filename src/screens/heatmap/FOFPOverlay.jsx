@@ -103,8 +103,14 @@ const sanitizePosition = (
     globalMarkerSize
   );
   const markerShape = resolveFofpMarkerShape(raw.marker_shape, configShape);
+  const driverAlertType =
+    typeof raw.driver_alert_type === "string" && raw.driver_alert_type.trim()
+      ? raw.driver_alert_type.trim()
+      : null;
   const driverAlert =
-    raw.driver_alert === true || raw.alert_color === "red";
+    raw.driver_alert === true ||
+    raw.alert_color === "red" ||
+    driverAlertType != null;
   const lightLevel = driverAlert
     ? null
     : sanitizeLightLevel(raw.light_level);
@@ -123,10 +129,14 @@ const sanitizePosition = (
     shapeSize: raw.shape_size,
     markerShape,
     driverAlert,
+    driverAlertType,
     alertColor: raw.alert_color,
     lightLevel,
     lightStatus,
-    tooltip: formatFofpMarkerTooltip(zoneName, lightLevel, { driverAlert }),
+    tooltip: formatFofpMarkerTooltip(zoneName, lightLevel, {
+      driverAlert,
+      driverAlertType,
+    }),
   };
 };
 

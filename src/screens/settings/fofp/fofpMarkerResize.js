@@ -2,7 +2,10 @@ import {
   clampFofpMarkerSizeMin,
   FOFP_MIN_MARKER_SIZE,
 } from "../../heatmap/fofpMarkerShapes";
-import { buildMarkerSizePatch } from "../../heatmap/fofpMarkerDimensions";
+import {
+  buildMarkerResizePatch,
+  buildMarkerSizePatch,
+} from "../../heatmap/fofpMarkerDimensions";
 import { clampMarkerSizePatchToArea } from "../../../features/fofp/geometry/markerContainment";
 
 /** Corner handles: uniform scale (preserve aspect). */
@@ -72,8 +75,22 @@ export const markerUniformResizeFromCorner = (
   return buildMarkerSizePatch(nextW, nextH);
 };
 
+/** Fixed edge coordinates for edge-anchored stretch (from drag start). */
+export const computeStretchAnchorEdges = (centerX, centerY, halfW, halfH) => {
+  const cx = Number(centerX);
+  const cy = Number(centerY);
+  const hw = clampHalf(halfW);
+  const hh = clampHalf(halfH);
+  return {
+    top: cy - hh,
+    bottom: cy + hh,
+    left: cx - hw,
+    right: cx + hw,
+  };
+};
+
 /**
- * Stretch one axis from mid-edge handle.
+ * Stretch one axis from mid-edge handle; opposite edge stays fixed on the floor plan.
  */
 export const markerStretchFromEdge = (
   handleId,
@@ -82,31 +99,51 @@ export const markerStretchFromEdge = (
   centerX,
   centerY,
   halfW,
-  halfH
+  halfH,
+  anchorEdges = null
 ) => {
   const cx = Number(centerX);
   const cy = Number(centerY);
-  let nextW = clampHalf(halfW);
-  let nextH = clampHalf(halfH);
+  const curW = clampHalf(halfW);
+  const curH = clampHalf(halfH);
+  const anchor =
+    anchorEdges ?? computeStretchAnchorEdges(cx, cy, curW, curH);
+
+  let nextW = curW;
+  let nextH = curH;
+  let nextX = cx;
+  let nextY = cy;
 
   switch (handleId) {
-    case "e":
-      nextW = clampHalf(Number(svgX) - cx);
+    case "s": {
+      const span = Number(svgY) - anchor.top;
+      nextH = clampHalf(Math.max(span / 2, FOFP_MIN_MARKER_SIZE));
+      nextY = anchor.top + nextH;
       break;
-    case "w":
-      nextW = clampHalf(cx - Number(svgX));
+    }
+    case "n": {
+      const span = anchor.bottom - Number(svgY);
+      nextH = clampHalf(Math.max(span / 2, FOFP_MIN_MARKER_SIZE));
+      nextY = anchor.bottom - nextH;
       break;
-    case "s":
-      nextH = clampHalf(Number(svgY) - cy);
+    }
+    case "e": {
+      const span = Number(svgX) - anchor.left;
+      nextW = clampHalf(Math.max(span / 2, FOFP_MIN_MARKER_SIZE));
+      nextX = anchor.left + nextW;
       break;
-    case "n":
-      nextH = clampHalf(cy - Number(svgY));
+    }
+    case "w": {
+      const span = anchor.right - Number(svgX);
+      nextW = clampHalf(Math.max(span / 2, FOFP_MIN_MARKER_SIZE));
+      nextX = anchor.right - nextW;
       break;
+    }
     default:
       break;
   }
 
-  return buildMarkerSizePatch(nextW, nextH);
+  return buildMarkerResizePatch(nextW, nextH, nextX, nextY);
 };
 
 /**
@@ -119,7 +156,8 @@ export const markerResizeFromHandleRaw = (
   centerX,
   centerY,
   halfW,
-  halfH
+  halfH,
+  stretchAnchor = null
 ) => {
   if (isCornerResizeHandle(handleId)) {
     return markerUniformResizeFromCorner(
@@ -140,7 +178,8 @@ export const markerResizeFromHandleRaw = (
       centerX,
       centerY,
       halfW,
-      halfH
+      halfH,
+      stretchAnchor
     );
   }
   return buildMarkerSizePatch(halfW, halfH);
@@ -162,6 +201,9 @@ export const markerResizeFromHandle = (
     rings,
     lastValidHalfX,
     lastValidHalfY,
+    lastValidX,
+    lastValidY,
+    stretchAnchor = null,
   } = {}
 ) => {
   const rawPatch = markerResizeFromHandleRaw(
@@ -171,7 +213,8 @@ export const markerResizeFromHandle = (
     centerX,
     centerY,
     halfW,
-    halfH
+    halfH,
+    stretchAnchor
   );
   return clampMarkerSizePatchToArea({
     shape,
@@ -180,7 +223,11 @@ export const markerResizeFromHandle = (
     patch: rawPatch,
     lastValidHalfX,
     lastValidHalfY,
+    lastValidX,
+    lastValidY,
     rings,
+    handleId,
+    stretchAnchor,
   });
 };
 
@@ -213,10 +260,14 @@ export const getMarkerResizeBounds = (centerX, centerY, halfW, halfH) => {
   };
 };
 
-/** Hit target size for corner handles (smaller when marker is tiny). */
-export const getResizeHandleHitSize = (halfW, halfH) => {
+/** Hit target size; mid-edge handles get a slightly larger target for easier grabs. */
+export const getResizeHandleHitSize = (halfW, halfH, handleId = null) => {
   const ref = Math.max(Number(halfW) || 0, Number(halfH) || 0);
-  return Math.max(6, Math.min(RESIZE_HANDLE_HIT_SIZE, ref + 4));
+  const base = Math.max(6, Math.min(RESIZE_HANDLE_HIT_SIZE, ref + 4));
+  if (handleId != null && isStretchResizeHandle(handleId)) {
+    return Math.min(RESIZE_HANDLE_HIT_SIZE + 2, base + 2);
+  }
+  return base;
 };
 
 /** Cursor for handle id. */
