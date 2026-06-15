@@ -29,6 +29,7 @@
 # runtime logs and local tooling
 /logs
 /tools
+/docs
 
 # editor
 .cursor/
