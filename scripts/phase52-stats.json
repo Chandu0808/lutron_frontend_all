@@ -1,0 +1,47 @@
+{
+  "consolidated": [
+    "src/shared/settings/users/userUpdatePayload.js",
+    "src/shared/settings/users/UsersComponent.jsx",
+    "src/shared/settings/users/CreateUser.jsx",
+    "src/shared/settings/users/UpdateUser.jsx",
+    "src/shared/settings/schedule/ScheduleComponent.jsx",
+    "src/shared/settings/schedule/ScheduleFormPanel.jsx",
+    "src/shared/settings/schedule/ScheduleDetails.jsx",
+    "src/shared/settings/schedule/AddEvent.jsx",
+    "src/shared/settings/schedule/UpdatePreconfigurdEvent.jsx"
+  ],
+  "wrappers": [
+    "src/variants/basic/screens/settings/Users/userUpdatePayload.js",
+    "src/variants/advanced/screens/settings/Users/userUpdatePayload.js",
+    "src/variants/customized/screens/settings/Users/userUpdatePayload.js",
+    "src/variants/basic/screens/settings/Users/UsersComponent.jsx",
+    "src/variants/basic/screens/settings/Users/CreateUser.jsx",
+    "src/variants/basic/screens/settings/Users/UpdateUser.jsx",
+    "src/variants/advanced/screens/settings/Users/UsersComponent.jsx (advanced variant-only)",
+    "src/variants/advanced/screens/settings/Users/CreateUser.jsx (advanced variant-only)",
+    "src/variants/advanced/screens/settings/Users/UpdateUser.jsx (advanced variant-only)",
+    "src/variants/customized/screens/settings/Users/UsersComponent.jsx",
+    "src/variants/customized/screens/settings/Users/CreateUser.jsx",
+    "src/variants/customized/screens/settings/Users/UpdateUser.jsx",
+    "src/variants/basic/screens/schedule/ScheduleComponent.jsx",
+    "src/variants/basic/screens/schedule/ScheduleFormPanel.jsx",
+    "src/variants/basic/screens/schedule/ScheduleDetails.jsx",
+    "src/variants/basic/screens/schedule/AddEvent.jsx",
+    "src/variants/basic/screens/schedule/UpdatePreconfigurdEvent.jsx",
+    "src/variants/advanced/screens/schedule/ScheduleComponent.jsx",
+    "src/variants/advanced/screens/schedule/ScheduleFormPanel.jsx",
+    "src/variants/advanced/screens/schedule/ScheduleDetails.jsx",
+    "src/variants/advanced/screens/schedule/AddEvent.jsx",
+    "src/variants/advanced/screens/schedule/UpdatePreconfigurdEvent.jsx",
+    "src/variants/customized/screens/schedule/ScheduleComponent.jsx",
+    "src/variants/customized/screens/schedule/ScheduleFormPanel.jsx",
+    "src/variants/customized/screens/schedule/ScheduleDetails.jsx",
+    "src/variants/customized/screens/schedule/AddEvent.jsx",
+    "src/variants/customized/screens/schedule/UpdatePreconfigurdEvent.jsx"
+  ],
+  "variantOnly": [
+    "src/variants/advanced/screens/settings/Users/UsersComponent.jsx",
+    "src/variants/advanced/screens/settings/Users/CreateUser.jsx",
+    "src/variants/advanced/screens/settings/Users/UpdateUser.jsx"
+  ]
+}

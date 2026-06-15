@@ -1,0 +1,1407 @@
+﻿{
+  "summary": {
+    "totalTri": 113,
+    "exactTri": 29,
+    "highSimTri": 54
+  },
+  "folders": {
+    "screens": {
+      "counts": {
+        "basic": 98,
+        "advanced": 92,
+        "customized": 82
+      },
+      "inAll3": [
+        {
+          "file": ".DS_Store",
+          "rel": "screens/.DS_Store",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "ActivityReport.jsx",
+          "rel": "screens/activityReport/ActivityReport.jsx",
+          "avgSim": 83,
+          "exact": false,
+          "sBA": 78,
+          "sBC": 90,
+          "sAC": 82
+        },
+        {
+          "file": "ActivityReportTable.jsx",
+          "rel": "screens/activityReport/ActivityReportTable.jsx",
+          "avgSim": 80,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 85,
+          "sAC": 83
+        },
+        {
+          "file": "AreaSizeLoad.jsx",
+          "rel": "screens/area-size-load/AreaSizeLoad.jsx",
+          "avgSim": 49,
+          "exact": false,
+          "sBA": 38,
+          "sBC": 65,
+          "sAC": 44
+        },
+        {
+          "file": "AreaSizeLoadTree.jsx",
+          "rel": "screens/area-size-load/AreaSizeLoadTree.jsx",
+          "avgSim": 63,
+          "exact": false,
+          "sBA": 51,
+          "sBC": 82,
+          "sAC": 57
+        },
+        {
+          "file": "ChangePassword.jsx",
+          "rel": "screens/auth/ChangePassword.jsx",
+          "avgSim": 73,
+          "exact": false,
+          "sBA": 65,
+          "sBC": 71,
+          "sAC": 82
+        },
+        {
+          "file": "Login.jsx",
+          "rel": "screens/auth/Login.jsx",
+          "avgSim": 69,
+          "exact": false,
+          "sBA": 63,
+          "sBC": 68,
+          "sAC": 77
+        },
+        {
+          "file": "CreateAreaModelComponent.jsx",
+          "rel": "screens/create-area-model/CreateAreaModelComponent.jsx",
+          "avgSim": 96,
+          "exact": false,
+          "sBA": 94,
+          "sBC": 96,
+          "sAC": 98
+        },
+        {
+          "file": "SelectAreaDialog.jsx",
+          "rel": "screens/create-area-model/SelectAreaDialog.jsx",
+          "avgSim": 77,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 85,
+          "sAC": 73
+        },
+        {
+          "file": "Alerts.jsx",
+          "rel": "screens/dashboard/Alerts.jsx",
+          "avgSim": 80,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 90,
+          "sAC": 77
+        },
+        {
+          "file": "Dashboard.jsx",
+          "rel": "screens/dashboard/Dashboard.jsx",
+          "avgSim": 60,
+          "exact": false,
+          "sBA": 72,
+          "sBC": 52,
+          "sAC": 57
+        },
+        {
+          "file": "DashboardOverview.jsx",
+          "rel": "screens/dashboard/DashboardOverview.jsx",
+          "avgSim": 54,
+          "exact": false,
+          "sBA": 32,
+          "sBC": 33,
+          "sAC": 98
+        },
+        {
+          "file": "SpaceUtilization.jsx",
+          "rel": "screens/dashboard/SpaceUtilization.jsx",
+          "avgSim": 46,
+          "exact": false,
+          "sBA": 63,
+          "sBC": 36,
+          "sAC": 40
+        },
+        {
+          "file": "EmailServer.jsx",
+          "rel": "screens/emailServer/EmailServer.jsx",
+          "avgSim": 76,
+          "exact": false,
+          "sBA": 70,
+          "sBC": 73,
+          "sAC": 84
+        },
+        {
+          "file": "AreaSettingsDialog.jsx",
+          "rel": "screens/heatmap/AreaSettingsDialog.jsx",
+          "avgSim": 85,
+          "exact": false,
+          "sBA": 90,
+          "sBC": 83,
+          "sAC": 81
+        },
+        {
+          "file": "fofpColorUtils.js",
+          "rel": "screens/heatmap/fofpColorUtils.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpMarkerDimensions.js",
+          "rel": "screens/heatmap/fofpMarkerDimensions.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpMarkerShapes.jsx",
+          "rel": "screens/heatmap/fofpMarkerShapes.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "FOFPOverlay.jsx",
+          "rel": "screens/heatmap/FOFPOverlay.jsx",
+          "avgSim": 94,
+          "exact": false,
+          "sBA": 94,
+          "sBC": 95,
+          "sAC": 92
+        },
+        {
+          "file": "fofpStatusStyles.js",
+          "rel": "screens/heatmap/fofpStatusStyles.js",
+          "avgSim": 94,
+          "exact": false,
+          "sBA": 99,
+          "sBC": 92,
+          "sAC": 92
+        },
+        {
+          "file": "fofpZoneInteraction.js",
+          "rel": "screens/heatmap/fofpZoneInteraction.js",
+          "avgSim": 90,
+          "exact": false,
+          "sBA": 90,
+          "sBC": 88,
+          "sAC": 93
+        },
+        {
+          "file": "GroupOccupancymodel.jsx",
+          "rel": "screens/heatmap/GroupOccupancymodel.jsx",
+          "avgSim": 69,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 70,
+          "sAC": 64
+        },
+        {
+          "file": "HeatMap.jsx",
+          "rel": "screens/heatmap/HeatMap.jsx",
+          "avgSim": 85,
+          "exact": false,
+          "sBA": 92,
+          "sBC": 82,
+          "sAC": 81
+        },
+        {
+          "file": "HeatmapControls.jsx",
+          "rel": "screens/heatmap/HeatmapControls.jsx",
+          "avgSim": 68,
+          "exact": false,
+          "sBA": 60,
+          "sBC": 69,
+          "sAC": 74
+        },
+        {
+          "file": "heatmapLightStyles.js",
+          "rel": "screens/heatmap/heatmapLightStyles.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "LutronWebsiteComponent.jsx",
+          "rel": "screens/lutronwebsite page/LutronWebsiteComponent.jsx",
+          "avgSim": 33,
+          "exact": false,
+          "sBA": 6,
+          "sBC": 86,
+          "sAC": 7
+        },
+        {
+          "file": "CreateAreaGroup.jsx",
+          "rel": "screens/manageAreaGroup/CreateAreaGroup.jsx",
+          "avgSim": 94,
+          "exact": false,
+          "sBA": 91,
+          "sBC": 95,
+          "sAC": 95
+        },
+        {
+          "file": "ManageAreaGroup.jsx",
+          "rel": "screens/manageAreaGroup/ManageAreaGroup.jsx",
+          "avgSim": 54,
+          "exact": false,
+          "sBA": 54,
+          "sBC": 55,
+          "sAC": 53
+        },
+        {
+          "file": "UpdateAreaGroup.jsx",
+          "rel": "screens/manageAreaGroup/UpdateAreaGroup.jsx",
+          "avgSim": 95,
+          "exact": false,
+          "sBA": 92,
+          "sBC": 96,
+          "sAC": 96
+        },
+        {
+          "file": "Action.jsx",
+          "rel": "screens/quickcontrols/Action.jsx",
+          "avgSim": 91,
+          "exact": false,
+          "sBA": 87,
+          "sBC": 96,
+          "sAC": 90
+        },
+        {
+          "file": "AreaTreeDialog.jsx",
+          "rel": "screens/quickcontrols/AreaTreeDialog.jsx",
+          "avgSim": 83,
+          "exact": false,
+          "sBA": 78,
+          "sBC": 87,
+          "sAC": 85
+        },
+        {
+          "file": "CreateQuickControl.jsx",
+          "rel": "screens/quickcontrols/CreateQuickControl.jsx",
+          "avgSim": 79,
+          "exact": false,
+          "sBA": 72,
+          "sBC": 90,
+          "sAC": 75
+        },
+        {
+          "file": "QuickControlDetails.jsx",
+          "rel": "screens/quickcontrols/QuickControlDetails.jsx",
+          "avgSim": 76,
+          "exact": false,
+          "sBA": 68,
+          "sBC": 85,
+          "sAC": 74
+        },
+        {
+          "file": "QuickControls.jsx",
+          "rel": "screens/quickcontrols/QuickControls.jsx",
+          "avgSim": 96,
+          "exact": false,
+          "sBA": 95,
+          "sBC": 96,
+          "sAC": 97
+        },
+        {
+          "file": "AddEvent.jsx",
+          "rel": "screens/schedule/AddEvent.jsx",
+          "avgSim": 87,
+          "exact": false,
+          "sBA": 83,
+          "sBC": 91,
+          "sAC": 88
+        },
+        {
+          "file": "ScheduleComponent.jsx",
+          "rel": "screens/schedule/ScheduleComponent.jsx",
+          "avgSim": 89,
+          "exact": false,
+          "sBA": 85,
+          "sBC": 91,
+          "sAC": 91
+        },
+        {
+          "file": "ScheduleDetails.jsx",
+          "rel": "screens/schedule/ScheduleDetails.jsx",
+          "avgSim": 83,
+          "exact": false,
+          "sBA": 78,
+          "sBC": 83,
+          "sAC": 88
+        },
+        {
+          "file": "ScheduleFormPanel.jsx",
+          "rel": "screens/schedule/ScheduleFormPanel.jsx",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 99,
+          "sBC": 99,
+          "sAC": 100
+        },
+        {
+          "file": "UpdatePreconfigurdEvent.jsx",
+          "rel": "screens/schedule/UpdatePreconfigurdEvent.jsx",
+          "avgSim": 97,
+          "exact": false,
+          "sBA": 97,
+          "sBC": 96,
+          "sAC": 99
+        },
+        {
+          "file": "AlertsComponent.jsx",
+          "rel": "screens/settings/alerts/AlertsComponent.jsx",
+          "avgSim": 69,
+          "exact": false,
+          "sBA": 65,
+          "sBC": 64,
+          "sAC": 79
+        },
+        {
+          "file": "AlertsComponent.test.jsx",
+          "rel": "screens/settings/alerts/AlertsComponent.test.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "FofpThemeColorCard.jsx",
+          "rel": "screens/settings/changetheme/FofpThemeColorCard.jsx",
+          "avgSim": 82,
+          "exact": false,
+          "sBA": 91,
+          "sBC": 76,
+          "sAC": 80
+        },
+        {
+          "file": "ThemeChange.jsx",
+          "rel": "screens/settings/changetheme/ThemeChange.jsx",
+          "avgSim": 76,
+          "exact": false,
+          "sBA": 91,
+          "sBC": 70,
+          "sAC": 68
+        },
+        {
+          "file": "AreaCalculationPage.jsx",
+          "rel": "screens/settings/floor/AreaCalculationPage.jsx",
+          "avgSim": 96,
+          "exact": false,
+          "sBA": 94,
+          "sBC": 98,
+          "sAC": 97
+        },
+        {
+          "file": "CorrectCoordinate.jsx",
+          "rel": "screens/settings/floor/CorrectCoordinate.jsx",
+          "avgSim": 92,
+          "exact": false,
+          "sBA": 88,
+          "sBC": 96,
+          "sAC": 92
+        },
+        {
+          "file": "CreateFloor.jsx",
+          "rel": "screens/settings/floor/CreateFloor.jsx",
+          "avgSim": 89,
+          "exact": false,
+          "sBA": 86,
+          "sBC": 91,
+          "sAC": 91
+        },
+        {
+          "file": "EditFloor.jsx",
+          "rel": "screens/settings/floor/EditFloor.jsx",
+          "avgSim": 87,
+          "exact": false,
+          "sBA": 84,
+          "sBC": 90,
+          "sAC": 88
+        },
+        {
+          "file": "FloorComponent.jsx",
+          "rel": "screens/settings/floor/FloorComponent.jsx",
+          "avgSim": 82,
+          "exact": false,
+          "sBA": 76,
+          "sBC": 84,
+          "sAC": 85
+        },
+        {
+          "file": "ProcessorSelectionDialog.jsx",
+          "rel": "screens/settings/floor/ProcessorSelectionDialog.jsx",
+          "avgSim": 89,
+          "exact": false,
+          "sBA": 85,
+          "sBC": 92,
+          "sAC": 90
+        },
+        {
+          "file": "FOFPComponent.jsx",
+          "rel": "screens/settings/fofp/FOFPComponent.jsx",
+          "avgSim": 92,
+          "exact": false,
+          "sBA": 92,
+          "sBC": 95,
+          "sAC": 88
+        },
+        {
+          "file": "fofpContextMenuPosition.js",
+          "rel": "screens/settings/fofp/fofpContextMenuPosition.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpIndividualStyle.js",
+          "rel": "screens/settings/fofp/fofpIndividualStyle.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "FOFPLayoutViewer.jsx",
+          "rel": "screens/settings/fofp/FOFPLayoutViewer.jsx",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 99,
+          "sAC": 99
+        },
+        {
+          "file": "FofpMarkerContextMenu.jsx",
+          "rel": "screens/settings/fofp/FofpMarkerContextMenu.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpMarkerDrag.js",
+          "rel": "screens/settings/fofp/fofpMarkerDrag.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpMarkerResize.js",
+          "rel": "screens/settings/fofp/fofpMarkerResize.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "FofpMarkerResizeHandles.jsx",
+          "rel": "screens/settings/fofp/FofpMarkerResizeHandles.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpSettingsUi.js",
+          "rel": "screens/settings/fofp/fofpSettingsUi.js",
+          "avgSim": 74,
+          "exact": false,
+          "sBA": 72,
+          "sBC": 87,
+          "sAC": 62
+        },
+        {
+          "file": "FofpShapeMenuIcon.jsx",
+          "rel": "screens/settings/fofp/FofpShapeMenuIcon.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpShapeOptions.js",
+          "rel": "screens/settings/fofp/fofpShapeOptions.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpViewAutoFit.js",
+          "rel": "screens/settings/fofp/fofpViewAutoFit.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpViewportFit.js",
+          "rel": "screens/settings/fofp/fofpViewportFit.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "CreateHelp.jsx",
+          "rel": "screens/settings/help/CreateHelp.jsx",
+          "avgSim": 73,
+          "exact": false,
+          "sBA": 68,
+          "sBC": 82,
+          "sAC": 69
+        },
+        {
+          "file": "GetHelp.jsx",
+          "rel": "screens/settings/help/GetHelp.jsx",
+          "avgSim": 81,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 87,
+          "sAC": 82
+        },
+        {
+          "file": "HomeComponent.jsx",
+          "rel": "screens/settings/home/HomeComponent.jsx",
+          "avgSim": 80,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 83,
+          "sAC": 84
+        },
+        {
+          "file": "ManageModules.jsx",
+          "rel": "screens/settings/modules/ManageModules.jsx",
+          "avgSim": 87,
+          "exact": false,
+          "sBA": 83,
+          "sBC": 92,
+          "sAC": 87
+        },
+        {
+          "file": "AddByIpDialog.jsx",
+          "rel": "screens/settings/processors/AddByIpDialog.jsx",
+          "avgSim": 84,
+          "exact": false,
+          "sBA": 85,
+          "sBC": 81,
+          "sAC": 87
+        },
+        {
+          "file": "ProcessorsSettings.jsx",
+          "rel": "screens/settings/processors/ProcessorsSettings.jsx",
+          "avgSim": 87,
+          "exact": false,
+          "sBA": 89,
+          "sBC": 86,
+          "sAC": 87
+        },
+        {
+          "file": "processorsTableStyles.js",
+          "rel": "screens/settings/processors/processorsTableStyles.js",
+          "avgSim": 30,
+          "exact": false,
+          "sBA": 34,
+          "sBC": 29,
+          "sAC": 27
+        },
+        {
+          "file": "ManageSensors.jsx",
+          "rel": "screens/settings/sensors/ManageSensors.jsx",
+          "avgSim": 86,
+          "exact": false,
+          "sBA": 81,
+          "sBC": 91,
+          "sAC": 85
+        },
+        {
+          "file": "ThemeContext.jsx",
+          "rel": "screens/settings/theme/ThemeContext.jsx",
+          "avgSim": 36,
+          "exact": false,
+          "sBA": 21,
+          "sBC": 62,
+          "sAC": 24
+        },
+        {
+          "file": "CreateUser.jsx",
+          "rel": "screens/settings/Users/CreateUser.jsx",
+          "avgSim": 75,
+          "exact": false,
+          "sBA": 63,
+          "sBC": 100,
+          "sAC": 63
+        },
+        {
+          "file": "UpdateUser.jsx",
+          "rel": "screens/settings/Users/UpdateUser.jsx",
+          "avgSim": 81,
+          "exact": false,
+          "sBA": 72,
+          "sBC": 100,
+          "sAC": 72
+        },
+        {
+          "file": "UsersComponent.jsx",
+          "rel": "screens/settings/Users/UsersComponent.jsx",
+          "avgSim": 71,
+          "exact": false,
+          "sBA": 64,
+          "sBC": 72,
+          "sAC": 76
+        },
+        {
+          "file": "userUpdatePayload.js",
+          "rel": "screens/settings/Users/userUpdatePayload.js",
+          "avgSim": 93,
+          "exact": false,
+          "sBA": 90,
+          "sBC": 100,
+          "sAC": 90
+        },
+        {
+          "file": "CreateUserAreaGroup.jsx",
+          "rel": "screens/userAreaGroup/CreateUserAreaGroup.jsx",
+          "avgSim": 67,
+          "exact": false,
+          "sBA": 92,
+          "sBC": 54,
+          "sAC": 55
+        },
+        {
+          "file": "UpdateUserAreaGroup.jsx",
+          "rel": "screens/userAreaGroup/UpdateUserAreaGroup.jsx",
+          "avgSim": 97,
+          "exact": false,
+          "sBA": 95,
+          "sBC": 97,
+          "sAC": 98
+        }
+      ],
+      "in2": [
+        {
+          "file": "Untitled",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 0
+        },
+        {
+          "file": "ThemeChangePage.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 92
+        },
+        {
+          "file": "ThemeChangeWithFofp.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 73
+        },
+        {
+          "file": "themePickerLayout.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 69
+        },
+        {
+          "file": "ProcessorsSettings.test.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        },
+        {
+          "file": "RenameWidget.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 33
+        },
+        {
+          "file": "SettingsLayout.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 55
+        },
+        {
+          "file": "Dashboard_Old.jsx",
+          "variants": [
+            "advanced",
+            "customized"
+          ],
+          "sim": 99
+        },
+        {
+          "file": "HeatMap_original.jsx",
+          "variants": [
+            "advanced",
+            "customized"
+          ],
+          "sim": 100
+        }
+      ],
+      "variantOnly": {
+        "basic": [
+          "CarbonFootprintTeardrop.jsx",
+          "ConsumptionSavingsCombinedChart.jsx",
+          "Dashboard - Copy.jsx",
+          "DashboardDurationFilterBar.jsx",
+          "DashboardOverview - Copy.jsx",
+          "SpaceInstantUtilizationCombinedChart.jsx",
+          "AreaSettingsDialog  - Copy.jsx",
+          "fofpZoneInteraction.test.js",
+          "HeatMap - Copy.jsx",
+          "HeatmapControls - Copy.jsx",
+          "heatmapLightStyles.test.js",
+          "zoneControlCardLayout.js",
+          "zoneControlCardLayout.test.js",
+          "settingsLayout.test.js"
+        ],
+        "advanced": [
+          "authFormStyles.js",
+          "AreaSettingsDialog .jsx",
+          "LutronPublicHome.jsx",
+          "ThemeBackgroundPresets.jsx",
+          "floorToolStyles.js",
+          "userSelectMenuProps.js"
+        ],
+        "customized": [
+          "CustomGraphScopedGroupPicker.jsx",
+          "CustomGraphScopeSection.jsx",
+          "Widgets.jsx"
+        ]
+      }
+    },
+    "components": {
+      "counts": {
+        "basic": 6,
+        "advanced": 7,
+        "customized": 7
+      },
+      "inAll3": [
+        {
+          "file": "ErrorBoundary.jsx",
+          "rel": "components/ErrorBoundary.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "Footer.jsx",
+          "rel": "components/Footer.jsx",
+          "avgSim": 44,
+          "exact": false,
+          "sBA": 73,
+          "sBC": 31,
+          "sAC": 28
+        },
+        {
+          "file": "TopbarComponent.jsx",
+          "rel": "components/TopbarComponent.jsx",
+          "avgSim": 60,
+          "exact": false,
+          "sBA": 49,
+          "sBC": 59,
+          "sAC": 71
+        }
+      ],
+      "in2": [
+        {
+          "file": "SettingsSidebarNav.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 45
+        }
+      ],
+      "variantOnly": {
+        "basic": [
+          "ScheduleHeaderDropdown.jsx",
+          "TopbarComponent - Copy.jsx"
+        ],
+        "advanced": [
+          "ChartExportButton.jsx",
+          "ChartExportDropdown.jsx",
+          "NativeDateInput.jsx"
+        ],
+        "customized": [
+          "CustomGroupScopeTooltip.jsx",
+          "ChartSizeBox.jsx",
+          "EnergyCustomGraphCard.jsx",
+          "SettingsSidebar.jsx"
+        ]
+      }
+    },
+    "redux": {
+      "counts": {
+        "basic": 26,
+        "advanced": 25,
+        "customized": 21
+      },
+      "inAll3": [
+        {
+          "file": "userlogin.js",
+          "rel": "redux/slice/auth/userlogin.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "alertsSlice.js",
+          "rel": "redux/slice/dashboard/alertsSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "dashboardSlice.js",
+          "rel": "redux/slice/dashboard/dashboardSlice.js",
+          "avgSim": 85,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 77,
+          "sAC": 77
+        },
+        {
+          "file": "unifiedEnergySlice.js",
+          "rel": "redux/slice/dashboard/unifiedEnergySlice.js",
+          "avgSim": 91,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 86,
+          "sAC": 86
+        },
+        {
+          "file": "floorSlice.js",
+          "rel": "redux/slice/floor/floorSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "fofpSlice.js",
+          "rel": "redux/slice/fofp/fofpSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "homeSlice.js",
+          "rel": "redux/slice/home/homeSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "modulesSlice.js",
+          "rel": "redux/slice/modules/modulesSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "processorSlice.js",
+          "rel": "redux/slice/processor/processorSlice.js",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 99,
+          "sAC": 99
+        },
+        {
+          "file": "quickControlSlice.js",
+          "rel": "redux/slice/quickcontrols/quickControlSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "scheduleSlice.js",
+          "rel": "redux/slice/schedule/scheduleSlice.js",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 98,
+          "sBC": 98,
+          "sAC": 100
+        },
+        {
+          "file": "sensorsSlice.js",
+          "rel": "redux/slice/sensors/sensorsSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "alertsDisplaySlice.js",
+          "rel": "redux/slice/settingsslice/alerts/alertsDisplaySlice.js",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 99,
+          "sBC": 99,
+          "sAC": 100
+        },
+        {
+          "file": "createUserSlice.js",
+          "rel": "redux/slice/settingsslice/createUserSlice.js",
+          "avgSim": 95,
+          "exact": false,
+          "sBA": 92,
+          "sBC": 100,
+          "sAC": 92
+        },
+        {
+          "file": "areaSettingsSlice.js",
+          "rel": "redux/slice/settingsslice/heatmap/areaSettingsSlice.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "groupOccupancySlice.js",
+          "rel": "redux/slice/settingsslice/heatmap/groupOccupancySlice.js",
+          "avgSim": 61,
+          "exact": false,
+          "sBA": 84,
+          "sBC": 48,
+          "sAC": 50
+        },
+        {
+          "file": "HeatmapSlice.js",
+          "rel": "redux/slice/settingsslice/heatmap/HeatmapSlice.js",
+          "avgSim": 94,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 91,
+          "sAC": 91
+        },
+        {
+          "file": "usersSlice.js",
+          "rel": "redux/slice/settingsslice/user/usersSlice.js",
+          "avgSim": 88,
+          "exact": false,
+          "sBA": 82,
+          "sBC": 99,
+          "sAC": 82
+        },
+        {
+          "file": "themeSlice.js",
+          "rel": "redux/slice/theme/themeSlice.js",
+          "avgSim": 76,
+          "exact": false,
+          "sBA": 65,
+          "sBC": 68,
+          "sAC": 95
+        },
+        {
+          "file": "store.js",
+          "rel": "redux/store.js",
+          "avgSim": 99,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 99,
+          "sAC": 99
+        }
+      ],
+      "in2": [
+        {
+          "file": "heatmapMapSync.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        },
+        {
+          "file": "heatmapMapSync.test.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        },
+        {
+          "file": "HeatmapSlice.mapSync.test.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        },
+        {
+          "file": "HeatmapSlice.test.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        },
+        {
+          "file": "occupancyModeUtils.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 100
+        }
+      ],
+      "variantOnly": {
+        "basic": [
+          "HeatmapSlice - Copy.js"
+        ],
+        "advanced": [],
+        "customized": [
+          "AreaGroupFilter.js"
+        ]
+      }
+    },
+    "utils": {
+      "counts": {
+        "basic": 25,
+        "advanced": 33,
+        "customized": 39
+      },
+      "inAll3": [
+        {
+          "file": "ColorPickerCard.jsx",
+          "rel": "utils/ColorPickerCard.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "colorScale.js",
+          "rel": "utils/colorScale.js",
+          "avgSim": 64,
+          "exact": false,
+          "sBA": 46,
+          "sBC": 100,
+          "sAC": 46
+        },
+        {
+          "file": "FeedbackUI.jsx",
+          "rel": "utils/FeedbackUI.jsx",
+          "avgSim": 84,
+          "exact": false,
+          "sBA": 80,
+          "sBC": 91,
+          "sAC": 82
+        },
+        {
+          "file": "floorplanCoordinates.js",
+          "rel": "utils/floorplanCoordinates.js",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "HexColorPicker.jsx",
+          "rel": "utils/HexColorPicker.jsx",
+          "avgSim": 72,
+          "exact": false,
+          "sBA": 65,
+          "sBC": 78,
+          "sAC": 72
+        },
+        {
+          "file": "PaginatedList.jsx",
+          "rel": "utils/PaginatedList.jsx",
+          "avgSim": 100,
+          "exact": true,
+          "sBA": 100,
+          "sBC": 100,
+          "sAC": 100
+        },
+        {
+          "file": "sidebarItems.jsx",
+          "rel": "utils/sidebarItems.jsx",
+          "avgSim": 72,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 58,
+          "sAC": 58
+        },
+        {
+          "file": "themeOnSurface.js",
+          "rel": "utils/themeOnSurface.js",
+          "avgSim": 87,
+          "exact": false,
+          "sBA": 80,
+          "sBC": 100,
+          "sAC": 80
+        },
+        {
+          "file": "ZoneControlCard.jsx",
+          "rel": "utils/ZoneControlCard.jsx",
+          "avgSim": 97,
+          "exact": false,
+          "sBA": 96,
+          "sBC": 96,
+          "sAC": 99
+        }
+      ],
+      "in2": [
+        {
+          "file": "SettingsSidebarNavLabel.jsx",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 73
+        },
+        {
+          "file": "settingsSidebarTabStyles.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 1
+        },
+        {
+          "file": "themePageBackground.js",
+          "variants": [
+            "basic",
+            "advanced"
+          ],
+          "sim": 5
+        }
+      ],
+      "variantOnly": {
+        "basic": [
+          "customOverviewWidgets.js",
+          "dashboardChartLayoutStorage.js",
+          "dashboardWidgetVisibility.js",
+          "dashboardWidgetVisibility.test.js",
+          "dashboardWidgetVisibilityCore.js",
+          "draggableReflowOrder.js",
+          "LongPressDraggable.jsx",
+          "normalizeBackgroundPath.js",
+          "settingsHomeTabParams.js",
+          "settingsUsersBreadcrumbParams.js",
+          "shadesWidgetSettings.js",
+          "WheelColorPicker.jsx",
+          "whiteThemeCheckboxIcons.jsx"
+        ],
+        "advanced": [
+          "areaSizeLoadStyles.js",
+          "chartExportMenuStyles.js",
+          "dashboardChartChrome.js",
+          "dashboardChartColors.js",
+          "dashboardSelectMenuProps.js",
+          "dynamicThemeTokens.js",
+          "formatApiError.js",
+          "keyboardNavUtils.js",
+          "pageSubNavBridge.js",
+          "premiumThemeTokens.js",
+          "quickControlTheme.js",
+          "rovingTablistKeyboard.js",
+          "scheduleActionPriority.js",
+          "scheduleCreateStyles.js",
+          "scheduleLocationPath.js",
+          "scheduleSelectMenuProps.js",
+          "settingsSidebarKeyboard.js",
+          "settingsSidebarPillState.js",
+          "theme3PageChrome.js",
+          "topbarNavActive.js",
+          "useAppBreakpoints.js"
+        ],
+        "customized": [
+          "advancedBuiltinChartStyles.js",
+          "aggregateEnergyConsumptionByFloorScope.js",
+          "applyCustomGraphGroupScopedParams.js",
+          "areaGroupFlags.js",
+          "areaGroupNameLookup.js",
+          "buildDashboardChartQueryParams.js",
+          "buildTotalConsumptionByGroupPieRows.js",
+          "builtinWidgetDashboardPage.js",
+          "builtinWidgetOverrides.js",
+          "customWidgetFloorBuckets.js",
+          "dashboardChartPlotSurface.js",
+          "dashboardCustomGraphThunkResolver.js",
+          "dashboardLanding.js",
+          "filterGroupIdsByAreaGroupScope.js",
+          "floorDisplayLabel.js",
+          "graphSizesStore.js",
+          "inferDashboardUnitFallback.js",
+          "intersectDashboardGraphFloors.js",
+          "meanOccupancyFromChartPayload.js",
+          "mergeCustomGraphScopeIntoApiParams.js",
+          "mergeLeafPayloadIntoAreaFloorMap.js",
+          "normalizeAreaGroupListPayload.js",
+          "normalizeTotalConsumptionByGroupPayload.js",
+          "scheduleFormLayout.js",
+          "settingsPageLayout.js",
+          "sumEnergyConsumptionPayload.js",
+          "sumEnergySavingsPayload.js",
+          "useGraphSize.js",
+          "useSyncPanelToTopbar.js",
+          "useSyncScheduleDetailsPanelWidth.js"
+        ]
+      }
+    },
+    "customhooks": {
+      "counts": {
+        "basic": 2,
+        "advanced": 2,
+        "customized": 2
+      },
+      "inAll3": [
+        {
+          "file": "AuthGuard.jsx",
+          "rel": "customhooks/AuthGuard.jsx",
+          "avgSim": 95,
+          "exact": false,
+          "sBA": 100,
+          "sBC": 92,
+          "sAC": 92
+        },
+        {
+          "file": "UseAuth.jsx",
+          "rel": "customhooks/UseAuth.jsx",
+          "avgSim": 85,
+          "exact": false,
+          "sBA": 97,
+          "sBC": 80,
+          "sAC": 78
+        }
+      ],
+      "in2": [],
+      "variantOnly": {
+        "basic": [],
+        "advanced": [],
+        "customized": []
+      }
+    },
+    "layouts": {
+      "counts": {
+        "basic": 2,
+        "advanced": 1,
+        "customized": 1
+      },
+      "inAll3": [
+        {
+          "file": "MainLayout.jsx",
+          "rel": "layouts/MainLayout.jsx",
+          "avgSim": 40,
+          "exact": false,
+          "sBA": 34,
+          "sBC": 30,
+          "sAC": 57
+        }
+      ],
+      "in2": [],
+      "variantOnly": {
+        "basic": [
+          "MainLayout - Copy.jsx"
+        ],
+        "advanced": [],
+        "customized": []
+      }
+    },
+    "config": {
+      "counts": {
+        "basic": 0,
+        "advanced": 2,
+        "customized": 0
+      },
+      "inAll3": [],
+      "in2": [],
+      "variantOnly": {
+        "basic": [],
+        "advanced": [
+          "featureFlags.js",
+          "themeConstants.js"
+        ],
+        "customized": []
+      }
+    },
+    "styles": {
+      "counts": {
+        "basic": 1,
+        "advanced": 1,
+        "customized": 1
+      },
+      "inAll3": [
+        {
+          "file": "HexColorPicker.css",
+          "rel": "styles/HexColorPicker.css",
+          "avgSim": 79,
+          "exact": false,
+          "sBA": 68,
+          "sBC": 100,
+          "sAC": 68
+        }
+      ],
+      "in2": [],
+      "variantOnly": {
+        "basic": [],
+        "advanced": [],
+        "customized": []
+      }
+    }
+  }
+}

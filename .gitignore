@@ -26,8 +26,17 @@
 *.pem
 *.log
 
+# runtime logs and local tooling
+/logs
+/tools
+
+# editor
+.cursor/
+
 # environment variables
 .env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
