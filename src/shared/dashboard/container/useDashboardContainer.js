@@ -2,11 +2,13 @@ import {
   useDashboardExports,
   useDashboardDates,
   useDashboardWidgets,
-  useDashboardVisibility,
 } from './hooks';
+import { useMemo } from 'react';
 
 export function useDashboardContainer(adapter, runtime) {
-  const visibility = useDashboardVisibility(adapter.resolveVisibilityOptions(runtime));
+  const visibilityOptions = adapter.resolveVisibilityOptions(runtime);
+  const useVisibility = adapter.useVisibility;
+  const visibility = useVisibility(visibilityOptions);
 
   const widgets = useDashboardWidgets(
     adapter.resolveWidgetsOptions({
@@ -32,10 +34,13 @@ export function useDashboardContainer(adapter, runtime) {
     })
   );
 
-  return {
-    visibility,
-    widgets,
-    dates,
-    exports,
-  };
+  return useMemo(
+    () => ({
+      visibility,
+      widgets,
+      dates,
+      exports,
+    }),
+    [visibility, widgets, dates, exports]
+  );
 }

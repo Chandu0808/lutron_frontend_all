@@ -38,6 +38,7 @@ const QuickControls = () => {
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
   const modalBg = 'var(--schedule-modal-bg, #d6dde8)';
   const modalTitleColor = 'var(--schedule-modal-title-color, #000000)';
+  const quickControlCardBorder = '1px solid rgba(0, 0, 0, 0.2)';
   
   // Get user authentication and role
   const { role } = UseAuth();
@@ -163,6 +164,7 @@ const QuickControls = () => {
     if (status === 'idle' || shouldRefresh) {
       dispatch(fetchQuickControls());
       if (shouldRefresh) dispatch(setShouldRefresh(false));
+      setLastRefreshTime(Date.now());
     }
   }, [status, shouldRefresh, dispatch]);
 
@@ -185,12 +187,6 @@ const QuickControls = () => {
 
     return () => clearInterval(interval);
   }, [dispatch, lastRefreshTime]);
-
-  // Force refresh when component mounts or when navigating to this page
-  useEffect(() => {
-    dispatch(fetchQuickControls());
-    setLastRefreshTime(Date.now());
-  }, [dispatch]);
 
   // Check if all areas have the same action type
   const checkSameActionType = () => {
@@ -617,7 +613,8 @@ const QuickControls = () => {
               padding: '12px 20px',
               fontWeight: 700,
               fontSize: 14,
-              border: 'none',
+              border: quickControlCardBorder,
+              boxSizing: 'border-box',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               cursor: 'pointer',
               minWidth: '140px',
@@ -656,7 +653,8 @@ const QuickControls = () => {
                 padding: isTablet ? '12px 20px' : '15px 30px',
                 fontWeight: 700,
                 fontSize: isTablet ? 14 : 16,
-                border: 'none',
+                border: quickControlCardBorder,
+                boxSizing: 'border-box',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                 cursor: 'pointer',
                 minWidth: isTablet ? 140 : 180,
@@ -769,9 +767,9 @@ const QuickControls = () => {
                       maxWidth: '200px'
                     }}>
                       {editMode ? (
-                        <span>{area.floor_name} &gt; {area.area_name}</span>
+                        <span>{area.floor_name} / {area.area_name}</span>
                       ) : (
-                        `${area.floor_name} &gt; ${area.area_name}`
+                        `${area.floor_name} / ${area.area_name}`
                       )}
                     </td>
                     <td style={{ padding: '8px 0' }}>

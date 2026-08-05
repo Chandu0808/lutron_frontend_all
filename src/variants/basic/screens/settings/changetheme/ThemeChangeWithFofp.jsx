@@ -4,7 +4,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import HexColorPicker, { HEX_PICKER_DEFAULT_WHITE_SWATCH } from '../../../utils/HexColorPicker';
 import '../../../styles/HexColorPicker.css';
-import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
+import {
+    BASIC_MANAGE_AREA_GROUPS_PATH,
+} from '../../../utils/basicSettingsPaths';
+import { getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import {
     clearBackgroundImage,
     fetchApplicationTheme,
@@ -24,6 +27,13 @@ import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/U
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
 import UiVariantSelector from '../../../../../components/UiVariantSelector';
 import {
+    dispatchFetchApplicationThemeOnce,
+    dispatchFetchBackgroundImageOnce,
+    dispatchFetchClientOnce,
+    dispatchFetchHeatMapThemeOnce,
+    dispatchFetchThemeSettingsOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
     DEFAULT_APP_BACKGROUND,
     DEFAULT_APP_CONTENT,
     onContentColors,
@@ -33,11 +43,13 @@ import { settingsSidebarColumnDividerSx } from '../../../utils/settingsSidebarTa
 import SettingsSidebarNav from '../../../components/SettingsSidebarNav';
 import FofpThemeColorCard from './FofpThemeColorCard';
 import {
+    BASIC_THEME_PICKER_HEX,
     themePickerCardCellSx,
     themePickerCardColumnSx,
     themePickerCardsGridSx,
     themePickerCardSurfaceSx,
     themePickerTitleSpacerSx,
+    themePickerActionsSx,
 } from './themePickerLayout';
 
 const ThemeChange = () => {
@@ -111,7 +123,10 @@ const ThemeChange = () => {
     const [themePickerKey, setThemePickerKey] = useState(0);
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
-        dispatch(getLutronDataClient());
+        dispatchFetchClientOnce(dispatch, getLutronDataClient);
+    }, [dispatch]);
+
+    useEffect(() => {
         setDynamicButtonColor(themeColorMap?.Button || '#232323');
     }, [themeColorMap?.Button]);
 
@@ -126,16 +141,16 @@ const ThemeChange = () => {
     useEffect(() => {
         // Only fetch if not already loaded
         if (!appTheme || !appTheme.application_theme) {
-            dispatch(fetchApplicationTheme());
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
         }
         if (!heatMapTheme || !heatMapTheme.application_theme) {
-            dispatch(fetchHeatMapTheme());
+            dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
         }
         const bgApiLoaded =
             apibgImage &&
             (apibgImage.status != null || Object.prototype.hasOwnProperty.call(apibgImage, 'background_image'));
         if (!bgApiLoaded) {
-            dispatch(fetchBackgroundImage());
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
     useEffect(() => {
@@ -273,19 +288,6 @@ const ThemeChange = () => {
             // Optionally handle error feedback here
         }
     };
-    const sidebarItemPaths = {
-        "Home": "/main",
-        "Alerts": "/alerts",
-        "Email Server": "/email-server/",
-        "Theme": "/theme-change",
-        "User Management": "/users",
-        "Area Size for Energy": "/area-size-load",
-        "Area Groups": "/manage-area-groups",
-        "Widgets": "/rename-widget/",
-        "Floors": "/floor",
-        "Processors": "/processors",
-        "Help": "/create-help/",
-    };
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
     const fileInputRef = React.useRef();
@@ -305,7 +307,7 @@ const ThemeChange = () => {
                 backgroundRemovedRef.current = false;
                 dispatch(updateApplicationTheme({ background_image: backendPath }));
                 const bgResponse = await dispatch(fetchBackgroundImage()).unwrap();
-                dispatch(fetchThemeSettings());
+                dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
                 const bgUrl = bgResponse?.background_image?.trim();
                 if (bgUrl) {
                     reloadTheme(
@@ -334,9 +336,9 @@ const ThemeChange = () => {
                 button: normalizeColor(themeColorMap.Button),
             };
             reloadTheme(themePayload, '');
-            dispatch(fetchThemeSettings());
-            dispatch(fetchBackgroundImage());
-            dispatch(fetchApplicationTheme());
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage, { force: true });
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
             setSnackbarSeverity('success');
             setSnackbarMessage('Background image removed.');
             setSnackbarOpen(true);
@@ -352,7 +354,6 @@ const ThemeChange = () => {
     };
 
     const themePickerCardSx = themePickerCardSurfaceSx;
-    const themePickerActionsSx = { mt: 'auto', pt: 2, minHeight: 40, display: 'flex', alignItems: 'center' };
 
     const renderTabs = (labels, active, setActive, colorMap, setSelectedColor) => (
         <Box className="pill-tab-container">
@@ -378,10 +379,14 @@ const ThemeChange = () => {
 
     const normalizedRole = role ? role.toLowerCase() : '';
     const canAccessTheme = normalizedRole === 'superadmin' || normalizedRole === 'super admin' || normalizedRole === 'admin';
+    // FOFP marker palette is Superadmin-only; Admin keeps Background + heatmap pickers.
+    // Keep a 3-column grid so Admin's two cards stay the same width as Superadmin's.
+    const canEditFofpThemeColor =
+        normalizedRole === 'superadmin' || normalizedRole === 'super admin';
 
     useEffect(() => {
         if (!canAccessTheme) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(BASIC_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessTheme, navigate]);
 
@@ -392,9 +397,9 @@ const ThemeChange = () => {
     const isDefaultWhiteTheme = isLightSurface(contentForSidebar);
 
     return (
-        <Grid container sx={{ ml: '18px', p: '18px' }}>
+        <Grid container className="settings-layout-root" sx={{ ml: '12px', p: '12px' }}>
             {/* Full-width header (title + 2 horizontal dividers) */}
-            <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
+            <Grid item xs={12} sx={{ pt: '8px', mb: 1 }}>
                 <Typography
                     variant="h6"
                     sx={{
@@ -434,14 +439,12 @@ const ThemeChange = () => {
                 md={10}
                 sx={{
                     backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentForSidebar,
-                    p: 3,
+                    p: { xs: 1.5, md: 2 },
                     borderTopRightRadius: '10px',
                     borderBottomRightRadius: '10px',
                 }}
             >
-                <Box sx={{ margin: '1em', marginBottom: 0 }}>
-                    <UiVariantSelector />
-                </Box>
+                <UiVariantSelector compact />
                 <Box sx={themePickerCardsGridSx(3)}>
                     {/* Theme Picker Card */}
                     <Box sx={themePickerCardCellSx}>
@@ -458,11 +461,11 @@ const ThemeChange = () => {
                                     selectedColor={selectedThemeColor}
                                     setSelectedColor={setSelectedThemeColor}
                                     activeTarget={activeThemeTab}
-                                    width={200}
-                                    height={220}
-                                    hexRadius={8}
+                                    width={BASIC_THEME_PICKER_HEX.width}
+                                    height={BASIC_THEME_PICKER_HEX.height}
+                                    hexRadius={BASIC_THEME_PICKER_HEX.hexRadius}
                                 />
-                                <Box sx={{ ...themePickerActionsSx, justifyContent: 'space-between', px: 2, gap: 2 }}>
+                                <Box sx={{ ...themePickerActionsSx, justifyContent: 'space-between', px: 1.5, gap: 1.5 }}>
                                     <Button
                                         className="save-button"
                                         onClick={handleThemeReset}
@@ -510,9 +513,9 @@ const ThemeChange = () => {
                                     selectedColor={selectedHeatmapColor}
                                     setSelectedColor={setSelectedHeatmapColor}
                                     activeTarget={activeHeatmapTab}
-                                    width={200}
-                                    height={220}
-                                    hexRadius={8}
+                                    width={BASIC_THEME_PICKER_HEX.width}
+                                    height={BASIC_THEME_PICKER_HEX.height}
+                                    hexRadius={BASIC_THEME_PICKER_HEX.hexRadius}
                                 />
                                 <Box sx={{ ...themePickerActionsSx, justifyContent: 'center' }}>
                                     <Button
@@ -534,18 +537,20 @@ const ThemeChange = () => {
                         </Box>
                     </Box>
 
-                    <FofpThemeColorCard
-                        renderTabs={renderTabs}
-                        dynamicButtonColor={dynamicButtonColor}
-                        actionButtonLabel={actionButtonLabel}
-                        themePickerActionsSx={{ ...themePickerActionsSx, justifyContent: 'center' }}
-                        onSaveMessage={(message) => {
-                            setSnackbarMessage(message);
-                            setSnackbarOpen(true);
-                        }}
-                    />
+                    {canEditFofpThemeColor && (
+                        <FofpThemeColorCard
+                            renderTabs={renderTabs}
+                            dynamicButtonColor={dynamicButtonColor}
+                            actionButtonLabel={actionButtonLabel}
+                            themePickerActionsSx={{ ...themePickerActionsSx, justifyContent: 'center' }}
+                            onSaveMessage={(message) => {
+                                setSnackbarMessage(message);
+                                setSnackbarOpen(true);
+                            }}
+                        />
+                    )}
                 </Box>
-                <Box sx={{ mt: 4, p: 2 }}>
+                <Box sx={{ mt: 2, p: 1 }}>
                     <Typography
                         variant="subtitle1"
                         fontWeight="bold"

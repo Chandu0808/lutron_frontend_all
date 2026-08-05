@@ -1,6 +1,8 @@
 import { createSlice, createAsyncThunk, createSelector } from '@reduxjs/toolkit';
 import { fetchFloors, getLeafByFloorID } from '../floor/floorSlice';
 import { BaseUrl } from '../../../BaseUrl';
+import { coalesceDashboardHttpGet } from '../../../../../shared/dashboard/utils/coalesceDashboardHttpGet';
+import { mapTimeRangeToBackend, mapTimeRangeToBackendForSavings } from '../../../../../shared/dashboard/utils/mapTimeRangeToBackend';
 
 // Helper function to extract error message from error response
 const extractErrorMessage = (error) => {
@@ -136,8 +138,6 @@ export const clearDataCache = createAsyncThunk(
     return true;
   }
 );
-
-import { mapTimeRangeToBackend, mapTimeRangeToBackendForSavings } from '../../../../../shared/dashboard/utils/mapTimeRangeToBackend';
 
 // Helper function to generate proper date format for filenames
 const generateDateString = (timeRange, startDate, endDate) => {
@@ -390,9 +390,7 @@ export const fetchTotalConsumptionByGroup = createAsyncThunk(
   'dashboard/fetchTotalConsumptionByGroup',
   async ({ areaIds, floorIds, timeRange, startDate, endDate, isNavigating }, { rejectWithValue }) => {
     try {
-      const requestId = Math.random().toString(36).substr(2, 9);
-
-      // Generate cache key
+      // Respect Energy dashboard area/floor filter (same as other energy charts).
       const cacheKey = `totalconsumption_${generateCacheKey(areaIds, floorIds, timeRange, startDate, endDate)}`;
 
       // Check cache first (but skip cache for debugging)
@@ -402,11 +400,11 @@ export const fetchTotalConsumptionByGroup = createAsyncThunk(
       }
 
       const params = new URLSearchParams();
-      // CORRECT LOGIC: If floor is selected, send ONLY floorIds, NOT areaIds
+      // Match other energy charts: floor selection sends floor_ids; otherwise area_ids.
       if (floorIds && floorIds.length > 0) {
-        floorIds.forEach(id => params.append('floor_ids', id));
+        floorIds.forEach((id) => params.append('floor_ids', id));
       } else if (areaIds && areaIds.length > 0) {
-        areaIds.forEach(id => params.append('area_ids', id));
+        areaIds.forEach((id) => params.append('area_ids', id));
       }
 
       // Removed console logs for cleaner production code
@@ -451,7 +449,7 @@ export const fetchTotalConsumptionByGroup = createAsyncThunk(
       const url = `/dashboard/total_consumption/by_group?${params}`;
       // Removed console logs for cleaner production code
 
-      const response = await BaseUrl.get(url);
+      const response = await coalesceDashboardHttpGet(BaseUrl, url);
 
       // Removed console logs for cleaner production code
 
@@ -514,7 +512,7 @@ export const fetchLightPowerDensity = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/light_power_density?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/light_power_density?${params}`);
       return response.data;
     } catch (error) {
       const errorMessage = extractErrorMessage(error.response?.data || error);
@@ -573,7 +571,7 @@ export const fetchOccupancyCount = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/occupancy_count?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/occupancy_count?${params}`);
       return response.data;
     } catch (error) {
       const errorMessage = extractErrorMessage(error.response?.data || error);
@@ -630,7 +628,7 @@ export const fetchInstantOccupancyCount = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/instant_occupancy_count?${params}`, {
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/instant_occupancy_count?${params}`, {
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -693,7 +691,7 @@ export const fetchOccupancyByGroupFromLogs = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/occupancy_by_group_from_logs?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/occupancy_by_group_from_logs?${params}`);
       return response.data;
     } catch (error) {
       const errorMessage = extractErrorMessage(error.response?.data || error);
@@ -750,7 +748,7 @@ export const fetchSpaceUtilizationPerFromLogs = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/space_utilization_per_from_logs?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/space_utilization_per_from_logs?${params}`);
       return response.data;
     } catch (error) {
       const errorMessage = extractErrorMessage(error.response?.data || error);
@@ -809,7 +807,7 @@ export const fetchOccupancyByGroup = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/occupancy_by_group?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/occupancy_by_group?${params}`);
 
       // Return the response data directly as it already has the correct structure
       return response.data;
@@ -872,7 +870,7 @@ export const fetchSpaceUtilizationPerArea = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/space_utilization_per?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/space_utilization_per?${params}`);
       return response.data;
     } catch (error) {
       // Error fetching space utilization per area
@@ -960,7 +958,7 @@ export const fetchSavingsByStrategy = createAsyncThunk(
         params.append('time_range', backendTimeRange);
       }
 
-      const response = await BaseUrl.get(`/dashboard/saving_by_stratergy?${params}`);
+      const response = await coalesceDashboardHttpGet(BaseUrl, `/dashboard/saving_by_stratergy?${params}`);
 
       // Check if the response has data
       if (response.data && response.data.status === 'success') {
@@ -1165,19 +1163,9 @@ export const downloadPeakMinConsumption = createAsyncThunk(
 
 export const downloadTotalConsumptionByGroup = createAsyncThunk(
   'dashboard/downloadTotalConsumptionByGroup',
-  async ({ areaIds, floorIds, timeRange, startDate, endDate }, { rejectWithValue }) => {
+  async ({ timeRange, startDate, endDate }, { rejectWithValue }) => {
     try {
-
-      // If no areas are selected, let the backend return data for all accessible areas
-      // Don't return early - let the API call proceed
-
       const params = new URLSearchParams();
-      // CORRECT LOGIC: If floor is selected, send ONLY floorIds, NOT areaIds
-      if (floorIds && floorIds.length > 0) {
-        floorIds.forEach(id => params.append('floor_ids', id));
-      } else if (areaIds && areaIds.length > 0) {
-        areaIds.forEach(id => params.append('area_ids', id));
-      }
 
       // Use custom date range only when explicitly custom, otherwise use predefined time range
       if (timeRange === 'custom') {
@@ -1645,7 +1633,7 @@ export const sendEnergySavingsEmail = createAsyncThunk(
 
 export const sendPeakMinConsumptionEmail = createAsyncThunk(
   'dashboard/sendPeakMinConsumptionEmail',
-  async ({ toEmail, areaIds, floorIds, timeRange, startDate, endDate }, { rejectWithValue }) => {
+  async ({ toEmail, areaIds, floorIds, timeRange, startDate, endDate, isNavigating }, { rejectWithValue }) => {
     try {
       const params = new URLSearchParams();
       params.append('to_email', toEmail);
@@ -1690,20 +1678,10 @@ export const sendPeakMinConsumptionEmail = createAsyncThunk(
 
 export const sendTotalConsumptionByGroupEmail = createAsyncThunk(
   'dashboard/sendTotalConsumptionByGroupEmail',
-  async ({ toEmail, areaIds, floorIds, timeRange, startDate, endDate }, { rejectWithValue }) => {
+  async ({ toEmail, timeRange, startDate, endDate }, { rejectWithValue }) => {
     try {
-
-      // If no areas are selected, let the backend return data for all accessible areas
-      // Don't return early - let the API call proceed
-
       const params = new URLSearchParams();
       params.append('to_email', toEmail);
-      // CORRECT LOGIC: If floor is selected, send ONLY floorIds, NOT areaIds
-      if (floorIds && floorIds.length > 0) {
-        floorIds.forEach(id => params.append('floor_ids', id));
-      } else if (areaIds && areaIds.length > 0) {
-        areaIds.forEach(id => params.append('area_ids', id));
-      }
 
       // Use custom date range only when explicitly custom, otherwise use predefined time range
       if (timeRange === 'custom') {
@@ -2076,7 +2054,7 @@ export const sendSavingsByStrategyEmail = createAsyncThunk(
     } catch (error) {
       const errorMessage = extractErrorMessage(error.response?.data || error);
       return rejectWithValue(errorMessage);
-    }strategy
+    }
   }
 );
 

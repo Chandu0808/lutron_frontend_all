@@ -20,6 +20,10 @@ import {
   usesCustomApplicationTheme,
   usesTheme4PageGradient,
 } from '../../utils/themePageBackground';
+import {
+  dispatchFetchFloorsOnce,
+  dispatchFetchLeafByFloorOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards';
 
 const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   const dispatch = useDispatch();
@@ -94,20 +98,27 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   const [areaToRemove, setAreaToRemove] = useState(null);
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    if (!open) return;
+    dispatchFetchFloorsOnce(
+      dispatch,
+      fetchFloors,
+      Array.isArray(floors) && floors.length > 0
+    );
+  }, [dispatch, open, floors]);
 
-  // Auto-select first available floor when floors are loaded
+  // Auto-select first available floor only when the dialog is open
   useEffect(() => {
+    if (!open) return;
     const availableFloors = getAvailableFloors();
     if (availableFloors && availableFloors.length > 0 && !selectedFloor) {
       setSelectedFloor(availableFloors[0].id.toString());
     }
-  }, [floors, currentUserRole, userProfile]);
+  }, [open, floors, currentUserRole, userProfile, selectedFloor]);
 
   useEffect(() => {
-    if (selectedFloor) dispatch(getLeafByFloorID(selectedFloor));
-  }, [dispatch, selectedFloor]);
+    if (!open || !selectedFloor) return;
+    dispatchFetchLeafByFloorOnce(dispatch, getLeafByFloorID, selectedFloor);
+  }, [dispatch, open, selectedFloor]);
 
   // Helper to get all area_codes under a node (including itself and ALL descendants)
   const getAllAreaCodes = (node) => {

@@ -18,11 +18,29 @@ import { UseAuth } from '../../customhooks/UseAuth';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome, onContentColors } from '../../utils/themeOnSurface';
 import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
+import { dispatchFetchFloorsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 import {
   SCHEDULE_FIXED_ACTION_BAR_BOTTOM,
   scheduleFixedActionBarStyle,
   schedulePageWithFixedActionBarStyle,
 } from "../../../../utils/fixedActionBarStyles";
+import { detailsRowActionControlsStyle } from "../../../../utils/detailsRowActionControlsStyle";
+import {
+  applyCommonActionToActions,
+  stripActionSource,
+  tagAreasWithLoadedActions,
+  withIndividualSource,
+} from "../../../../utils/scheduleActionPriority";
+import ActionChooserModal from '../../../../shared/quickcontrols/ActionChooserModal';
+import { getQuickControlActionShortLabel } from '../../../../shared/quickcontrols/quickControlActionLabels';
+import {
+  convertApiActionToUiAction,
+  expandQuickControlActionData,
+  lightStatusSettingsFromAreaAction,
+  locationHasSceneAction,
+  locationHasZoneAction,
+  mergeExpandedActionsIntoLocation,
+} from '../../../../shared/quickcontrols/zoneActionHelpers';
 
 /** Scrollable table body so fixed action buttons do not cover rows. */
 const quickControlDetailsTableScrollStyle = {
@@ -33,12 +51,6 @@ const quickControlDetailsTableScrollStyle = {
 };
 
 const QUICK_CONTROL_DETAILS_BOTTOM_CLEARANCE = 120;
-import {
-  applyCommonActionToActions,
-  stripActionSource,
-  tagAreasWithLoadedActions,
-  withIndividualSource,
-} from "../../../../utils/scheduleActionPriority";
 
 const QuickControlDetails = () => {
   const dispatch = useDispatch();
@@ -58,74 +70,57 @@ const QuickControlDetails = () => {
   const { role } = UseAuth();
   const userProfile = useSelector((state) => state.user?.profile);
   const floors = useSelector(selectFloors);
-  
+
   // Direct role checking for Quick Control permissions
   const canCreateQuickControl = () => {
-    // Superadmin and Admin can always create Quick Controls
     if (role === 'Superadmin' || role === 'Admin') {
       return true;
     }
-    
-    // For Operators, check if they have monitor_control_edit permission
     if (role === 'Operator' && userProfile && userProfile.floors) {
       const hasMonitorControlEdit = userProfile.floors.some(f => f.floor_permission === 'monitor_control_edit');
       return hasMonitorControlEdit;
     }
-    
     return false;
   };
-  
+
   const canModifyQuickControl = () => {
-    // Superadmin and Admin can always modify Quick Controls
     if (role === 'Superadmin' || role === 'Admin') {
       return true;
     }
-    
-    // For Operators, check if they have monitor_control_edit permission
     if (role === 'Operator' && userProfile && userProfile.floors) {
       const hasMonitorControlEdit = userProfile.floors.some(f => f.floor_permission === 'monitor_control_edit');
       return hasMonitorControlEdit;
     }
-    
     return false;
   };
-  
+
   const canDeleteQuickControl = () => {
-    // Superadmin and Admin can always delete Quick Controls
     if (role === 'Superadmin' || role === 'Admin') {
       return true;
     }
-    
-    // For Operators, check if they have monitor_control_edit permission
     if (role === 'Operator' && userProfile && userProfile.floors) {
       const hasMonitorControlEdit = userProfile.floors.some(f => f.floor_permission === 'monitor_control_edit');
       return hasMonitorControlEdit;
     }
-    
     return false;
   };
-  
+
   const canTriggerQuickControl = () => {
-    // Superadmin and Admin can always trigger Quick Controls
     if (role === 'Superadmin' || role === 'Admin') {
       return true;
     }
-    
-    // For Operators, check if they have monitor_control or monitor_control_edit permission
     if (role === 'Operator' && userProfile && userProfile.floors) {
-      const hasMonitorControl = userProfile.floors.some(f => 
+      const hasMonitorControl = userProfile.floors.some(f =>
         f.floor_permission === 'monitor_control' || f.floor_permission === 'monitor_control_edit'
       );
       return hasMonitorControl;
     }
-    
     return false;
   };
 
   // Add responsive state for tablets
   const [isTablet, setIsTablet] = useState(false);
 
-  // Check screen size on mount and resize
   useEffect(() => {
     const checkScreenSize = () => {
       const width = window.innerWidth;
@@ -138,10 +133,9 @@ const QuickControlDetails = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // Fetch floors (used to display `Floor > Area` like Add/Create Quick Control)
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   const {
     selectedControl,
@@ -149,7 +143,7 @@ const QuickControlDetails = () => {
     triggerStatus,
     deleteStatus,
     updateStatus,
-    error // Add this to get error messages
+    error
   } = useSelector((state) => state.quickControl);
 
   const floorNameById = new Map(
@@ -185,25 +179,26 @@ const QuickControlDetails = () => {
   const [editableControl, setEditableControl] = useState(null);
   const [isCopyMode, setIsCopyMode] = useState(false);
   const location = useLocation();
-  
+
   const isCopyEdit = location?.state?.isCopy === true;
   const [isEditing, setIsEditing] = useState(isCopyEdit || false);
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "" });
-  
-  // Add confirmation dialog states for delete operations
+
   const [showDeleteQuickControlDialog, setShowDeleteQuickControlDialog] = useState(false);
   const [showDeleteActionDialog, setShowDeleteActionDialog] = useState(false);
   const [actionToDelete, setActionToDelete] = useState(null);
-  
-  // New state for editing functionality
+
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [actionDialogIdx, setActionDialogIdx] = useState(null);
   const [selectedActionData, setSelectedActionData] = useState(null);
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editAllMode, setEditAllMode] = useState(false);
+  const [actionChooser, setActionChooser] = useState(null); // { mode, locationIdx }
 
-  // New state for common action functionality
   const [showCommonActionDialog, setShowCommonActionDialog] = useState(false);
+  const [editingAreaStatus, setEditingAreaStatus] = useState(null);
   const [selectedCommonActionType, setSelectedCommonActionType] = useState('light_status');
   const [selectedOccupancySetting, setSelectedOccupancySetting] = useState(null);
   const [selectedZoneType, setSelectedZoneType] = useState('switched');
@@ -213,10 +208,16 @@ const QuickControlDetails = () => {
     whitetune: { brightness: 50, cct: 2700, fadeTime: '02', delayTime: '00' }
   });
 
-  // New state for zone names
+  const resetCommonActionDialog = () => {
+    setShowCommonActionDialog(false);
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+  };
+
   const [zoneNames, setZoneNames] = useState({});
 
-  // Helper function to decode HTML entities
   const decodeHtmlEntities = (text) => {
     if (!text) return text;
     return text
@@ -227,26 +228,22 @@ const QuickControlDetails = () => {
       .replace(/&#39;/g, "'");
   };
 
-  // Add action display function like ScheduleDetails
   const renderActionDisplay = (action) => {
-    // Handle area_status actions (from common action for On/Off)
     if (action.type === "area_status") {
       const status = action.area_status || "Off";
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Area Status: {status}</div>;
     }
-    
-    // Handle zone_status actions (for specific zone controls with brightness/temperature)
+
     if (action.type === "zone_status") {
       const status = action.zone_status || action.switched_state;
       const brightness = action.zone_brightness || action.level;
       const temperature = action.zone_temperature || action.kelvin;
       const zoneType = action.zone_type;
-      
-      // For zone_status with specific zone_id, show zone details
+
       if (action.zone_id) {
         const zoneName = action.zone_name || `Zone ${action.zone_id}`;
         let displayText = `Zone: ${zoneName}`;
-        
+
         if (zoneType === "switched") {
           const switchedState = action.switched_state || action.zone_status;
           displayText += ` (${switchedState})`;
@@ -265,14 +262,14 @@ const QuickControlDetails = () => {
           const switchedState = action.zone_status || "On";
           let brightnessValue = action.zone_brightness;
           let temperatureValue = action.zone_temperature;
-          
+
           if (brightnessValue && typeof brightnessValue === 'string') {
             brightnessValue = brightnessValue.includes('%') ? brightnessValue : `${brightnessValue}%`;
           }
           if (temperatureValue && typeof temperatureValue === 'string') {
             temperatureValue = temperatureValue.includes('K') ? temperatureValue : `${temperatureValue}K`;
           }
-          
+
           if (brightnessValue && temperatureValue) {
             displayText += ` (${switchedState}, ${brightnessValue}, ${temperatureValue})`;
           } else if (brightnessValue) {
@@ -285,43 +282,38 @@ const QuickControlDetails = () => {
         } else {
           displayText += ` (${status || "Off"})`;
         }
-        
+
         return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{displayText}</div>;
       }
-      
-      // Fallback for zone_status without zone_id (shouldn't happen, but handle gracefully)
+
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Area Status: {status || "Off"}</div>;
     }
-    
-    // Handle zone actions from Action component (NEW: This is the missing part!)
+
     if (action.type === "zone" && action.zone) {
       const zoneName = action.zone.name || action.zone.id || 'Zone';
       const zoneType = action.zone.type;
       const values = action.values || {};
-      
+
       let displayText = `Zone: ${zoneName}`;
-      
+
       if (zoneType === "switched") {
         displayText += ` (${values.on_off || "Off"})`;
       } else if (zoneType === "dimmed") {
-        // ONLY show brightness if it's actually set - NO DEFAULTS
         if (values.brightness !== undefined) {
           let brightnessValue = values.brightness;
           if (typeof brightnessValue === 'string') {
-            // Only add % if it doesn't already exist
             brightnessValue = brightnessValue.includes('%') ? brightnessValue : `${brightnessValue}%`;
           } else {
             brightnessValue = `${brightnessValue}%`;
           }
           displayText += ` (On, ${brightnessValue})`;
         } else {
-          displayText += ` (On)`; // Don't show brightness if not set
+          displayText += ` (On)`;
         }
       } else if (zoneType === "whitetune") {
-        // ONLY show values if they're actually set - NO DEFAULTS
         let brightnessValue = null;
         let cctValue = null;
-        
+
         if (values.brightness !== undefined) {
           brightnessValue = values.brightness;
           if (typeof brightnessValue === 'string') {
@@ -330,7 +322,7 @@ const QuickControlDetails = () => {
             brightnessValue = `${brightnessValue}%`;
           }
         }
-        
+
         if (values.cct !== undefined) {
           cctValue = values.cct;
           if (typeof cctValue === 'string') {
@@ -339,7 +331,7 @@ const QuickControlDetails = () => {
             cctValue = `${cctValue}K`;
           }
         }
-        
+
         if (brightnessValue && cctValue) {
           displayText += ` (On, ${brightnessValue}, ${cctValue})`;
         } else if (brightnessValue) {
@@ -347,10 +339,9 @@ const QuickControlDetails = () => {
         } else if (cctValue) {
           displayText += ` (On, ${cctValue})`;
         } else {
-          displayText += ` (On)`; // Don't show values if not set
+          displayText += ` (On)`;
         }
       } else {
-        // Generic zone handling
         if (values.on_off === "Off") {
           displayText += " (Off)";
         } else {
@@ -375,11 +366,10 @@ const QuickControlDetails = () => {
           }
         }
       }
-      
+
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{displayText}</div>;
     }
-    
-    // Handle occupancy actions (from common action)
+
     if (action.type === "occupancy") {
       let occLabel = "";
       if (action.occupancy_setting) {
@@ -397,16 +387,15 @@ const QuickControlDetails = () => {
       }
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Occupancy Setting: {occLabel}</div>;
     }
-    
-    // Handle other action types
+
     if (action.type === "scene" && action.scene) {
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Scene: {action.scene.name}</div>;
     }
-    
+
     if (action.type === "set_scene") {
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Scene: {action.scene_name}</div>;
     }
-    
+
     if (action.type === "shade" && action.shade) {
       return (
         <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
@@ -414,24 +403,22 @@ const QuickControlDetails = () => {
         </div>
       );
     }
-    
+
     if (action.type === "shade_group_status") {
       let shadeLevel = action.shade_level;
       if (typeof shadeLevel === "string") {
-        // Only add % if it doesn't already exist
         shadeLevel = shadeLevel.includes('%') ? shadeLevel : `${shadeLevel}%`;
       }
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Shade: {action.shade_group_name} ({shadeLevel})</div>;
     }
-    
+
     if (action.type === "device" && action.device) {
       return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Device: {action.device.name}</div>;
     }
-    
+
     return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Unknown action</div>;
   };
 
-  // Function to fetch zone names
   const fetchZoneNames = async (areaId, zoneId) => {
     try {
       const response = await BaseUrl.post("/area/zone_status", { area_id: areaId });
@@ -443,32 +430,29 @@ const QuickControlDetails = () => {
     }
   };
 
-  // Function to get zone name (with caching)
   const getZoneName = async (areaId, zoneId) => {
     const cacheKey = `${areaId}-${zoneId}`;
     if (zoneNames[cacheKey]) {
       return zoneNames[cacheKey];
     }
-    
+
     const zoneName = await fetchZoneNames(areaId, zoneId);
     setZoneNames(prev => ({ ...prev, [cacheKey]: zoneName }));
     return zoneName;
   };
 
-  // Always fetch details from API when this page loads or id changes
   useEffect(() => {
     dispatch(fetchQuickControlDetails(id));
-  
+
     if (location.state?.edit) {
       setEditMode(true);
     }
-  
+
     return () => {
       dispatch(clearSelectedControl());
     };
   }, [dispatch, id]);
 
-  // Fetch zone names when selectedControl changes
   useEffect(() => {
     if (selectedControl?.quick_control_areas) {
       selectedControl.quick_control_areas.forEach(area => {
@@ -481,9 +465,6 @@ const QuickControlDetails = () => {
     }
   }, [selectedControl]);
 
-
-
-  // Actions
   const handleTrigger = () => setShowConfirm(true);
 
   const doTrigger = async () => {
@@ -502,44 +483,38 @@ const QuickControlDetails = () => {
 
   const confirmDeleteQuickControl = async () => {
     if (!selectedControl) return;
-    
+
     try {
       await dispatch(deleteQuickControl(selectedControl.id)).unwrap();
-      
-      // If successful, navigate back
       navigate('/quickcontrols');
     } catch (error) {
-      // Check if it's a schedule usage error
       if (error && error.includes("being used by")) {
-        setToast({ 
-          open: true, 
-          message: error 
+        setToast({
+          open: true,
+          message: error
         });
       } else {
-        setToast({ 
-          open: true, 
-          message: "Failed to delete Quick Control. Please try again." 
+        setToast({
+          open: true,
+          message: "Failed to delete Quick Control. Please try again."
         });
       }
     }
-    
+
     setShowDeleteQuickControlDialog(false);
   };
 
-  // Always use selectedControl (from API) for copy
   const handleCopy = () => {
     if (!selectedControl || updateStatus === 'loading') return;
     setEditMode(true);
     setIsCopyMode(true);
-    // Deep copy and reset name
     const copy = JSON.parse(JSON.stringify(selectedControl));
     copy.name = `Copy of ${copy.name}`;
-    copy.id = undefined; // Remove id so it's not mistaken for update
+    copy.id = undefined;
     copy.quick_control_areas = tagAreasWithLoadedActions(copy.quick_control_areas);
     setEditableControl(copy);
   };
 
-  // Always use selectedControl (from API) for modify
   const handleModify = () => {
     if (!selectedControl) return;
     setEditMode(true);
@@ -548,7 +523,6 @@ const QuickControlDetails = () => {
     setEditableControl(editable);
   };
 
-  // Handle location changes
   const handleAddLocations = (areas) => {
     setEditableControl(prev => ({
       ...prev,
@@ -572,198 +546,192 @@ const QuickControlDetails = () => {
     }));
   };
 
-  // Handle action changes
   const handleOpenActionDialog = (idx) => {
     if (!editableControl) {
       return;
     }
+    setEditingActionIdx(null);
+    setEditAllMode(false);
     setActionDialogIdx(idx);
     setSelectedActionData(null);
   };
 
-  // Add action to location - EXACT SAME AS ScheduleDetails
+  // Add / update action(s) on a location (supports All Zones expand + multi-action merge)
   const handleAddAction = (idx, actionData) => {
+    const expanded = expandQuickControlActionData(actionData);
     setEditableControl(prev => ({
       ...prev,
       quick_control_areas: prev.quick_control_areas.map((loc, i) => {
         if (i !== idx) return loc;
-        
-        // Convert action data to the correct format for the API
-        let newAction = actionData;
-        
-        if (actionData.type === "scene" && actionData.scene) {
-          newAction = {
-            type: "set_scene",
-            scene_code: Number(actionData.scene.id), // Convert to number
-            scene_name: actionData.scene.name
-          };
-        } else if (actionData.type === "zone" && actionData.zone) {
-          // Check if this is a simple On/Off for switched zone without zone_id (area-level control)
-          if (actionData.zone.type === "switched" && 
-              (!actionData.zone.id || actionData.zone.id === null) &&
-              actionData.values?.on_off &&
-              !actionData.values.brightness &&
-              !actionData.values.cct) {
-            // Use area_status for simple On/Off area control (uses /area/zone_on-off API)
-            newAction = {
-              type: "area_status",
-              area_status: actionData.values.on_off
-            };
-          } else {
-            // For specific zone controls, use zone_status
-            newAction = {
-              type: "zone_status",
-              zone_id: Number(actionData.zone.id || actionData.zone.zone_id),
-              zone_type: actionData.zone.type,
-              zone_name: actionData.zone.name,
-              zone_status: actionData.values?.on_off || "Off"
-            };
-            
-            // ONLY set brightness if user actually provided a value
-            if (actionData.values && actionData.values.brightness !== undefined && actionData.values.brightness !== null) {
-              newAction.zone_brightness = actionData.values.brightness.toString().includes('%') ? actionData.values.brightness : `${actionData.values.brightness}%`;
-            }
-            
-            // ONLY set temperature if user actually provided a value
-            if (actionData.values && actionData.values.cct !== undefined && actionData.values.cct !== null) {
-              newAction.zone_temperature = actionData.values.cct.toString().includes('K') ? actionData.values.cct : `${actionData.values.cct}K`;
-            }
-          
-            // Add fade and delay times for dimmed and whitetune zones
-            if (actionData.zone.type === "dimmed" || actionData.zone.type === "whitetune") {
-              newAction.fade_time = actionData.values?.fadeTime || "02";
-              newAction.delay_time = actionData.values?.delayTime || "00";
-            }
-          }
-        } else if (actionData.type === "occupancy" && actionData.action) {
-          newAction = {
-            type: "occupancy",
-            occupancy_setting: actionData.action
-          };
-        } else if (actionData.type === "shade" && actionData.shade) {
-          newAction = {
-            type: "shade_group_status",
-            shade_group_id: Number(actionData.shade.id || actionData.shade.zone_id),
-            shade_group_name: actionData.shade.name,
-            shade_level: actionData.value.toString().includes('%') ? actionData.value : `${actionData.value}%`
-          };
-        }
-        
-        // COMPLETELY REPLACE all actions with the new one (remove all old actions)
-        return { ...loc, actions: [withIndividualSource(newAction)] };
-      })
+        return {
+          ...loc,
+          actions: mergeExpandedActionsIntoLocation(loc.actions, expanded, {
+            editingActionIdx: editAllMode ? null : editingActionIdx,
+            editAllMode,
+            withSource: withIndividualSource,
+          }),
+        };
+      }),
     }));
     setActionDialogIdx(null);
     setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
   };
 
-  // Handle edit action - SIMPLIFIED (same as CreateQuickControl)
-  const handleEditAction = (locationIdx, actionIdx) => {
+  const openEditForAction = (locationIdx, actionIdx) => {
     const location = editableControl.quick_control_areas[locationIdx];
     const action = location.actions[actionIdx];
-    
-    // Convert action to the format expected by Action component
-    let convertedAction = null;
-    
-    if (action.type === "set_scene") {
-      convertedAction = {
-        type: "scene",
-        scene: {
-          id: action.scene_code || action.scene_id,
-          name: action.scene_name
-        }
-      };
-    } else if (action.type === "area_status") {
-      // For area_status, convert to zone action with switched type for editing
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: null,
-          name: "Area",
-          type: "switched"
-        },
-        values: {
-          on_off: action.area_status || "Off"
-        }
-      };
-    } else if (action.type === "zone_status") {
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: action.zone_id,
-          name: action.zone_name,
-          type: action.zone_type
-        },
-        values: {
-          on_off: action.zone_status || "On",
-          brightness: action.zone_brightness ? parseInt(action.zone_brightness.replace('%', '')) : undefined,
-          cct: action.zone_temperature ? parseInt(action.zone_temperature.replace('K', '')) : undefined,
-          fadeTime: action.fade_time || '02',
-          delayTime: action.delay_time || '00'
-        }
-      };
-    } else if (action.type === "occupancy") {
-      convertedAction = {
-        type: "occupancy",
-        action: action.occupancy_setting
-      };
-    } else if (action.type === "shade_group_status") {
-      convertedAction = {
-        type: "shade",
-        shade: {
-          id: action.shade_group_id,
-          name: action.shade_group_name
-        },
-        value: parseInt(action.shade_level.replace('%', ''))
-      };
+    if (!action) return;
+
+    if (action.type === 'area_status') {
+      setEditingAreaStatus({ locationIdx });
+      setSelectedCommonActionType('light_status');
+      setSelectedOccupancySetting(null);
+      setSelectedZoneType('switched');
+      setLightStatusSettings((prev) => ({
+        ...prev,
+        ...lightStatusSettingsFromAreaAction(action),
+      }));
+      setShowCommonActionDialog(true);
+      return;
     }
-    
+
+    const convertedAction = convertApiActionToUiAction(action);
+    setEditingActionIdx(actionIdx);
+    setEditAllMode(false);
     setSelectedActionData(convertedAction);
     setActionDialogIdx(locationIdx);
   };
 
-  // Handle common action selection
+  const handleEditButtonClick = (locationIdx) => {
+    const location = editableControl.quick_control_areas[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      handleOpenActionDialog(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      openEditForAction(locationIdx, 0);
+      return;
+    }
+    setActionChooser({ mode: 'edit', locationIdx });
+  };
+
+  const handleDeleteButtonClick = (locationIdx) => {
+    const location = editableControl.quick_control_areas[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      setActionToDelete({ areaIndex: locationIdx, area: location, deleteLocation: true });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    if (actions.length === 1) {
+      setActionToDelete({
+        areaIndex: locationIdx,
+        area: location,
+        actionIndex: 0,
+        action: actions[0],
+      });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    setActionChooser({ mode: 'delete', locationIdx });
+  };
+
+  const handleChooserPickEdit = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    if (pick === 'all') {
+      setEditAllMode(true);
+      setEditingActionIdx(null);
+      setSelectedActionData(null);
+      setActionDialogIdx(locationIdx);
+      return;
+    }
+    openEditForAction(locationIdx, pick);
+  };
+
+  const handleChooserPickDelete = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    const location = editableControl.quick_control_areas[locationIdx];
+    if (pick === 'all') {
+      setEditableControl((prev) => ({
+        ...prev,
+        quick_control_areas: prev.quick_control_areas.map((loc, i) =>
+          i === locationIdx ? { ...loc, actions: [] } : loc
+        ),
+      }));
+      return;
+    }
+    setActionToDelete({
+      areaIndex: locationIdx,
+      area: location,
+      actionIndex: pick,
+      action: location.actions[pick],
+    });
+    setShowDeleteActionDialog(true);
+  };
+
+  // Handle edit action - kept for compatibility
+  const handleEditAction = (locationIdx, actionIdx) => {
+    openEditForAction(locationIdx, actionIdx);
+  };
+
   const handleCommonActionTypeSelect = async (actionType) => {
     setSelectedCommonActionType(actionType);
     setSelectedOccupancySetting(null);
     setSelectedZoneType('switched');
 
-    // Only set default occupancy setting, don't apply yet
     if (actionType === 'occupancy') {
       setSelectedOccupancySetting("auto");
     }
-    // Don't auto-apply - wait for "Apply to All" button
   };
 
-  // Handle light status setting changes
   const handleLightStatusSettingChange = async (type, setting, value) => {
-    // Only update the state, don't apply to areas yet - wait for "Apply to All" button
     setLightStatusSettings(prev => ({
       ...prev,
       [type]: { ...prev[type], [setting]: value }
     }));
   };
 
-  // Handle occupancy setting selection
   const handleOccupancySettingSelect = (setting) => {
-    // Only update the state, don't apply to areas yet - wait for "Apply to All" button
     setSelectedOccupancySetting(setting);
   };
 
-  // Apply common action to all areas - UPDATED to ensure action is applied
   const handleApplyCommonAction = () => {
     if (!editableControl || !editableControl.quick_control_areas) {
-      setShowCommonActionDialog(false);
+      resetCommonActionDialog();
       return;
     }
-    
-    // Ensure the action is applied with current settings
+
+    if (editingAreaStatus != null && selectedCommonActionType === 'light_status') {
+      const { locationIdx } = editingAreaStatus;
+      const commonAction = {
+        type: "area_status",
+        area_status: lightStatusSettings.switched.on_off
+      };
+      setEditableControl(prev => ({
+        ...prev,
+        quick_control_areas: prev.quick_control_areas.map((area, i) =>
+          i === locationIdx
+            ? { ...area, actions: applyCommonActionToActions(area.actions, commonAction) }
+            : area
+        )
+      }));
+      resetCommonActionDialog();
+      return;
+    }
+
     if (selectedCommonActionType === 'light_status') {
       const commonAction = {
         type: "area_status",
         area_status: lightStatusSettings.switched.on_off
       };
-      
+
       setEditableControl(prev => ({
         ...prev,
         quick_control_areas: prev.quick_control_areas.map(area => ({
@@ -776,7 +744,7 @@ const QuickControlDetails = () => {
         type: "occupancy",
         occupancy_setting: selectedOccupancySetting
       };
-      
+
       setEditableControl(prev => ({
         ...prev,
         quick_control_areas: prev.quick_control_areas.map(area => ({
@@ -785,26 +753,19 @@ const QuickControlDetails = () => {
         }))
       }));
     }
-    
-    // Close the dialog and reset
-    setShowCommonActionDialog(false);
-    setSelectedCommonActionType('light_status');
-    setSelectedOccupancySetting(null);
-    setSelectedZoneType('switched');
-  };
 
-  // Don't auto-apply when dialog opens - wait for "Apply to All" button
+    resetCommonActionDialog();
+  };
 
   const handleSave = async () => {
     if (!editableControl || updateStatus === 'loading') return;
-    
-    // Check that all locations have at least one action
+
     const hasLocationsWithoutActions = editableControl.quick_control_areas.some(area => !area.actions || area.actions.length === 0);
     if (hasLocationsWithoutActions) {
       setToast({ open: true, message: "All locations must have at least one action before saving." });
       return;
     }
-    
+
     try {
       const payload = {
         name: editableControl.name,
@@ -816,31 +777,26 @@ const QuickControlDetails = () => {
       };
 
       if (isCopyMode || !editableControl.id) {
-        // Create new quick control (either copy mode or no ID)
         const response = await dispatch(createQuickControl(payload)).unwrap();
         setToast({ open: true, message: "Quick Control created successfully!" });
         navigate('/quickcontrols');
       } else {
-        // Update existing - FIXED: Properly handle the update
-        await dispatch(updateQuickControl({ 
-          controlId: editableControl.id, 
-          payload 
+        await dispatch(updateQuickControl({
+          controlId: editableControl.id,
+          payload
         })).unwrap();
-        
-        // FIXED: Show success message first
+
         setToast({ open: true, message: "Quick Control updated successfully!" });
-        
-        // FIXED: Clear edit mode and reload details
+
         setEditMode(false);
         setEditableControl(null);
-        
-        // FIXED: Reload details to get the updated data
+
         await dispatch(fetchQuickControlDetails(id));
       }
     } catch (error) {
-      setToast({ 
-        open: true, 
-        message: error?.message || "Failed to save Quick Control" 
+      setToast({
+        open: true,
+        message: error?.message || "Failed to save Quick Control"
       });
     }
   };
@@ -849,19 +805,23 @@ const QuickControlDetails = () => {
     setEditableControl(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handle delete action
   const handleDeleteAction = (areaIndex) => {
-    const area = editableControl.quick_control_areas[areaIndex];
-    setActionToDelete({ areaIndex, area });
-    setShowDeleteActionDialog(true);
+    handleDeleteButtonClick(areaIndex);
   };
 
   const confirmDeleteAction = () => {
     if (actionToDelete) {
       setEditableControl(prev => {
         const updatedAreas = [...prev.quick_control_areas];
-        // Remove the entire area (location + action) at the specified index
-        updatedAreas.splice(actionToDelete.areaIndex, 1);
+        if (actionToDelete.deleteLocation) {
+          updatedAreas.splice(actionToDelete.areaIndex, 1);
+        } else if (actionToDelete.actionIndex != null) {
+          const area = { ...updatedAreas[actionToDelete.areaIndex] };
+          area.actions = (area.actions || []).filter((_, i) => i !== actionToDelete.actionIndex);
+          updatedAreas[actionToDelete.areaIndex] = area;
+        } else {
+          updatedAreas.splice(actionToDelete.areaIndex, 1);
+        }
         return { ...prev, quick_control_areas: updatedAreas };
       });
       setShowDeleteActionDialog(false);
@@ -877,10 +837,11 @@ const QuickControlDetails = () => {
     ? editableControl?.quick_control_areas
     : selectedControl?.quick_control_areas;
 
+  const basePad = isTablet ? 24 : 40;
+
   return (
     <div
       style={{
-        padding: isTablet ? 24 : 40,
         borderRadius: 20,
         minHeight: 500,
         maxWidth: 1200,
@@ -888,22 +849,25 @@ const QuickControlDetails = () => {
         boxSizing: 'border-box',
         color: listChromeText,
         ...schedulePageWithFixedActionBarStyle(false, false, isTablet),
+        paddingTop: basePad,
+        paddingRight: basePad,
         paddingBottom: QUICK_CONTROL_DETAILS_BOTTOM_CLEARANCE,
+        paddingLeft: basePad,
       }}
     >
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
         alignItems: 'flex-start',
-        flexDirection: 'row', // Keep as row for all screen sizes
+        flexDirection: 'row',
         gap: isTablet ? 12 : 0
       }}>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 16,
           width: 'auto',
-          flex: isTablet ? '1' : 'auto' // Allow flex growing on tablets
+          flex: isTablet ? '1' : 'auto'
         }}>
           {editMode ? (
             <input
@@ -918,13 +882,13 @@ const QuickControlDetails = () => {
                 borderRadius: 8,
                 padding: '8px 16px',
                 marginBottom: isTablet ? 16 : 24,
-                minWidth: isTablet ? 200 : 300, // Smaller minWidth for tablets
+                minWidth: isTablet ? 200 : 300,
                 width: 'auto'
               }}
             />
           ) : (
-            <h2 style={{ 
-              color: listChromeText, 
+            <h2 style={{
+              color: listChromeText,
               marginBottom: isTablet ? 16 : 24,
               fontSize: isTablet ? 20 : 24
             }}>
@@ -932,11 +896,11 @@ const QuickControlDetails = () => {
             </h2>
           )}
         </div>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: isTablet ? 8 : 16,
-          flexWrap: 'nowrap', // Prevent wrapping on all screen sizes
+          flexWrap: 'nowrap',
           justifyContent: 'flex-end',
           width: 'auto'
         }}>
@@ -972,58 +936,66 @@ const QuickControlDetails = () => {
           maxHeight: `calc(100vh - 220px - ${SCHEDULE_FIXED_ACTION_BAR_BOTTOM})`,
         }}
       >
-      {/* Table-like header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-        color: whiteChrome ? '#fff' : listChromeText,
-        background: whiteChrome ? '#1565C0' : 'transparent',
-        borderBottom: whiteChrome ? '1px solid rgba(255,255,255,0.35)' : '1px solid #ccc',
-        borderTopLeftRadius: whiteChrome ? 8 : 0,
-        borderTopRightRadius: whiteChrome ? 8 : 0,
-        padding: '10px 12px',
-        marginBottom: 8,
-        fontSize: 15,
-        fontWeight: 700,
-        gap: 16
-      }}>
-        <span 
-          style={{ 
-            flex: '0 0 300px', 
-            cursor: editMode ? 'pointer' : 'default', 
-            textAlign: 'left'
-          }}
-          onClick={() => editMode && setShowLocationDialog(true)}
-        >
-          {editMode ? "+ Add Location" : "Location"}
-        </span>
-        <span style={{ 
-          flex: '1 1 300px', 
-          textAlign: 'left'
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexShrink: 0,
+          color: whiteChrome ? '#fff' : listChromeText,
+          background: whiteChrome ? '#1565C0' : 'transparent',
+          borderBottom: whiteChrome ? '1px solid rgba(255,255,255,0.35)' : '1px solid #ccc',
+          borderTopLeftRadius: whiteChrome ? 8 : 0,
+          borderTopRightRadius: whiteChrome ? 8 : 0,
+          padding: '10px 12px',
+          marginBottom: 8,
+          fontSize: 15,
+          fontWeight: 700,
+          gap: 16
         }}>
-          Action
-        </span>
-        {editMode && (
           <span
-            style={{ 
-              flex: '0 0 180px', 
-              cursor: 'pointer', 
-              textAlign: 'left', 
-              whiteSpace: 'nowrap'
+            style={{
+              flex: '0 0 300px',
+              cursor: editMode ? 'pointer' : 'default',
+              textAlign: 'left'
             }}
-            onClick={() => setShowCommonActionDialog(true)}
+            onClick={() => editMode && setShowLocationDialog(true)}
           >
-            + Add Common Action
+            {editMode ? "+ Add Location" : "Location"}
           </span>
-        )}
-      </div>
+          <span style={{
+            flex: '1 1 300px',
+            textAlign: 'left'
+          }}>
+            Action
+          </span>
+          {editMode && (
+            <span
+              style={{
+                flex: '0 0 180px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                whiteSpace: 'nowrap'
+              }}
+              onClick={() => {
+                setEditingAreaStatus(null);
+                setSelectedCommonActionType('light_status');
+                setSelectedOccupancySetting(null);
+                setSelectedZoneType('switched');
+                setLightStatusSettings((prev) => ({
+                  ...prev,
+                  switched: { on_off: 'On' },
+                }));
+                setShowCommonActionDialog(true);
+              }}
+            >
+              + Add Common Action
+            </span>
+          )}
+        </div>
 
-      {/* Table-like list of locations and actions */}
-      <div style={quickControlDetailsTableScrollStyle}>
-        {(quickControlAreas || []).map((area, aidx) => {
-            // Create a unique key that includes area ID to avoid duplicates
+        <div style={quickControlDetailsTableScrollStyle}>
+          {(quickControlAreas || []).map((area, aidx) => {
             const uniqueKey = `${area.floor_id}-${area.area_id}-${aidx}`;
+            const hasActions = area.actions && area.actions.length > 0;
             const resolvedFromFloors =
               area?.area_id != null ? areaIdToFloor.get(String(area.area_id)) : null;
             const floorLabel =
@@ -1032,39 +1004,93 @@ const QuickControlDetails = () => {
               (resolvedFromFloors?.floorName || "") ||
               "";
             const locationText = floorLabel
-              ? `${decodeHtmlEntities(floorLabel)} > ${decodeHtmlEntities(area.area_name)}`
+              ? `${decodeHtmlEntities(floorLabel)} / ${decodeHtmlEntities(area.area_name)}`
               : `${decodeHtmlEntities(area.area_name)}`;
             return (
               <div key={uniqueKey} style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '8px 0',
-              borderBottom: '1px solid #b2a98b',
-              gap: 16,
-              background: onContent.isLight
-                ? (aidx % 2 === 0 ? 'rgba(0,0,0,0.03)' : 'transparent')
-                : (aidx % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'transparent'),
-            }}>
-              {/* Location */}
-              <div style={{ 
-                flex: '0 0 300px', 
-                fontSize: 15, 
-                color: listChromeText, 
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                display: 'flex',
+                alignItems: 'center',
+                padding: '8px 0',
+                borderBottom: '1px solid #b2a98b',
+                gap: 16,
+                background: onContent.isLight
+                  ? (aidx % 2 === 0 ? 'rgba(0,0,0,0.03)' : 'transparent')
+                  : (aidx % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'transparent'),
               }}>
-                {locationText}
-              </div>
-              {/* Actions */}
-              <div style={{ 
-                flex: '1 1 300px', 
-                fontSize: 15, 
-                color: listChromeText, 
-                textAlign: 'left' 
-              }}>
-                  {area.actions && area.actions.length > 0 ? (
+                <div style={{
+                  flex: '0 0 300px',
+                  fontSize: 15,
+                  color: listChromeText,
+                  textAlign: 'left',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {locationText}
+                </div>
+                <div style={{
+                  flex: '1 1 300px',
+                  fontSize: 15,
+                  color: listChromeText,
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                }}>
+                  {editMode ? (
+                    hasActions ? (
+                      <>
+                        {area.actions.map((action, actidx) => {
+                          const actionKey = `${uniqueKey}-action-${actidx}`;
+                          return (
+                            <div key={actionKey} style={{
+                              wordWrap: 'break-word',
+                              wordBreak: 'break-word',
+                              lineHeight: '1.4',
+                              width: '100%',
+                              textAlign: 'left',
+                            }}>
+                              {renderActionDisplay(action)}
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenActionDialog(aidx)}
+                          style={{
+                            background: 'transparent',
+                            color: ACTION_BLUE,
+                            border: `1px solid ${ACTION_BLUE}`,
+                            borderRadius: 4,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            alignSelf: 'flex-start',
+                            marginTop: 4,
+                          }}
+                        >
+                          + Add Action
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenActionDialog(aidx)}
+                        style={{
+                          background: ACTION_BLUE,
+                          border: 'none',
+                          borderRadius: 4,
+                          color: '#fff',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          whiteSpace: 'nowrap',
+                          alignSelf: 'flex-start',
+                        }}
+                      >
+                        Add Action
+                      </button>
+                    )
+                  ) : hasActions ? (
                     area.actions.map((action, actidx) => {
                       const actionKey = `${uniqueKey}-action-${actidx}`;
                       return (
@@ -1075,73 +1101,61 @@ const QuickControlDetails = () => {
                           lineHeight: '1.4'
                         }}>
                           {renderActionDisplay(action)}
-                      </div>
+                        </div>
                       );
                     })
                   ) : (
                     <div style={{ color: listChromeMuted, fontStyle: 'italic' }}>No action</div>
                   )}
-              </div>
-              {/* Action buttons */}
-              {editMode && (
-                <div style={{ 
-                  flex: '0 0 120px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 8, 
-                  justifyContent: 'flex-end' 
-                }}>
-                  <button
-                    onClick={() => {
-                      if (area.actions && area.actions.length > 0) {
-                        handleEditAction(aidx, 0); // Edit the first action
-                      } else {
-                        handleOpenActionDialog(aidx);
-                      }
-                    }}
-                    style={{
-                      background: ACTION_BLUE,
-                      border: 'none',
-                      borderRadius: 4,
-                      color: '#fff',
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {area.actions && area.actions.length > 0 ? 'Edit' : 'Add'} Action
-                  </button>
-                  <button
-                    onClick={() => handleDeleteAction(aidx)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: listChromeText,
-                      padding: 0,
-                      cursor: 'pointer',
-                      fontSize: 18,
-                      lineHeight: 1
-                    }}
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
                 </div>
-              )}
-            </div>
+                {editMode && (
+                  <div style={detailsRowActionControlsStyle(180)}>
+                    {hasActions && (
+                      <button
+                        onClick={() => handleEditButtonClick(aidx)}
+                        style={{
+                          background: ACTION_BLUE,
+                          border: 'none',
+                          borderRadius: 4,
+                          color: '#fff',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Edit Action
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteButtonClick(aidx)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: listChromeText,
+                        padding: 0,
+                        cursor: 'pointer',
+                        fontSize: 18,
+                        lineHeight: 1
+                      }}
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
-      </div>
+        </div>
       </div>
 
-      {/* Action Buttons - fixed above footer; table scrolls separately */}
       <div style={scheduleFixedActionBarStyle(false, false, isTablet)}>
         {!editMode && (
           <>
             <button
               style={{
-                    background: canCreateQuickControl() ? ACTION_BLUE : '#666',
+                background: canCreateQuickControl() ? ACTION_BLUE : '#666',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
@@ -1159,7 +1173,7 @@ const QuickControlDetails = () => {
             </button>
             <button
               style={{
-                    background: canModifyQuickControl() ? ACTION_BLUE : '#666',
+                background: canModifyQuickControl() ? ACTION_BLUE : '#666',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
@@ -1177,7 +1191,7 @@ const QuickControlDetails = () => {
             </button>
             <button
               style={{
-                    background: canDeleteQuickControl() ? ACTION_BLUE : '#666',
+                background: canDeleteQuickControl() ? ACTION_BLUE : '#666',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
@@ -1195,7 +1209,7 @@ const QuickControlDetails = () => {
             </button>
             <button
               style={{
-                    background: ACTION_BLUE,
+                background: ACTION_BLUE,
                 color: '#fff',
                 border: 'none',
                 borderRadius: 8,
@@ -1214,7 +1228,7 @@ const QuickControlDetails = () => {
           <>
             <button
               style={{
-                    background: (updateStatus === 'loading' || editableControl.quick_control_areas.some(area => !area.actions || area.actions.length === 0)) ? '#888' : ACTION_BLUE,
+                background: (updateStatus === 'loading' || editableControl.quick_control_areas.some(area => !area.actions || area.actions.length === 0)) ? '#888' : ACTION_BLUE,
                 color: '#fff',
                 border: (updateStatus === 'loading' || editableControl.quick_control_areas.some(area => !area.actions || area.actions.length === 0)) ? '1px solid #888' : '1px solid #1565C0',
                 borderRadius: 8,
@@ -1230,7 +1244,7 @@ const QuickControlDetails = () => {
             </button>
             <button
               style={{
-                    background: '#fff',
+                background: '#fff',
                 color: '#1565C0',
                 border: '1px solid #1565C0',
                 borderRadius: 8,
@@ -1247,7 +1261,6 @@ const QuickControlDetails = () => {
         )}
       </div>
 
-      {/* Common Action Dialog */}
       {showCommonActionDialog && (
         <div style={{
           position: 'fixed',
@@ -1269,15 +1282,15 @@ const QuickControlDetails = () => {
             color: whiteChrome ? '#000000' : buttonColor
           }}>
             <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: dialogLabelColor }}>
-              Add Common Action
+              {editingAreaStatus ? 'Edit Action' : 'Add Common Action'}
             </div>
-            
-            {/* Action Type Dropdown */}
+
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontWeight: 600, marginBottom: 8, color: whiteChrome ? '#000000' : onContent.primary }}>Select Action Type</div>
               <select
                 value={selectedCommonActionType}
                 onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
+                disabled={!!editingAreaStatus}
                 style={{
                   width: "100%",
                   padding: "8px 12px",
@@ -1289,11 +1302,10 @@ const QuickControlDetails = () => {
                 }}
               >
                 <option value="light_status">Light Status</option>
-                <option value="occupancy">Occupancy Setting</option>
+                {!editingAreaStatus && <option value="occupancy">Occupancy Setting</option>}
               </select>
             </div>
 
-            {/* Occupancy Setting Options */}
             {selectedCommonActionType === 'occupancy' && (
               <div style={{ marginTop: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8, color: whiteChrome ? '#000000' : onContent.primary }}>Occupancy Setting</div>
@@ -1323,12 +1335,8 @@ const QuickControlDetails = () => {
               </div>
             )}
 
-            {/* Light Status Options */}
             {selectedCommonActionType === 'light_status' && (
               <div style={{ marginTop: 16 }}>
-                {/* <div style={{ fontWeight: 600, marginBottom: 8, color: whiteChrome ? '#000000' : onContent.primary }}>Light Status (On/Off)</div> */}
-                
-                {/* Simplified: Only On/Off options */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, marginBottom: 8, color: whiteChrome ? '#000000' : onContent.primary }}>Light State</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -1338,7 +1346,7 @@ const QuickControlDetails = () => {
                         value="On"
                         checked={lightStatusSettings.switched.on_off === 'On'}
                         onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
-                        style={{ 
+                        style={{
                           marginRight: 8,
                           accentColor: '#1565C0',
                           WebkitAppearance: 'none',
@@ -1359,7 +1367,7 @@ const QuickControlDetails = () => {
                         value="Off"
                         checked={lightStatusSettings.switched.on_off === 'Off'}
                         onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
-                        style={{ 
+                        style={{
                           marginRight: 8,
                           accentColor: '#1565C0',
                           WebkitAppearance: 'none',
@@ -1382,34 +1390,29 @@ const QuickControlDetails = () => {
             <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button
                 onClick={handleApplyCommonAction}
-                disabled={!selectedCommonActionType || 
+                disabled={!selectedCommonActionType ||
                   (selectedCommonActionType === 'occupancy' && !selectedOccupancySetting) ||
                   (selectedCommonActionType === 'light_status' && !selectedZoneType)}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
-                  border: (selectedCommonActionType && 
+                  border: (selectedCommonActionType &&
                     (selectedCommonActionType !== 'occupancy' || selectedOccupancySetting) &&
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "1px solid #1565C0" : "1px solid #888",
-                  background: (selectedCommonActionType && 
+                  background: (selectedCommonActionType &&
                     (selectedCommonActionType !== 'occupancy' || selectedOccupancySetting) &&
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? ACTION_BLUE : "#888",
                   color: "#fff",
                   fontWeight: 500,
-                  cursor: (selectedCommonActionType && 
+                  cursor: (selectedCommonActionType &&
                     (selectedCommonActionType !== 'occupancy' || selectedOccupancySetting) &&
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "pointer" : "not-allowed"
                 }}
               >
-                Apply to All
+                {editingAreaStatus ? 'Update' : 'Apply to All'}
               </button>
               <button
-                onClick={() => { 
-                  setShowCommonActionDialog(false); 
-                  setSelectedCommonActionType(''); 
-                  setSelectedOccupancySetting(null); 
-                  setSelectedZoneType('switched');
-                }}
+                onClick={resetCommonActionDialog}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
@@ -1427,14 +1430,12 @@ const QuickControlDetails = () => {
         </div>
       )}
 
-      {/* Location Dialog */}
       <AreaTreeDialog
         open={showLocationDialog}
         onClose={() => setShowLocationDialog(false)}
         onAdd={handleAddLocations}
       />
 
-      {/* Action Dialog */}
       {actionDialogIdx !== null && (
         <div style={{
           position: 'fixed',
@@ -1470,6 +1471,20 @@ const QuickControlDetails = () => {
               areaId={editableControl?.quick_control_areas[actionDialogIdx]?.area_id}
               onActionSelect={action => setSelectedActionData(action)}
               initialAction={selectedActionData}
+              hideZoneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasSceneAction(
+                  editableControl?.quick_control_areas?.[actionDialogIdx]?.actions
+                )
+              }
+              hideSceneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasZoneAction(
+                  editableControl?.quick_control_areas?.[actionDialogIdx]?.actions
+                )
+              }
             />
             <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button
@@ -1523,7 +1538,6 @@ const QuickControlDetails = () => {
         onCancel={() => setShowConfirm(false)}
       />
 
-      {/* Delete Quick Control Confirmation Dialog */}
       <ConfirmDialog
         open={showDeleteQuickControlDialog}
         title="Delete Quick Control"
@@ -1532,16 +1546,35 @@ const QuickControlDetails = () => {
         onCancel={() => setShowDeleteQuickControlDialog(false)}
       />
 
-      {/* Delete Action Confirmation Dialog */}
       <ConfirmDialog
         open={showDeleteActionDialog}
-        title="Delete Action"
-        message={`Are you sure you want to delete the action for "${actionToDelete?.area?.area_name}"?`}
+        title={actionToDelete?.deleteLocation ? "Delete Location" : "Delete Action"}
+        message={
+          actionToDelete?.deleteLocation
+            ? `Are you sure you want to delete location "${actionToDelete?.area?.area_name}"?`
+            : `Are you sure you want to delete "${getQuickControlActionShortLabel(actionToDelete?.action)}" from "${actionToDelete?.area?.area_name}"?`
+        }
         onConfirm={confirmDeleteAction}
         onCancel={() => {
           setShowDeleteActionDialog(false);
           setActionToDelete(null);
         }}
+      />
+
+      <ActionChooserModal
+        open={Boolean(actionChooser)}
+        mode={actionChooser?.mode || 'edit'}
+        actions={
+          actionChooser != null
+            ? editableControl?.quick_control_areas?.[actionChooser.locationIdx]?.actions || []
+            : []
+        }
+        buttonColor={ACTION_BLUE}
+        onPick={(pick) => {
+          if (actionChooser?.mode === 'delete') handleChooserPickDelete(pick);
+          else handleChooserPickEdit(pick);
+        }}
+        onCancel={() => setActionChooser(null)}
       />
 
       <Toast

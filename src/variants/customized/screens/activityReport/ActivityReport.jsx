@@ -31,6 +31,7 @@ import ActivityReportTable from "./ActivityReportTable";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { UseAuth } from "../../customhooks/UseAuth";
 import { fetchProfile } from "../../redux/slice/auth/userlogin";
+import { dispatchFetchProfileOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 
 // Activity type mapping for API
 const ACTIVITY_TYPE_MAPPING = {
@@ -719,9 +720,9 @@ const ActivityReport = ({ onGenerate }) => {
         }
     }, [emailSuccess, emailError, hasMounted]);
 
-    // Fetch user profile on component mount
+    // Profile is owned by Topbar; join in-flight / skip if already loaded
     useEffect(() => {
-        dispatch(fetchProfile());
+        dispatchFetchProfileOnce(dispatch, fetchProfile);
     }, [dispatch]);
 
     // Clear ALL success states when component mounts to prevent showing stale success messages

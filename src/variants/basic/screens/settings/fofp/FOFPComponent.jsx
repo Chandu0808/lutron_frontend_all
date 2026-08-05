@@ -15,6 +15,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { toSafeReactText } from '../../../../../utils/safeReactText';
 import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
@@ -42,6 +43,9 @@ import Swal from "sweetalert2";
 
 import { UseAuth } from "../../../customhooks/UseAuth";
 import { BaseUrl } from "../../../BaseUrl";
+import { resolveFloorPlanMediaUrl } from "../../../../../shared/pdf/floorPlanPdf";
+import { dispatchFetchFloorsOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
+import { fetchFloors, selectFloors, selectFloorLoading } from "../../../redux/slice/floor/floorSlice";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { isLightSurface } from "../../../utils/themeOnSurface";
 import SettingsLayout from "../SettingsLayout";
@@ -126,10 +130,10 @@ const FOFPComponent = () => {
   const fofpConfig = useSelector(selectFofpConfig);
   const configSaving = useSelector(selectFofpConfigSaving);
   const effectiveMarkerColor = useSelector(selectFofpEffectiveMarkerColor);
-
-  const [floors, setFloors] = useState([]);
-  const [floorsLoading, setFloorsLoading] = useState(false);
-  const [floorsError, setFloorsError] = useState(null);
+  const floors = useSelector(selectFloors) || [];
+  const floorStatus = useSelector(selectFloorLoading);
+  const floorsLoading = floorStatus === "loading";
+  const floorsError = useSelector((state) => state.floor?.error) || null;
   const [selectedFloorId, setSelectedFloorId] = useState("");
 
   const [floorMeta, setFloorMeta] = useState(null);
@@ -180,33 +184,11 @@ const FOFPComponent = () => {
     dispatch(fetchFofpConfig());
   }, [dispatch]);
 
-  // -------------------- floor list (independent of floorSlice) --------------------
+  // -------------------- floor list (shared Redux; skip if already loaded) --------------------
 
   useEffect(() => {
-    let cancelled = false;
-    setFloorsLoading(true);
-    setFloorsError(null);
-    BaseUrl.get("/floor/list")
-      .then((res) => {
-        if (cancelled) return;
-        const list = Array.isArray(res?.data) ? res.data : [];
-        setFloors(list);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setFloorsError(
-          err?.response?.data?.detail ||
-            err?.response?.data?.message ||
-            "Failed to load floors"
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setFloorsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   // -------------------- floor metadata (pdf + polygons) --------------------
 
@@ -225,8 +207,7 @@ const FOFPComponent = () => {
       const rawPath = data.floor_plan || data.floor_image || "";
       let pdfUrl = "";
       if (rawPath) {
-        const API_URL = process.env.REACT_APP_API_URL || "";
-        const base = rawPath.startsWith("http") ? rawPath : `${API_URL}${rawPath}`;
+        const base = resolveFloorPlanMediaUrl(rawPath);
         const sep = base.includes("?") ? "&" : "?";
         pdfUrl = `${base}${sep}t=${Date.now()}`;
       }
@@ -616,7 +597,7 @@ const FOFPComponent = () => {
             )}
             {error && (
               <Alert severity="error" action={<Button onClick={handleRetry}>Retry</Button>}>
-                {error}
+                {toSafeReactText(error)}
               </Alert>
             )}
             {floorMetaError && <Alert severity="warning">{floorMetaError}</Alert>}

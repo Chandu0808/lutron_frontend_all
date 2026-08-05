@@ -7,6 +7,7 @@ export function consumptionPieChartPropsAreEqual(prevProps, nextProps) {
   if (prevProps.isLoading !== nextProps.isLoading) return false;
   if (prevProps.onEmail !== nextProps.onEmail) return false;
   if (prevProps.onDownload !== nextProps.onDownload) return false;
+  if (prevProps.exportControl !== nextProps.exportControl) return false;
 
   if ('chartSurface' in prevProps || 'chartSurface' in nextProps) {
     if (prevProps.chartSurface !== nextProps.chartSurface) return false;

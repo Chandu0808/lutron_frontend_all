@@ -10,6 +10,7 @@ import {
 /** Chart tooltip / loading colors per application theme (set on :root). */
 export function applyDashboardChartChrome(root, { isGoldTheme, isTheme3Page, isTheme4Page, isCustomTheme }) {
   if (isGoldTheme) {
+    root.style.setProperty('--dashboard-chart-header-text', '#ffffff');
     root.style.setProperty('--dashboard-chart-tooltip-bg', GOLD_THEME_SURFACE_GRADIENT);
     root.style.setProperty('--dashboard-chart-tooltip-border-color', 'rgba(255, 255, 255, 0.85)');
     root.style.setProperty('--dashboard-chart-tooltip-text', '#ffffff');
@@ -19,6 +20,7 @@ export function applyDashboardChartChrome(root, { isGoldTheme, isTheme3Page, isT
     return;
   }
   if (isTheme4Page) {
+    root.style.setProperty('--dashboard-chart-header-text', '#ffffff');
     root.style.setProperty('--dashboard-chart-tooltip-bg', THEME_4_TAB_PILL_GRADIENT);
     root.style.setProperty('--dashboard-chart-tooltip-border-color', 'rgba(255, 255, 255, 0.85)');
     root.style.setProperty('--dashboard-chart-tooltip-text', '#ffffff');
@@ -28,6 +30,7 @@ export function applyDashboardChartChrome(root, { isGoldTheme, isTheme3Page, isT
     return;
   }
   if (isTheme3Page) {
+    root.style.setProperty('--dashboard-chart-header-text', '#ffffff');
     root.style.setProperty('--dashboard-chart-tooltip-bg', THEME_3_TAB_PILL_GRADIENT);
     root.style.setProperty('--dashboard-chart-tooltip-border-color', 'rgba(255, 255, 255, 0.85)');
     root.style.setProperty('--dashboard-chart-tooltip-text', '#ffffff');
@@ -39,6 +42,7 @@ export function applyDashboardChartChrome(root, { isGoldTheme, isTheme3Page, isT
   if (isCustomTheme) {
     return;
   }
+  root.style.setProperty('--dashboard-chart-header-text', '#ffffff');
   root.style.setProperty('--dashboard-chart-tooltip-bg', '#3d4a5c');
   root.style.setProperty('--dashboard-chart-tooltip-border-color', '#ffffff');
   root.style.setProperty('--dashboard-chart-tooltip-text', '#ffffff');

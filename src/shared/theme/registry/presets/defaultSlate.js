@@ -3,6 +3,7 @@ import {
   THEME_4_BUTTON_SOLID,
   THEME_4_TAB_PILL_GRADIENT,
 } from "../../../../variants/advanced/config/themeConstants";
+import { onContentColors } from "../../../../variants/advanced/utils/themeOnSurface";
 
 /**
  * Default slate preset CSS variables (non-gold, non-custom shared surface).
@@ -74,8 +75,12 @@ export function applyDefaultSlatePreset(root, context = {}) {
     return;
   }
 
+  const whitePanelOn = onContentColors("#ffffff");
+  const creamSectionOn = onContentColors("#d6dde8");
+
   root.style.setProperty("--area-picker-light-dialog-bg", "#d6dde8");
-  root.style.setProperty("--area-picker-light-dialog-title-color", "#000000");
+  root.style.setProperty("--area-picker-light-dialog-title-color", whitePanelOn.primary);
+  root.style.setProperty("--area-picker-light-dialog-field-text", whitePanelOn.primary);
   root.style.setProperty("--activity-report-table-head-bg", "#d6dde8");
   root.style.setProperty("--activity-report-table-container-bg", "#ffffff");
   root.style.setProperty("--activity-report-table-row-bg", "#ffffff");
@@ -146,11 +151,17 @@ export function applyDefaultSlatePreset(root, context = {}) {
   root.style.setProperty("--settings-sidebar-title-color", "");
   if (fixedGradientPageTheme?.id !== "theme3") {
     root.style.setProperty("--settings-sidebar-active-bg", "#3d4a5c");
-    root.style.removeProperty("--settings-panel-text");
-    root.style.removeProperty("--settings-panel-muted-text");
-    root.style.removeProperty("--settings-panel-button-text");
-    root.style.removeProperty("--settings-panel-button-bg");
+    root.style.setProperty("--settings-panel-text", whitePanelOn.primary);
+    root.style.setProperty("--settings-panel-muted-text", whitePanelOn.secondary);
+    root.style.setProperty("--settings-panel-button-text", creamSectionOn.primary);
+    root.style.setProperty("--settings-panel-button-bg", "#d6dde8");
   }
+  root.style.setProperty("--users-input-text", whitePanelOn.primary);
+  root.style.setProperty("--users-input-label-text", whitePanelOn.secondary);
+  root.style.setProperty("--users-input-placeholder-text", whitePanelOn.disabled);
+  root.style.setProperty("--users-readonly-field-text", whitePanelOn.primary);
+  root.style.setProperty("--dashboard-select-field-text", whitePanelOn.primary);
+  root.style.setProperty("--dashboard-select-option-text", whitePanelOn.primary);
   root.style.setProperty("--settings-sidebar-active-text", "#ffffff");
   root.style.setProperty("--settings-sidebar-hover-bg", "rgba(61, 74, 92, 0.18)");
   root.style.setProperty("--users-table-container-bg", "#d6dde8");
@@ -162,6 +173,8 @@ export function applyDefaultSlatePreset(root, context = {}) {
   root.style.setProperty("--users-input-bg", "#ffffff");
   root.style.setProperty("--users-select-menu-bg", "#ffffff");
   root.style.setProperty("--users-select-menu-hover", "#D6DDE8");
+  root.style.setProperty("--users-select-menu-checkbox-color", whitePanelOn.secondary);
+  root.style.setProperty("--users-select-menu-checkbox-checked-color", "#3d4a5c");
   root.style.setProperty("--users-chip-bg", "#D6DDE8");
   root.style.setProperty("--users-confirm-dialog-bg", "#ffffff");
   root.style.setProperty("--users-border", "#C5CDD8");
@@ -169,6 +182,8 @@ export function applyDefaultSlatePreset(root, context = {}) {
   root.style.setProperty("--area-groups-inner-bg", "#ffffff");
   root.style.setProperty("--area-groups-chip-bg", "#D6DDE8");
   root.style.setProperty("--area-groups-border", "#C5CDD8");
+  root.style.setProperty("--area-group-on-surface-text", whitePanelOn.primary);
+  root.style.setProperty("--area-group-inner-text", whitePanelOn.primary);
   root.style.setProperty("--settings-form-section-bg", "#3d4a5c");
   root.style.setProperty("--settings-form-control-bg", "#3d4a5c");
   root.style.setProperty("--settings-form-control-text", "#ffffff");
@@ -272,7 +287,10 @@ export function getDefaultSlatePresetVariableNames() {
     "area-groups-inner-bg",
     "area-groups-panel-bg",
     "area-picker-light-dialog-bg",
+    "area-picker-light-dialog-field-text",
     "area-picker-light-dialog-title-color",
+    "dashboard-select-field-text",
+    "dashboard-select-option-text",
     "auth-button-bg",
     "auth-button-hover-bg",
     "auth-button-text",
@@ -335,8 +353,12 @@ export function getDefaultSlatePresetVariableNames() {
     "settings-form-label-color",
     "settings-form-section-bg",
     "settings-panel-border",
+    "settings-panel-button-bg",
+    "settings-panel-button-text",
     "settings-panel-inner-bg",
+    "settings-panel-muted-text",
     "settings-panel-outer-bg",
+    "settings-panel-text",
     "settings-sidebar-active-bg",
     "settings-sidebar-active-text",
     "settings-sidebar-hover-bg",
@@ -354,7 +376,11 @@ export function getDefaultSlatePresetVariableNames() {
     "users-border",
     "users-chip-bg",
     "users-confirm-dialog-bg",
+    "users-readonly-field-text",
     "users-input-bg",
+    "users-input-label-text",
+    "users-input-placeholder-text",
+    "users-input-text",
     "users-modal-bg",
     "users-modal-info-bg",
     "users-modal-inner-bg",

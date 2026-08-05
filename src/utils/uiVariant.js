@@ -53,3 +53,52 @@ export function restoreUiVariantAfterStorageClear(raw) {
     /* ignore */
   }
 }
+
+/**
+ * Best-effort sync of selected UI variant into installation_settings.ui_variant.
+ * Theme APIs also pass ?variant= from localStorage; this keeps other
+ * variant-scoped backend routes aligned after a switch.
+ *
+ * Never throws — returns false on timeout/network/auth failure so the UI
+ * can still reload.
+ */
+export async function syncUiVariantToBackend(variant, options = {}) {
+  if (!UI_VARIANTS.includes(variant)) return false;
+  const apiUrl =
+    options.apiUrl ||
+    process.env.REACT_APP_API_URL ||
+    "http://localhost:8000";
+  const token =
+    options.token !== undefined
+      ? options.token
+      : (() => {
+          try {
+            return localStorage.getItem("lutron");
+          } catch {
+            return null;
+          }
+        })();
+  if (!token) return false;
+  const timeoutMs = options.timeoutMs ?? 3000;
+  const fetchImpl = options.fetchImpl || fetch;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(`${String(apiUrl).replace(/\/$/, "")}/installation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ui_variant: variant }),
+        signal: controller.signal,
+      });
+      return Boolean(response && response.ok);
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}

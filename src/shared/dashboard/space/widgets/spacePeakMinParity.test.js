@@ -155,12 +155,14 @@ describe('SpacePeakMinCards theme presets', () => {
     expect(theme.panelBorder).toBe('1px solid #444');
   });
 
-  it('customized theme uses fixed row height', () => {
+  it('customized theme matches compact peak/min consumption layout', () => {
     const theme = resolveSpacePeakMinTheme({
       preset: SPACE_PEAK_MIN_THEME_PRESETS.customized,
     });
-    expect(theme.panelLayout).toBe('centered-fixed');
-    expect(theme.rowHeight).toBe(220);
+    expect(theme.panelLayout).toBe('centered');
+    expect(theme.rowGap).toBe('15px');
+    expect(theme.rowHeight).toBeNull();
+    expect(theme.panelBg).toBe('#232323');
   });
 });
 

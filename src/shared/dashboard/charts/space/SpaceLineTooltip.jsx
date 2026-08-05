@@ -3,6 +3,11 @@ import {
   formatSpaceTooltipLabel,
   shouldShowSpaceOccupancyPercentage,
 } from './spaceLineChartConfig';
+import {
+  resolveSpaceChartTooltipBoxStyle,
+  resolveSpaceChartTooltipHeadBorder,
+  resolveSpaceChartTooltipTextColor,
+} from '../tooltips/resolveSpaceChartTooltipStyle';
 
 export function SpaceLineTooltip({
   active,
@@ -22,26 +27,18 @@ export function SpaceLineTooltip({
     selectedDuration,
     customDateRange
   );
+  const tooltipTextColor = resolveSpaceChartTooltipTextColor(theme);
+  const tooltipHeadBorder = resolveSpaceChartTooltipHeadBorder(theme);
 
   return (
-    <div
-      style={{
-        backgroundColor: theme.tooltipBg,
-        background: theme.tooltipBg,
-        border: theme.tooltipBorder,
-        borderRadius: '4px',
-        padding: '10px',
-        color: theme.tooltipText,
-        fontSize: '12px',
-        ...(theme.shellStyle || {}),
-      }}
-    >
+    <div style={resolveSpaceChartTooltipBoxStyle(theme)}>
       <p
         style={{
           margin: '0 0 8px 0',
           fontWeight: 'bold',
-          borderBottom: `1px solid ${theme.tooltipHeadBorder}`,
+          borderBottom: `1px solid ${tooltipHeadBorder}`,
           paddingBottom: '4px',
+          color: tooltipTextColor,
         }}
       >
         {formattedLabel}
@@ -51,8 +48,8 @@ export function SpaceLineTooltip({
           key={index}
           style={{
             margin: '4px 0',
-            color: theme.tooltipText,
-            fontWeight: '500',
+            color: tooltipTextColor,
+            fontWeight: '600',
           }}
         >
           Occupancy: {entry.value}

@@ -119,8 +119,15 @@ export function getEnergyLineChartConfig(chartData, options = {}) {
 }
 
 export function resolveEnergyLineSeriesNames(chartData) {
-  if (!chartData[0] || typeof chartData[0] !== 'object') return [];
-  return Object.keys(chartData[0]).filter((key) => key !== 'date');
+  const names = new Set();
+  for (const row of chartData) {
+    if (row && typeof row === 'object') {
+      Object.keys(row).forEach((k) => {
+        if (k !== 'date') names.add(k);
+      });
+    }
+  }
+  return Array.from(names);
 }
 
 export function resolveEnergyLineSeriesColors(seriesNames, colors, generateAdditional) {

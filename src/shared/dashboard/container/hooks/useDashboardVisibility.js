@@ -1,7 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  applyVisibilityToggleToMap,
+  applyVisibilityToggleToMapWithCombinedExclusion,
+  normalizeVisibilityMapCombinedExclusion,
+  isWidgetVisibleInMapWithCombinedExclusion,
+  DASHBOARD_WIDGET_VISIBILITY_EVENT,
+  hasBackendWidgetConfiguration,
+  isWidgetVisibleInMap,
+  normalizeDashboardWidgetKey,
+  readDashboardWidgetVisibility,
+  readDashboardWidgetVisibilityRaw,
+  resolveVisibilityMap,
+  resolveWidgetConfigurationDisplayName,
+  widgetConfigurationItemsToVisibilityMap,
+  writeDashboardWidgetVisibility,
+  filterWidgetConfigurationByUiVariant,
+} from '../../utils/dashboardWidgetVisibilityCore';
+import {
+  resolveCustomizedEnergyWidgetVisible,
+  resolveEnergyWidgetVisible,
+  resolveEnergyWidgetVisibilityKeys,
+} from './widgetVisibilityResolvers';
+import {
   applyEnergyChartOrderForVisibility,
-  buildEnergyDashboardRows,
+  buildDashboardRowsWithSpan,
   deriveEnergyChartOrderFromWidgetTitles,
   ENERGY_CHART_ORDER_STORAGE_KEY,
   hasStoredEnergyChartOrder,
@@ -9,28 +31,44 @@ import {
   loadEnergyChartOrderFromStorage,
   mergeVisibleDashboardOrder,
   normalizeEnergySlotOrder,
-  parseCustomizedWidgetVisibilityFromStorage,
   readDashboardPageOrder,
   readDashboardPageSpan,
+  CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY,
   resolveEnergyAllVisible,
   resolveEnergyCardColumnSpan,
   resolveEnergyGridColumnTemplate,
   resolveEnergyVisibleSlotOrder,
-  resolveOrderedVisibleDashboardCards,
+  resolveOrderedVisibleEnergyCardsPinningCombined,
   resolveShowEnergyStandaloneDurationFilter,
   sortItemsByDashboardOrder,
   writeDashboardPageOrder,
   writeDashboardPageSpan,
   clearDragTranslateKeys,
-  ENERGY_CHART_SLOT_ORDER_DEFAULT,
+  ADVANCED_DASHBOARD_ORDER_STORAGE_KEY,
+  BASIC_DASHBOARD_ORDER_STORAGE_KEY,
+  DASHBOARD_ORDER_STORAGE_KEY,
+  pinWidgetFirstInOrder,
+  ENERGY_COMBINED_WIDGET_KEY,
 } from '../dashboardLayoutResolvers';
 import {
   createVisibilityOrderSignature,
   hasVisibilityOrderSignatureChanged,
 } from '../visibilityMemoCompare';
-import { resolveCustomizedEnergyWidgetVisible, resolveEnergyWidgetVisible } from './widgetVisibilityResolvers';
+import {
+  applyVariantDashboardOrderBlob,
+  isPlainSpanMap,
+  normalizeSpanMap,
+  persistAdvancedLayoutAndBuildApiPayload,
+  persistBasicEnergySpanAndBuildApiPayload,
+  persistCustomizedLayoutAndBuildApiPayload,
+} from '../dashboardLayoutApiSync';
+import {
+  hydrateCustomizedVisibilityFromApiItems,
+  parseCustomizedWidgetVisibilityRoot,
+} from '../../../../variants/customized/utils/customizedOverviewWidgetVisibility';
+import { dispatchFetchWidgetConfigurationOnce } from '../../../utils/bootstrapFetchGuards';
 
-function useBasicDashboardVisibility({
+export function useBasicDashboardVisibility({
   visibilityMap,
   isWidgetVisible,
   energyReflowLocked = false,
@@ -42,19 +80,55 @@ function useBasicDashboardVisibility({
   dragTranslateKeys = [],
 }) {
   const [energyChartOrder, setEnergyChartOrder] = useState(() => loadEnergyChartOrderFromStorage());
+  const [energyCardSpan, setEnergyCardSpan] = useState({});
   const appliedEnergyOrderFromApiRef = useRef(false);
+  const lastAppliedEnergyApiOrderSigRef = useRef('');
   const prevEnergyVisibleSigRef = useRef('');
   const prevEnergyCombinedVisibleRef = useRef(null);
+
+  useEffect(() => {
+    setEnergyCardSpan(readDashboardPageSpan('energy', BASIC_DASHBOARD_ORDER_STORAGE_KEY));
+  }, []);
+
+  const getEnergySlotSpan = useCallback(
+    (slotId) => {
+      if (slotId === 'consumption_saving') return 12;
+      const raw = energyCardSpan?.[slotId];
+      return raw === 12 || raw === '12' ? 12 : 6;
+    },
+    [energyCardSpan]
+  );
+
+  const writeEnergyCardSpan = useCallback((nextSpan) => {
+    const normalized = normalizeSpanMap(nextSpan);
+    setEnergyCardSpan(normalized);
+    writeDashboardPageSpan('energy', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY);
+    if (!energyReflowLocked && dispatch && saveDashboardChartOrder) {
+      dispatch(
+        saveDashboardChartOrder(persistBasicEnergySpanAndBuildApiPayload(normalized))
+      );
+    }
+  }, [energyReflowLocked, dispatch, saveDashboardChartOrder]);
+
+  // Prefer shared API spans so Admin/Operator match Superadmin resize.
+  useEffect(() => {
+    if (dashboardChartOrderStatus !== 'succeeded') return;
+    const apiSpan = dashboardChartOrder?.energy_slot_span;
+    if (!isPlainSpanMap(apiSpan) || Object.keys(apiSpan).length === 0) return;
+    const normalized = normalizeSpanMap(apiSpan);
+    setEnergyCardSpan(normalized);
+    writeDashboardPageSpan('energy', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY);
+  }, [dashboardChartOrder, dashboardChartOrderStatus]);
 
   const energyAllVisible = useMemo(
     () => resolveEnergyAllVisible(visibilityMap),
     [visibilityMap]
   );
 
-  const energyVisibleSlotOrder = useMemo(
-    () => resolveEnergyVisibleSlotOrder(visibilityMap),
-    [visibilityMap]
-  );
+  const energyVisibleSlotOrder = useMemo(() => {
+    const canonicalVisible = resolveEnergyVisibleSlotOrder(visibilityMap);
+    return mergeVisibleDashboardOrder(energyChartOrder, canonicalVisible);
+  }, [visibilityMap, energyChartOrder]);
 
   const energyHiddenSlotIds = useMemo(() => {
     const visibleSet = new Set(energyVisibleSlotOrder);
@@ -67,32 +141,9 @@ function useBasicDashboardVisibility({
   );
 
   const energyDashboardRows = useMemo(
-    () => buildEnergyDashboardRows(energyVisibleSlotOrder),
-    [energyVisibleSlotOrder]
+    () => buildDashboardRowsWithSpan(energyVisibleSlotOrder, getEnergySlotSpan),
+    [energyVisibleSlotOrder, getEnergySlotSpan]
   );
-
-  useEffect(() => {
-    if (!energyAllVisible) return;
-    if (isCanonicalDefaultEnergyOrder(energyChartOrder)) return;
-    const merged = normalizeEnergySlotOrder([...ENERGY_CHART_SLOT_ORDER_DEFAULT]);
-    setEnergyChartOrder(merged);
-    try {
-      localStorage.setItem(ENERGY_CHART_ORDER_STORAGE_KEY, JSON.stringify(merged));
-    } catch {
-      /* ignore */
-    }
-    clearDragTranslateKeys(dragTranslateKeys);
-    if (!energyReflowLocked && dispatch && saveDashboardChartOrder) {
-      dispatch(saveDashboardChartOrder({ energy_slot_order: merged }));
-    }
-  }, [
-    energyAllVisible,
-    energyChartOrder,
-    energyReflowLocked,
-    dispatch,
-    saveDashboardChartOrder,
-    dragTranslateKeys,
-  ]);
 
   useEffect(() => {
     const sig = createVisibilityOrderSignature(energyVisibleSlotOrder);
@@ -138,6 +189,14 @@ function useBasicDashboardVisibility({
     if (dashboardChartOrderStatus !== 'succeeded') return;
     const raw = dashboardChartOrder?.energy_slot_order;
     if (!Array.isArray(raw) || raw.length === 0) return;
+    const apiSig = JSON.stringify(raw);
+    // Same API order + object churn (e.g. save fulfilled) must not wipe a local rearrange.
+    if (
+      appliedEnergyOrderFromApiRef.current &&
+      lastAppliedEnergyApiOrderSigRef.current === apiSig
+    ) {
+      return;
+    }
     const merged = normalizeEnergySlotOrder(raw);
     if (isCanonicalDefaultEnergyOrder(merged) && hasStoredEnergyChartOrder()) {
       try {
@@ -156,6 +215,7 @@ function useBasicDashboardVisibility({
     } catch {
       /* ignore */
     }
+    lastAppliedEnergyApiOrderSigRef.current = apiSig;
     appliedEnergyOrderFromApiRef.current = true;
   }, [dashboardChartOrder, dashboardChartOrderStatus, visibilityMap]);
 
@@ -201,46 +261,287 @@ function useBasicDashboardVisibility({
     showEnergyStandaloneDurationFilter,
     energyAllVisible,
     energyDashboardRows,
+    energyCardSpan,
+    setEnergyCardSpan,
+    getEnergySlotSpan,
+    writeEnergyCardSpan,
   };
 }
 
-function useAdvancedDashboardVisibility({ showOverviewTab = true } = {}) {
-  const isWidgetVisible = useCallback(() => true, []);
-  const shouldRenderWidget = useCallback(() => true, []);
+export function useAdvancedDashboardVisibility({
+  showOverviewTab = true,
+  variant = 'advanced',
+  widgetConfiguration = [],
+  widgetConfigurationStatus = 'idle',
+  dispatch,
+  saveDashboardChartOrder,
+  layoutLocked = false,
+} = {}) {
+  const uiVariant = variant || 'advanced';
+
+  const [visibilityMap, setVisibilityMap] = useState(() =>
+    normalizeVisibilityMapCombinedExclusion(readDashboardWidgetVisibility(uiVariant))
+  );
+  const visibilityMapRef = useRef(visibilityMap);
+  visibilityMapRef.current = visibilityMap;
+  const hydratedStatusRef = useRef(false);
+
+  // Hydrate once from Advanced localStorage when fetch settles — do not re-run on
+  // every widgetConfiguration reference change (that snapped toggles back to Combined).
+  useEffect(() => {
+    if (widgetConfigurationStatus !== 'succeeded') return;
+    if (hydratedStatusRef.current) return;
+    hydratedStatusRef.current = true;
+
+    const resolved = normalizeVisibilityMapCombinedExclusion(
+      resolveVisibilityMap(widgetConfiguration, widgetConfigurationStatus, uiVariant)
+    );
+    setVisibilityMap(resolved);
+    visibilityMapRef.current = resolved;
+    const raw = readDashboardWidgetVisibilityRaw(uiVariant);
+    if (raw != null && raw !== '') {
+      writeDashboardWidgetVisibility(resolved, uiVariant);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once on succeeded
+  }, [widgetConfigurationStatus, uiVariant]);
+
+  useEffect(() => {
+    const sync = () => {
+      const next = normalizeVisibilityMapCombinedExclusion(
+        readDashboardWidgetVisibility(uiVariant)
+      );
+      visibilityMapRef.current = next;
+      setVisibilityMap(next);
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, sync);
+    };
+  }, [uiVariant]);
+
+  const isWidgetVisible = useCallback(
+    (key) =>
+      isWidgetVisibleInMapWithCombinedExclusion(
+        visibilityMap,
+        normalizeDashboardWidgetKey(key)
+      ),
+    [visibilityMap]
+  );
+
+  const setWidgetVisible = useCallback(
+    (key, visible) => {
+      const k = normalizeDashboardWidgetKey(key);
+      if (!k) return;
+      const prev = visibilityMapRef.current;
+      const base =
+        prev && typeof prev === 'object' && Object.keys(prev).length > 0
+          ? prev
+          : normalizeVisibilityMapCombinedExclusion(
+              readDashboardWidgetVisibility(uiVariant)
+            );
+      const next = normalizeVisibilityMapCombinedExclusion(
+        applyVisibilityToggleToMapWithCombinedExclusion(base, k, visible)
+      );
+      writeDashboardWidgetVisibility(next, uiVariant);
+      visibilityMapRef.current = next;
+      setVisibilityMap(next);
+      window.dispatchEvent(new CustomEvent(DASHBOARD_WIDGET_VISIBILITY_EVENT));
+      // Advanced stays localStorage-only — do not POST shared API (would affect Basic).
+    },
+    [uiVariant]
+  );
+
+  const shouldRenderWidget = useCallback(
+    (widgetKey) => resolveEnergyWidgetVisible(widgetKey, { variant: uiVariant, visibilityMap }),
+    [uiVariant, visibilityMap]
+  );
+  const shouldShowEnergyWidget = shouldRenderWidget;
+
+  const [energyCardOrder, setEnergyCardOrder] = useState([]);
+  const [energyCardSpan, setEnergyCardSpan] = useState({});
+
+  useEffect(() => {
+    setEnergyCardOrder(readDashboardPageOrder('energy', ADVANCED_DASHBOARD_ORDER_STORAGE_KEY));
+    setEnergyCardSpan(readDashboardPageSpan('energy', ADVANCED_DASHBOARD_ORDER_STORAGE_KEY));
+  }, []);
+
+  const getEnergyCardCol = useCallback(
+    (key, visibleCount) => {
+      if (key === 'consumption_saving') return 12;
+      return resolveEnergyCardColumnSpan(key, energyCardSpan, visibleCount);
+    },
+    [energyCardSpan]
+  );
+
+  const resolveEnergyCardLayout = useCallback(
+    (cards) => resolveOrderedVisibleEnergyCardsPinningCombined(cards, energyCardOrder),
+    [energyCardOrder]
+  );
+
+  const writeEnergyCardOrder = useCallback(
+    (nextOrder) => {
+      const pinned = pinWidgetFirstInOrder(
+        Array.isArray(nextOrder) ? nextOrder : [],
+        ENERGY_COMBINED_WIDGET_KEY
+      );
+      // Only pin when Combined is actually in the order (visible / being arranged).
+      const order =
+        Array.isArray(nextOrder) && nextOrder.includes(ENERGY_COMBINED_WIDGET_KEY)
+          ? pinned
+          : Array.isArray(nextOrder)
+            ? nextOrder
+            : [];
+      setEnergyCardOrder(order);
+      writeDashboardPageOrder('energy', order, ADVANCED_DASHBOARD_ORDER_STORAGE_KEY);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistAdvancedLayoutAndBuildApiPayload({ energy: order })
+          )
+        );
+      }
+    },
+    [layoutLocked, dispatch, saveDashboardChartOrder]
+  );
+
+  const writeEnergyCardSpan = useCallback(
+    (nextSpan) => {
+      const normalized = normalizeSpanMap(nextSpan);
+      setEnergyCardSpan(normalized);
+      writeDashboardPageSpan('energy', normalized, ADVANCED_DASHBOARD_ORDER_STORAGE_KEY);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistAdvancedLayoutAndBuildApiPayload({ energySpan: normalized })
+          )
+        );
+      }
+    },
+    [layoutLocked, dispatch, saveDashboardChartOrder]
+  );
+
+  /** Apply shared Advanced layout blob from GET /widgets/dashboard_chart_order. */
+  const hydrateEnergyLayoutFromApi = useCallback((blob) => {
+    const applied = applyVariantDashboardOrderBlob(ADVANCED_DASHBOARD_ORDER_STORAGE_KEY, blob);
+    if (!applied) return;
+    if (Array.isArray(applied.energy)) {
+      const energy = applied.energy.includes(ENERGY_COMBINED_WIDGET_KEY)
+        ? pinWidgetFirstInOrder(applied.energy, ENERGY_COMBINED_WIDGET_KEY)
+        : applied.energy;
+      setEnergyCardOrder(energy);
+      writeDashboardPageOrder('energy', energy, ADVANCED_DASHBOARD_ORDER_STORAGE_KEY);
+    }
+    if (isPlainSpanMap(applied.energySpan)) setEnergyCardSpan(applied.energySpan);
+  }, []);
+
+  // When Energy Combined is enabled, pin it first (Basic parity).
+  useEffect(() => {
+    const combinedOn = shouldRenderWidget(ENERGY_COMBINED_WIDGET_KEY);
+    if (!combinedOn) return;
+    setEnergyCardOrder((prev) => {
+      const base = Array.isArray(prev) ? prev : [];
+      const withCombined = base.includes(ENERGY_COMBINED_WIDGET_KEY)
+        ? base
+        : [...base, ENERGY_COMBINED_WIDGET_KEY];
+      const next = pinWidgetFirstInOrder(withCombined, ENERGY_COMBINED_WIDGET_KEY);
+      if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
+      writeDashboardPageOrder('energy', next, ADVANCED_DASHBOARD_ORDER_STORAGE_KEY);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(persistAdvancedLayoutAndBuildApiPayload({ energy: next }))
+        );
+      }
+      return next;
+    });
+  }, [visibilityMap, shouldRenderWidget, layoutLocked, dispatch, saveDashboardChartOrder]);
+
+  const energyGridColumnTemplate = useCallback(
+    (visibleCount) => resolveEnergyGridColumnTemplate(visibleCount),
+    []
+  );
 
   return {
     isWidgetVisible,
-    visibilityMap: {},
+    setWidgetVisible,
+    visibilityMap,
     shouldRenderWidget,
+    shouldShowEnergyWidget,
     showOverviewTab,
+    energyCardOrder,
+    setEnergyCardOrder,
+    energyCardSpan,
+    setEnergyCardSpan,
+    getEnergyCardCol,
+    resolveEnergyCardLayout,
+    writeEnergyCardOrder,
+    writeEnergyCardSpan,
+    hydrateEnergyLayoutFromApi,
+    energyGridColumnTemplate,
   };
 }
 
-function useCustomizedDashboardVisibility({
+export function useCustomizedDashboardVisibility({
   locationPathname,
   getEffectiveBuiltinDashboardPage,
   dispatch,
   fetchRenameWidgets,
   fetchCustomGraphs,
+  fetchWidgetConfiguration,
+  widgetConfiguration = [],
+  widgetConfigurationStatus = 'idle',
+  saveDashboardChartOrder,
+  layoutLocked = false,
 }) {
   const [widgetVisibility, setWidgetVisibility] = useState(() =>
-    parseCustomizedWidgetVisibilityFromStorage()
+    parseCustomizedWidgetVisibilityRoot()
   );
   const [energyCardOrder, setEnergyCardOrder] = useState([]);
   const [energyCardSpan, setEnergyCardSpan] = useState({});
 
   useEffect(() => {
-    setWidgetVisibility(parseCustomizedWidgetVisibilityFromStorage());
+    setWidgetVisibility(parseCustomizedWidgetVisibilityRoot());
   }, [locationPathname]);
 
   useEffect(() => {
+    if (widgetConfigurationStatus === 'idle' && dispatch && fetchWidgetConfiguration) {
+      dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration);
+    }
+  }, [dispatch, fetchWidgetConfiguration, widgetConfigurationStatus]);
+
+  useEffect(() => {
+    if (widgetConfigurationStatus !== 'succeeded') return;
+    const filtered = filterWidgetConfigurationByUiVariant(
+      widgetConfiguration,
+      'customized'
+    );
+    if (!hasBackendWidgetConfiguration(filtered)) return;
+    const root = hydrateCustomizedVisibilityFromApiItems(filtered);
+    if (root) setWidgetVisibility(root);
+    const flat = normalizeVisibilityMapCombinedExclusion(
+      widgetConfigurationItemsToVisibilityMap(filtered, 'customized')
+    );
+    writeDashboardWidgetVisibility(flat, 'customized');
+    window.dispatchEvent(new CustomEvent('widgetVisibilityUpdated'));
+    window.dispatchEvent(new CustomEvent(DASHBOARD_WIDGET_VISIBILITY_EVENT));
+  }, [widgetConfiguration, widgetConfigurationStatus]);
+
+  useEffect(() => {
     const refreshFromStorage = () => {
-      setWidgetVisibility(parseCustomizedWidgetVisibilityFromStorage());
+      setWidgetVisibility(parseCustomizedWidgetVisibilityRoot());
     };
 
     const onCustomEvent = () => refreshFromStorage();
     const onStorage = (event) => {
-      if (!event || event.key === 'widgetVisibility') refreshFromStorage();
+      if (
+        !event ||
+        event.key === 'widgetVisibility' ||
+        event.key === CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY ||
+        event.key === 'widgetVisibility_customized'
+      ) {
+        refreshFromStorage();
+      }
     };
 
     const onWidgetTitlesUpdated = () => {
@@ -251,11 +552,13 @@ function useCustomizedDashboardVisibility({
     };
 
     window.addEventListener('widgetVisibilityUpdated', onCustomEvent);
+    window.addEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, onCustomEvent);
     window.addEventListener('widgetTitlesUpdated', onWidgetTitlesUpdated);
     window.addEventListener('customGraphsUpdated', onCustomGraphsUpdated);
     window.addEventListener('storage', onStorage);
     return () => {
       window.removeEventListener('widgetVisibilityUpdated', onCustomEvent);
+      window.removeEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, onCustomEvent);
       window.removeEventListener('widgetTitlesUpdated', onWidgetTitlesUpdated);
       window.removeEventListener('customGraphsUpdated', onCustomGraphsUpdated);
       window.removeEventListener('storage', onStorage);
@@ -267,37 +570,133 @@ function useCustomizedDashboardVisibility({
     setEnergyCardSpan(readDashboardPageSpan('energy'));
   }, []);
 
+  const flatVisibilityMap = useMemo(() => {
+    if (widgetConfigurationStatus === 'succeeded') {
+      const filtered = filterWidgetConfigurationByUiVariant(
+        widgetConfiguration,
+        'customized'
+      );
+      if (hasBackendWidgetConfiguration(filtered)) {
+        return normalizeVisibilityMapCombinedExclusion(
+          widgetConfigurationItemsToVisibilityMap(filtered, 'customized')
+        );
+      }
+    }
+    return normalizeVisibilityMapCombinedExclusion(
+      readDashboardWidgetVisibility('customized')
+    );
+  }, [widgetConfiguration, widgetConfigurationStatus]);
+
   const shouldRenderWidget = useCallback(
-    (widgetKey) =>
-      resolveCustomizedEnergyWidgetVisible(
-        widgetKey,
-        widgetVisibility,
-        getEffectiveBuiltinDashboardPage || (() => 'energy')
-      ),
-    [widgetVisibility, getEffectiveBuiltinDashboardPage]
+    (widgetKey) => {
+      const getPage = getEffectiveBuiltinDashboardPage || (() => 'energy');
+      const keysToCheckPage = resolveEnergyWidgetVisibilityKeys(widgetKey);
+      if (keysToCheckPage.some((key) => getPage(key) === 'space')) {
+        return false;
+      }
+      if (String(widgetKey).startsWith('custom_graph:')) {
+        return resolveCustomizedEnergyWidgetVisible(widgetKey, widgetVisibility, getPage);
+      }
+      return isWidgetVisibleInMapWithCombinedExclusion(flatVisibilityMap, widgetKey);
+    },
+    [flatVisibilityMap, widgetVisibility, getEffectiveBuiltinDashboardPage]
   );
 
   const shouldShowEnergyWidget = shouldRenderWidget;
 
+  const isSpaceCombinedVisible = useMemo(
+    () =>
+      isWidgetVisibleInMapWithCombinedExclusion(
+        flatVisibilityMap,
+        'instant_utilization_combined'
+      ),
+    [flatVisibilityMap]
+  );
+
   const getEnergyCardCol = useCallback(
-    (key, visibleCount) => resolveEnergyCardColumnSpan(key, energyCardSpan, visibleCount),
+    (key, visibleCount) => {
+      if (key === 'consumption_saving') return 12;
+      return resolveEnergyCardColumnSpan(key, energyCardSpan, visibleCount);
+    },
     [energyCardSpan]
   );
 
   const resolveEnergyCardLayout = useCallback(
-    (cards) => resolveOrderedVisibleDashboardCards(cards, energyCardOrder),
+    (cards) => resolveOrderedVisibleEnergyCardsPinningCombined(cards, energyCardOrder),
     [energyCardOrder]
   );
 
-  const writeEnergyCardOrder = useCallback((nextOrder) => {
-    setEnergyCardOrder(nextOrder);
-    writeDashboardPageOrder('energy', nextOrder);
+  const writeEnergyCardOrder = useCallback(
+    (nextOrder) => {
+      const order =
+        Array.isArray(nextOrder) && nextOrder.includes(ENERGY_COMBINED_WIDGET_KEY)
+          ? pinWidgetFirstInOrder(nextOrder, ENERGY_COMBINED_WIDGET_KEY)
+          : Array.isArray(nextOrder)
+            ? nextOrder
+            : [];
+      setEnergyCardOrder(order);
+      writeDashboardPageOrder('energy', order);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistCustomizedLayoutAndBuildApiPayload({ energy: order })
+          )
+        );
+      }
+    },
+    [layoutLocked, dispatch, saveDashboardChartOrder]
+  );
+
+  const writeEnergyCardSpan = useCallback(
+    (nextSpan) => {
+      const normalized = normalizeSpanMap(nextSpan);
+      setEnergyCardSpan(normalized);
+      writeDashboardPageSpan('energy', normalized);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistCustomizedLayoutAndBuildApiPayload({ energySpan: normalized })
+          )
+        );
+      }
+    },
+    [layoutLocked, dispatch, saveDashboardChartOrder]
+  );
+
+  /** Apply shared Customized layout blob from GET /widgets/dashboard_chart_order. */
+  const hydrateEnergyLayoutFromApi = useCallback((blob) => {
+    const applied = applyVariantDashboardOrderBlob(DASHBOARD_ORDER_STORAGE_KEY, blob);
+    if (!applied) return;
+    if (Array.isArray(applied.energy)) {
+      const energy = applied.energy.includes(ENERGY_COMBINED_WIDGET_KEY)
+        ? pinWidgetFirstInOrder(applied.energy, ENERGY_COMBINED_WIDGET_KEY)
+        : applied.energy;
+      setEnergyCardOrder(energy);
+      writeDashboardPageOrder('energy', energy);
+    }
+    if (isPlainSpanMap(applied.energySpan)) setEnergyCardSpan(applied.energySpan);
   }, []);
 
-  const writeEnergyCardSpan = useCallback((nextSpan) => {
-    setEnergyCardSpan(nextSpan);
-    writeDashboardPageSpan('energy', nextSpan);
-  }, []);
+  // When Energy Combined is enabled, pin it first (Basic parity).
+  useEffect(() => {
+    const combinedOn = shouldRenderWidget(ENERGY_COMBINED_WIDGET_KEY);
+    if (!combinedOn) return;
+    setEnergyCardOrder((prev) => {
+      const base = Array.isArray(prev) ? prev : [];
+      const withCombined = base.includes(ENERGY_COMBINED_WIDGET_KEY)
+        ? base
+        : [...base, ENERGY_COMBINED_WIDGET_KEY];
+      const next = pinWidgetFirstInOrder(withCombined, ENERGY_COMBINED_WIDGET_KEY);
+      if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
+      writeDashboardPageOrder('energy', next);
+      if (!layoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(persistCustomizedLayoutAndBuildApiPayload({ energy: next }))
+        );
+      }
+      return next;
+    });
+  }, [flatVisibilityMap, shouldRenderWidget, layoutLocked, dispatch, saveDashboardChartOrder]);
 
   const energyGridColumnTemplate = useCallback(
     (visibleCount) => resolveEnergyGridColumnTemplate(visibleCount),
@@ -308,6 +707,7 @@ function useCustomizedDashboardVisibility({
     widgetVisibility,
     shouldRenderWidget,
     shouldShowEnergyWidget,
+    isSpaceCombinedVisible,
     energyCardOrder,
     setEnergyCardOrder,
     energyCardSpan,
@@ -316,22 +716,9 @@ function useCustomizedDashboardVisibility({
     resolveEnergyCardLayout,
     writeEnergyCardOrder,
     writeEnergyCardSpan,
+    hydrateEnergyLayoutFromApi,
     energyGridColumnTemplate,
     mergeVisibleDashboardOrder,
     sortItemsByDashboardOrder,
   };
-}
-
-export function useDashboardVisibility(options = {}) {
-  const { variant = 'basic' } = options;
-
-  if (variant === 'advanced') {
-    return useAdvancedDashboardVisibility(options);
-  }
-
-  if (variant === 'customized') {
-    return useCustomizedDashboardVisibility(options);
-  }
-
-  return useBasicDashboardVisibility(options);
 }

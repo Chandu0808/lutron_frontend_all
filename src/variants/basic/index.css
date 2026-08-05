@@ -160,16 +160,15 @@ html.dashboard-route-shell #root {
     overflow-x: auto;
   }
   
-  /* Touch-friendly buttons and inputs */
+  /* Touch-friendly buttons and inputs (exclude compact shade % fields) */
   .MuiButton-root,
-  .MuiTextField-root input {
+  .MuiTextField-root:not(.heatmap-shade-level-input) input {
     min-height: 42px;
   }
   
-  /* Heatmap adjustments for laptop */
+  /* Heatmap adjustments for laptop — cap only; JS availableHeight sets exact fit */
   .heatmap-container {
-    height: calc(100vh - 130px) !important;
-    max-height: calc(100vh - 130px) !important;
+    max-height: calc(100vh - 96px) !important;
   }
   
   /* Area group scrollable adjustments */
@@ -189,8 +188,7 @@ html.dashboard-route-shell #root {
   }
   
   .heatmap-container {
-    height: calc(100vh - 120px) !important;
-    max-height: calc(100vh - 120px) !important;
+    max-height: calc(100vh - 88px) !important;
   }
   
   .area-group-scrollable {
@@ -259,31 +257,112 @@ html.dashboard-route-shell #root {
     overflow-x: auto;
   }
   
-  /* Ensure buttons and inputs are touch-friendly */
+  /* Ensure buttons and inputs are touch-friendly (exclude compact shade % fields) */
   .MuiButton-root,
-  .MuiTextField-root input {
+  .MuiTextField-root:not(.heatmap-shade-level-input) input {
     min-height: 44px;
   }
 }
 
-/* Heatmap specific styles to prevent vertical scroll */
+/* Heatmap: cap height so the bottom legend bar stays on-screen.
+   Measured `availableHeight` from JS sets the exact height (do not force a taller !important height). */
 .heatmap-container {
-  height: calc(100vh - 120px) !important;
+  max-height: calc(100vh - 88px) !important;
   overflow: hidden !important;
 }
 
-/* For screens 1440px and above, ensure heatmap has no scroll */
+/* Area status sidebar: vertical scroll so Shades Apply / full content is reachable */
+.heatmap-container .heatmap-area-sidebar {
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  overscroll-behavior: contain;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+}
+
+.heatmap-container .heatmap-area-sidebar-body {
+  padding-bottom: 72px !important;
+  box-sizing: border-box !important;
+}
+
+/* Shade % field — border on wrapper (native input; MUI outline was invisible) */
+.heatmap-container .heatmap-shade-level-wrap {
+  width: 64px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  box-sizing: border-box !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid rgba(30, 116, 197, 0.65) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  overflow: visible !important;
+}
+.heatmap-container .heatmap-shade-level-wrap:hover {
+  border-color: rgba(30, 116, 197, 0.9) !important;
+}
+.heatmap-container .heatmap-shade-level-wrap:focus-within {
+  border-color: #1e74c5 !important;
+  box-shadow: 0 0 0 2px rgba(30, 116, 197, 0.2) !important;
+}
+.heatmap-container .heatmap-shade-level-input {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  text-align: center !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+}
+
+.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar {
+  width: 10px !important;
+  display: block !important;
+}
+
+.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(30, 116, 197, 0.65) !important;
+  border-radius: 5px !important;
+}
+
+/* Keep floorplan canvas from scrolling; never clip sidebar or bottom legend bar */
 @media (min-width: 1440px) {
   .heatmap-container {
     overflow: hidden !important;
-    height: calc(100vh - 120px) !important;
-    max-height: calc(100vh - 120px) !important;
+    max-height: calc(100vh - 88px) !important;
   }
-  
-  .heatmap-container * {
+
+  .heatmap-container > *:not(.heatmap-area-sidebar),
+  .heatmap-container > *:not(.heatmap-area-sidebar) * {
     overflow: hidden !important;
     overflow-y: hidden !important;
     overflow-x: hidden !important;
+  }
+
+  .heatmap-container .heatmap-area-sidebar {
+    overflow-x: hidden !important;
+    overflow-y: scroll !important;
+  }
+
+  /* Legend / floor nav / Create Area Group must stay fully visible */
+  .heatmap-container .heatmap-legends-nav,
+  .heatmap-container .heatmap-legends-nav * {
+    overflow: visible !important;
   }
 }
 
@@ -298,6 +377,9 @@ html.dashboard-route-shell #root {
   border-radius: 8px !important;
   margin: 0 8px !important;
   padding: 4px 8px !important;
+  overflow: visible !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
 }
 
 /* Area group pages specific styles */
@@ -354,6 +436,14 @@ html.dashboard-route-shell #root {
 }
 
 /* Settings and Lutron website pages specific styles */
+.settings-layout-root,
+.settings-main-inner-panel {
+  min-height: auto !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
 .settings-container {
   height: 100% !important;
   min-height: 0 !important;
@@ -580,6 +670,9 @@ html.dashboard-route-shell #root {
   left: 0 !important;
 }
 
+/* Word-style numeric labels in font-size picker (basic Settings Home only). */
+@import '../../shared/settings/home/homeQuillFontSize.css';
+
 /* Ensure settings pages align properly with footer like other pages */
 .settings-container,
 .help-container {
@@ -640,8 +733,8 @@ body.lutron-page {
   
   /* Ensure Lutron website container has fixed height on larger screens */
   .lutron-website-container {
-    height: calc(100vh - 200px) !important;
-    max-height: calc(100vh - 200px) !important;
+    height: calc(100vh - 234px) !important;
+    max-height: calc(100vh - 234px) !important;
     overflow: hidden !important;
   }
   

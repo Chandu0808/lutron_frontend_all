@@ -19,7 +19,15 @@ export function ConsumptionPieTooltip({
   const value = formatConsumptionPieTooltipValue(pieData, name);
 
   const contentStyle = theme.useCssTooltipVars
-    ? cssTooltipStyle
+    ? {
+        ...cssTooltipStyle,
+        background:
+          cssTooltipStyle?.background ||
+          cssTooltipStyle?.backgroundColor ||
+          'var(--dashboard-chart-tooltip-bg, #3d4a5c)',
+        color:
+          cssTooltipStyle?.color || 'var(--dashboard-chart-tooltip-text, #ffffff)',
+      }
     : {
         backgroundColor: theme.tooltipBg,
         border: theme.tooltipBorder,
@@ -30,8 +38,30 @@ export function ConsumptionPieTooltip({
 
   return (
     <div style={contentStyle}>
-      <p style={{ margin: 0, color: theme.tooltipText, fontWeight: 600 }}>{name}</p>
-      <p style={{ margin: '4px 0 0', color: theme.tooltipText }}>{value}</p>
+      <p
+        style={{
+          margin: 0,
+          color:
+            theme.useCssTooltipVars
+              ? 'var(--dashboard-chart-tooltip-text, #ffffff)'
+              : theme.tooltipText,
+          fontWeight: 600,
+        }}
+      >
+        {name}
+      </p>
+      <p
+        style={{
+          margin: '4px 0 0',
+          color:
+            theme.useCssTooltipVars
+              ? 'var(--dashboard-chart-tooltip-text, #ffffff)'
+              : theme.tooltipText,
+          fontWeight: 600,
+        }}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -61,7 +91,15 @@ export function createConsumptionPieTooltipFormatter(pieData) {
 
 export function ConsumptionPieDefaultTooltip({ theme, pieData, cssTooltipStyle }) {
   const contentStyle = theme.useCssTooltipVars
-    ? cssTooltipStyle
+    ? {
+        ...cssTooltipStyle,
+        background:
+          cssTooltipStyle?.background ||
+          cssTooltipStyle?.backgroundColor ||
+          'var(--dashboard-chart-tooltip-bg, #3d4a5c)',
+        color:
+          cssTooltipStyle?.color || 'var(--dashboard-chart-tooltip-text, #ffffff)',
+      }
     : {
         backgroundColor: theme.tooltipBg,
         border: theme.tooltipBorder,
@@ -74,7 +112,18 @@ export function ConsumptionPieDefaultTooltip({ theme, pieData, cssTooltipStyle }
     <Tooltip
       contentStyle={contentStyle}
       formatter={createConsumptionPieTooltipFormatter(pieData)}
-      labelStyle={{ color: theme.tooltipText }}
+      labelStyle={{
+        color: theme.useCssTooltipVars
+          ? 'var(--dashboard-chart-tooltip-text, #ffffff)'
+          : theme.tooltipText,
+        fontWeight: 600,
+      }}
+      itemStyle={{
+        color: theme.useCssTooltipVars
+          ? 'var(--dashboard-chart-tooltip-text, #ffffff)'
+          : theme.tooltipText,
+        fontWeight: 600,
+      }}
     />
   );
 }

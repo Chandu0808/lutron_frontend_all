@@ -63,15 +63,23 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('Unhandled render error:', error, info);
-    // Redirect immediately to login page on any hard crash
-    // This prevents the user from being stuck on a broken UI
-    redirectToLogin();
   }
+
+  handleReload = () => {
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
 
   render() {
     if (this.state.hasError) {
-      // Return null while redirecting to keep the UI clean
-      return null;
+      return (
+        <div style={{ padding: 24, fontFamily: 'sans-serif', textAlign: 'center' }}>
+          <p style={{ marginBottom: 16 }}>Something went wrong loading this page.</p>
+          <button type="button" onClick={this.handleReload}>
+            Reload page
+          </button>
+        </div>
+      );
     }
     return this.props.children;
   }
@@ -79,4 +87,3 @@ class ErrorBoundary extends React.Component {
 
 export default ErrorBoundary;
 export { redirectToLogin, redirectFlagKey };
-

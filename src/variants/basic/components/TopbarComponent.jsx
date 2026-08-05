@@ -29,15 +29,20 @@ import {
   getValidToken,
 } from "../redux/slice/auth/userlogin";
 import {
+  dispatchFetchClientOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchProjectOnce,
+} from "../../../shared/utils/bootstrapFetchGuards";
+import {
   getLutronDataClient,
   getLutronDataProject,
   homeDataClient,
   homeDataProject,
 } from "../redux/slice/home/homeSlice";
 import {
-  readDashboardWidgetVisibilityRaw,
-  restoreDashboardWidgetVisibilityAfterStorageClear,
-} from "../utils/dashboardWidgetVisibility";
+  snapshotAllVariantWidgetVisibilityForLogout,
+  restoreAllVariantWidgetVisibilityAfterStorageClear,
+} from "../../../shared/dashboard/utils/widgetVisibilityLogoutPreserve";
 import {
   readCustomOverviewWidgetsRaw,
   restoreCustomOverviewWidgetsAfterStorageClear,
@@ -52,7 +57,6 @@ import {
   readUiVariantRaw,
   restoreUiVariantAfterStorageClear,
 } from "../../../utils/uiVariant";
-import { getSettingsHomeTabLabelFromSearch } from "../utils/settingsHomeTabParams";
 import { getSettingsUsersActionSuffixFromSearch } from "../utils/settingsUsersBreadcrumbParams";
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome } from "../utils/themeOnSurface";
 import {
@@ -66,8 +70,21 @@ import {
 } from "../../../utils/keyboard/pageSubNavBridge";
 import { isKeyboardNavBlockedTarget } from "../../../utils/keyboard/keyboardNavUtils";
 import { isSettingsAppRoute, isTopbarNavItemActive } from "../../../utils/keyboard/topbarNavActive";
+import {
+  BASIC_SETTINGS_HOME_PATH,
+  BASIC_SETTINGS_SIDEBAR_PATHS,
+  getBasicSettingsSectionLabel,
+  isBasicSettingsAppRoute,
+} from "../utils/basicSettingsPaths";
 import SharedSidebar from "../../../shared/layout/app/SharedSidebar";
 import { useSidebarDrawer } from "../../../shared/layout/app/useSidebarDrawer";
+
+const BASIC_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
+const resolveClientLogoUrl = (logoImage) => {
+  if (!logoImage) return null;
+  return logoImage.startsWith("http") ? logoImage : `${BASIC_API_URL}${logoImage}`;
+};
 
 export default function TopbarComponent() {
   const theme = useTheme();
@@ -85,11 +102,7 @@ export default function TopbarComponent() {
   const contentColor = applicationTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
   const isDefaultWhiteTheme = isWhiteAreaPickerChrome(contentColor);
 
-  const logoUrl = clientData?.logo_image?.startsWith("http")
-    ? clientData.logo_image
-    : process.env.REACT_APP_API_URL
-      ? process.env.REACT_APP_API_URL + clientData.logo_image
-      : clientData.logo_image;
+  const logoUrl = resolveClientLogoUrl(clientData?.logo_image);
 
   useEffect(() => {
     setClientLogoBroken(false);
@@ -99,7 +112,7 @@ export default function TopbarComponent() {
     // Don't fetch profile if logout is in progress or if there's no valid token
     const validToken = getValidToken();
     if (!profile && !profileLoading && !logoutLoading && validToken) {
-      dispatch(fetchProfile());
+      dispatchFetchProfileOnce(dispatch, fetchProfile);
     }
   }, [dispatch, profile, profileLoading, logoutLoading]);
 
@@ -109,27 +122,16 @@ export default function TopbarComponent() {
     // Don't fetch during logout process
     const validToken = getValidToken();
     if (validToken && profile && !clientData?.name && !logoutLoading) {
-      // Only fetch if we haven't tried recently (prevent multiple failed calls)
-      const lastFetchTime = sessionStorage.getItem('clientDataFetchTime');
-      const now = Date.now();
-      if (!lastFetchTime || (now - parseInt(lastFetchTime)) > 60000) { // Only retry after 1 minute
-        sessionStorage.setItem('clientDataFetchTime', now.toString());
-        dispatch(getLutronDataClient()).catch(() => {
-          // Silently handle errors - endpoint might not be available
-        });
-      }
+      dispatchFetchClientOnce(dispatch, getLutronDataClient).catch(() => {
+        // Silently handle errors - endpoint might not be available
+      });
     }
   }, [dispatch, profile, clientData?.name, logoutLoading]);
 
   useEffect(() => {
     const validToken = getValidToken();
     if (validToken && profile && !projectData?.name && !logoutLoading) {
-      const lastFetchTime = sessionStorage.getItem("projectDataFetchTime");
-      const now = Date.now();
-      if (!lastFetchTime || now - parseInt(lastFetchTime, 10) > 60000) {
-        sessionStorage.setItem("projectDataFetchTime", now.toString());
-        dispatch(getLutronDataProject()).catch(() => { });
-      }
+      dispatchFetchProjectOnce(dispatch, getLutronDataProject).catch(() => {});
     }
   }, [dispatch, profile, projectData?.name, logoutLoading]);
 
@@ -137,16 +139,7 @@ export default function TopbarComponent() {
   const roleFromStorage = localStorage.getItem('role');
   const currentRole = roleFromProfile || roleFromStorage;
   // Determine settings path based on user role
-  const getSettingsPath = (role) => {
-    if (role === 'Superadmin') {
-      return '/main'; // Home component
-    } else if (role === 'Admin') {
-      return '/main'; // Manage Area Groups component
-    } else {
-      // Operator - redirect to first available option
-      return '/main'; // Manage Area Groups component
-    }
-  };
+  const getSettingsPath = () => BASIC_SETTINGS_HOME_PATH;
 
   const settingsPath = getSettingsPath(currentRole);
 
@@ -214,49 +207,10 @@ export default function TopbarComponent() {
   const ribbonMuted = "rgba(255, 255, 255, 0.66)";
   const ribbonBright = "#ffffff";
   const ribbonHoverMuted = "rgba(255, 255, 255, 0.88)";
-  /** Single-line toolbar — keep MainLayout `paddingTop` and Dashboard fixed `top` in sync. */
-  /* Taller than legacy 39px to fit ~180% text without clipping; keep paddingTop / Dashboard `top` in MainLayout in sync +~2 */
-  const ribbonHeights = {
-    xs: "50px",
-    sm: "50px",
-    md: "50px",
-    lg: "50px",
-    xl: "50px",
-    xxl: "50px",
-    "2xl": "50px",
-    "3xl": "50px",
-    "4xl": "50px",
-    "5xl": "50px",
-    "6xl": "50px",
-  };
+  /** Single-line toolbar — keep MainLayout `paddingTop` and Dashboard fixed `top` in sync at 50px. */
 
   const isSettingsPath = (p) =>
-    p === settingsPath && (
-      location.pathname === "/main" ||
-      location.pathname === "/theme-change" ||
-      location.pathname === "/rename-widget/" ||
-      location.pathname.startsWith("/rename-widget/") ||
-      location.pathname === "/manage-area-groups" ||
-      location.pathname.startsWith("/manage-area-groups/") ||
-      location.pathname === "/area-size-load" ||
-      location.pathname.startsWith("/area-size-load/") ||
-      location.pathname === "/email-server/" ||
-      location.pathname.startsWith("/email-server/") ||
-      location.pathname === "/users" ||
-      location.pathname.startsWith("/users/") ||
-      location.pathname === "/floor" ||
-      location.pathname.startsWith("/floor/") ||
-      location.pathname === "/create-help/" ||
-      location.pathname.startsWith("/create-help/") ||
-      location.pathname === "/manage-sensors" ||
-      location.pathname.startsWith("/manage-sensors/") ||
-      location.pathname === "/manage-modules" ||
-      location.pathname.startsWith("/manage-modules/") ||
-      location.pathname === "/processors" ||
-      location.pathname.startsWith("/processors/") ||
-      location.pathname === "/alerts" ||
-      location.pathname.startsWith("/alerts/")
-    );
+    p === settingsPath && isBasicSettingsAppRoute(location.pathname, settingsPath);
 
   const isHeatmapPath = (p) =>
     p === "/heatmap" && (
@@ -289,33 +243,17 @@ export default function TopbarComponent() {
     return location.pathname === item.path;
   };
 
-  const getSettingsSectionLabelForBreadcrumb = (pathname) => {
-    if (!pathname || typeof pathname !== "string") return "";
-    const p = pathname;
-    if (p === "/main") return "Home";
-    if (p === "/alerts" || p.startsWith("/alerts/")) return "Alerts";
-    if (p === "/email-server/" || p.startsWith("/email-server/")) return "Email Server";
-    if (p === "/theme-change" || p.startsWith("/theme-change/")) return "Theme";
-    if (p === "/users" || p.startsWith("/users/")) return "User Management";
-    if (p === "/area-size-load" || p.startsWith("/area-size-load/")) return "Area Size for Energy";
-    if (p === "/manage-area-groups" || p.startsWith("/manage-area-groups/")) return "Area Groups";
-    if (p === "/rename-widget/" || p.startsWith("/rename-widget/")) return "Widgets";
-    if (p === "/floor" || p.startsWith("/floor/")) return "Floors";
-    if (p === "/processors" || p.startsWith("/processors/")) return "Processors";
-    if (p === "/create-help/" || p.startsWith("/create-help/")) return "Help";
-    if (p === "/manage-sensors" || p.startsWith("/manage-sensors/")) return "Manage Sensors";
-    if (p === "/manage-modules" || p.startsWith("/manage-modules/")) return "Manage Modules";
-    return "";
-  };
+  const getSettingsSectionLabelForBreadcrumb = (pathname) =>
+    getBasicSettingsSectionLabel(pathname);
 
   const settingsBreadcrumbFullText = (() => {
     if (!isSettingsPath(settingsPath)) return "";
     const section = getSettingsSectionLabelForBreadcrumb(location.pathname);
     let text = section ? `Settings > ${section}` : "Settings";
-    if (location.pathname === "/main") {
-      text += ` > ${getSettingsHomeTabLabelFromSearch(location.search)}`;
-    }
-    if (location.pathname === "/users" || location.pathname.startsWith("/users/")) {
+    if (
+      location.pathname === BASIC_SETTINGS_SIDEBAR_PATHS.Users ||
+      location.pathname.startsWith(`${BASIC_SETTINGS_SIDEBAR_PATHS.Users}/`)
+    ) {
       const usersSuffix = getSettingsUsersActionSuffixFromSearch(location.search);
       if (usersSuffix) text += ` > ${usersSuffix}`;
     }
@@ -527,8 +465,10 @@ export default function TopbarComponent() {
       return;
     }
 
-    // Capture prefs before logout runs (logout thunk / future changes must not erase snapshot source)
-    const widgetVisibilityRaw = readDashboardWidgetVisibilityRaw();
+    // Capture prefs before logout runs (logout thunk / future changes must not erase snapshot source).
+    // Restore Basic + Advanced + Customized so switching variants after Basic logout
+    // does not reset the others to Combined defaults.
+    const widgetVisibilitySnapshot = snapshotAllVariantWidgetVisibilityForLogout();
     const customOverviewWidgetsRaw = readCustomOverviewWidgetsRaw();
     const chartLayoutSnapshot = readDashboardChartLayoutSnapshotForLogout();
     const draggableSessionSnapshot = readDashboardDraggableSessionSnapshotForLogout();
@@ -544,7 +484,7 @@ export default function TopbarComponent() {
     } finally {
       localStorage.clear();
       restoreUiVariantAfterStorageClear(uiVariantRaw);
-      restoreDashboardWidgetVisibilityAfterStorageClear(widgetVisibilityRaw);
+      restoreAllVariantWidgetVisibilityAfterStorageClear(widgetVisibilitySnapshot);
       restoreCustomOverviewWidgetsAfterStorageClear(customOverviewWidgetsRaw);
       restoreDashboardChartLayoutAfterLocalStorageClear(chartLayoutSnapshot);
       sessionStorage.clear();
@@ -566,6 +506,11 @@ export default function TopbarComponent() {
         right: 0,
         zIndex: 10002,
         width: "100%",
+        /* Exact 50px so fixed sub-headers / secondary ribbons at top:50px never sit under this bar. */
+        height: 50,
+        maxHeight: 50,
+        boxSizing: "border-box",
+        overflow: "hidden",
         /* Match AppBar ribbon so the full fixed header is one solid blue (no theme default bleed). */
         backgroundColor: ribbonBg,
       }}
@@ -587,15 +532,43 @@ export default function TopbarComponent() {
             color: "#fff",
             boxShadow: "none",
             borderRadius: 0,
-            border: `1px solid ${ribbonBg}`,
+            /* No border: a same-color 1px border inflated height to ~52px and clipped
+               fixed sub-headers / secondary ribbons that sit at top: 50px. */
+            border: "none",
             overflow: "hidden",
           }}
         >
           <Toolbar
             disableGutters
             sx={{
-              minHeight: ribbonHeights,
-              maxHeight: ribbonHeights,
+              /* Force past MUI Toolbar sm+ default minHeight:64 so the bar stays 50px. */
+              minHeight: {
+                xs: "50px !important",
+                sm: "50px !important",
+                md: "50px !important",
+                lg: "50px !important",
+                xl: "50px !important",
+                xxl: "50px !important",
+                "2xl": "50px !important",
+                "3xl": "50px !important",
+                "4xl": "50px !important",
+                "5xl": "50px !important",
+                "6xl": "50px !important",
+              },
+              maxHeight: {
+                xs: "50px !important",
+                sm: "50px !important",
+                md: "50px !important",
+                lg: "50px !important",
+                xl: "50px !important",
+                xxl: "50px !important",
+                "2xl": "50px !important",
+                "3xl": "50px !important",
+                "4xl": "50px !important",
+                "5xl": "50px !important",
+                "6xl": "50px !important",
+              },
+              height: "50px !important",
               py: 0,
               /* Horizontal insets for nav content; ribbon background still spans full viewport width */
               px: {
@@ -761,7 +734,7 @@ export default function TopbarComponent() {
                           color: ribbonBright,
                           fontWeight: 400,
                           whiteSpace: "nowrap",
-                          lineHeight: 1.1,
+                          lineHeight: 1.35,
                         }}
                       >
                         {secondaryBreadcrumbText}
@@ -991,8 +964,9 @@ export default function TopbarComponent() {
                       color: "#111",
                       borderRadius: "8px",
                       boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                      width: `${menuWidth || 0}px`,
-                      minWidth: "160px",
+                      width: "max-content",
+                      minWidth: `${Math.max(menuWidth || 0, 160)}px`,
+                      maxWidth: "none",
                       mt: 0,
                       overflow: "hidden",
                       border: "1px solid rgba(0,0,0,0.08)",
@@ -1030,6 +1004,7 @@ export default function TopbarComponent() {
                     color: "#111",
                     fontWeight: 500,
                     justifyContent: "flex-start",
+                    whiteSpace: "nowrap",
                     borderBottom: "1px solid rgba(0,0,0,0.08)",
                     px: 2,
                     py: 1.5,
@@ -1039,7 +1014,7 @@ export default function TopbarComponent() {
                     }
                   }}
                 >
-                  <LockResetIcon sx={{ mr: 1.5, fontSize: 18, color: "#666" }} />
+                  <LockResetIcon sx={{ mr: 1.5, fontSize: 18, color: "#666", flexShrink: 0 }} />
                   Reset Password
                 </MenuItem>
                 <MenuItem
@@ -1054,6 +1029,7 @@ export default function TopbarComponent() {
                     color: logoutLoading ? "#9ca3af" : "#ef4444",
                     fontWeight: 600,
                     justifyContent: "flex-start",
+                    whiteSpace: "nowrap",
                     px: 2,
                     py: 1.5,
                     minHeight: "48px",

@@ -1,13 +1,13 @@
 /** @typedef {import('../types/savingsStrategyChartTypes').SavingsStrategyPieRow} SavingsStrategyPieRow */
 
 export const SAVINGS_STRATEGY_PIE_LAYOUT = {
-  margin: { top: 80, right: 140, bottom: 80, left: 140 },
+  margin: { top: 56, right: 140, bottom: 56, left: 140 },
   cx: '44%',
-  cy: '52%',
-  innerRadius: 60,
-  outerRadius: 110,
+  cy: '50%',
+  innerRadius: 55,
+  outerRadius: 95,
   paddingAngle: 5,
-  labelRadiusOffset: 35,
+  labelRadiusOffset: 28,
   labelLineInset: 5,
   centerLabelFontSize: 30,
   minAngle: 1,

@@ -197,11 +197,11 @@ export function SavingsStrategyChartView({
     <div style={outerStyle} className={cardClassName}>
       {header}
       <div
-        style={{ ...plotStyle, padding: '24px 24px 16px', position: 'relative' }}
+        style={{ ...plotStyle, padding: '24px 24px 16px', position: 'relative', overflow: 'visible' }}
         {...PLOT_EVENT_HANDLERS}
       >
-        <ResponsiveContainer width="100%" height="97%">
-          <PieChart margin={SAVINGS_STRATEGY_PIE_LAYOUT.margin}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={SAVINGS_STRATEGY_PIE_LAYOUT.margin} style={{ overflow: 'visible' }}>
             <Pie
               data={pieData}
               cx={SAVINGS_STRATEGY_PIE_LAYOUT.cx}
@@ -210,7 +210,7 @@ export function SavingsStrategyChartView({
               outerRadius={SAVINGS_STRATEGY_PIE_LAYOUT.outerRadius}
               paddingAngle={SAVINGS_STRATEGY_PIE_LAYOUT.paddingAngle}
               dataKey="value"
-              labelLine
+              labelLine={false}
               label={renderSegmentLabel}
               isAnimationActive={false}
               minAngle={SAVINGS_STRATEGY_PIE_LAYOUT.minAngle}

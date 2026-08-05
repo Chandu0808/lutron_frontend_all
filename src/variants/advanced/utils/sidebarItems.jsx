@@ -13,11 +13,12 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
     // Admin can see Home, Theme, Manage Area Groups, Area Size & Load, Email Server, Users
     // Cannot see: Rename Widget, Floor, Help, FOFP, Manage Sensors, Manage Modules, Alerts
     visible = SidebarItems.filter((i) => 
-      i !== 'Rename Widget' && 
+      i !== 'Widgets' && 
       i !== 'Floor' && 
       i !== 'Help' &&
       i !== 'Alerts' &&
       i !== 'Processors' &&
+      i !== 'Maintenance' &&
       i !== 'FOFP' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'
@@ -32,12 +33,13 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       visible = SidebarItems.filter((i) => 
         i !== 'Home' && 
         i !== 'Theme' && 
-        i !== 'Rename Widget' && 
+        i !== 'Widgets' && 
         i !== 'Email Server' && 
         i !== 'Floor' && 
         i !== 'Help' &&
         i !== 'Alerts' &&
         i !== 'Processors' &&
+        i !== 'Maintenance' &&
         i !== 'FOFP' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
@@ -47,12 +49,13 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       visible = SidebarItems.filter((i) => 
         i !== 'Home' && 
         i !== 'Theme' && 
-        i !== 'Rename Widget' && 
+        i !== 'Widgets' && 
         i !== 'Email Server' && 
         i !== 'Floor' && 
         i !== 'Help' &&
         i !== 'Alerts' &&
         i !== 'Processors' &&
+        i !== 'Maintenance' &&
         i !== 'FOFP' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
@@ -63,12 +66,13 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
     visible = SidebarItems.filter((i) => 
       i !== 'Home' && 
       i !== 'Theme' && 
-      i !== 'Rename Widget' && 
+      i !== 'Widgets' && 
       i !== 'Email Server' && 
       i !== 'Floor' && 
       i !== 'Help' &&
       i !== 'Alerts' &&
       i !== 'Processors' &&
+      i !== 'Maintenance' &&
       i !== 'FOFP' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'

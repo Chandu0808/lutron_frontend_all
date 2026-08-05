@@ -5,6 +5,7 @@ import { getUsersSettingsBindings } from './bindUsersSettingsModule';
 // - Admin: Can only create Operator users
 // - Operator: Cannot create any users
 import React, { useState, useEffect } from "react";
+import { dispatchFetchFloorsOnce } from '../../utils/bootstrapFetchGuards';
 import {
   Dialog,
   DialogTitle,
@@ -61,6 +62,28 @@ const outlinedSelectFloorsLabelSx = {
   px: 0.75,
 };
 
+/** White fill on the input only — not the helper text (avoids customized white-on-white errors). */
+const userDialogFieldSx = {
+  borderRadius: 1,
+  "& .MuiOutlinedInput-root": {
+    backgroundColor: "#fff",
+    borderRadius: 1,
+  },
+};
+
+const userDialogHelperTextProps = {
+  sx: {
+    backgroundColor: "transparent",
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: "6px",
+    lineHeight: 1.35,
+    "&.Mui-error": {
+      color: "#d32f2f",
+    },
+  },
+};
+
 // Filter role options based on current user's role
 const getAvailableRoles = (currentUserRole) => {
   switch (currentUserRole) {
@@ -79,15 +102,21 @@ export default function CreateUser({ open, onClose }) {
     createUserSlice: { createUser, resetCreateState, selectFloorsLoading, selectFloorsError, selectCreateLoading, selectCreateError, selectCreateSuccess },
     floorSlice: { fetchFloors, selectFloors },
     themeSlice: { selectApplicationTheme },
+    usersDialogChrome = null,
   } = getUsersSettingsBindings();
 
   const dispatch = useDispatch();
   const floorList = useSelector(selectFloors)
   useEffect(() => {
-    dispatch(fetchFloors())
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floorList?.length))
+  }, [dispatch, fetchFloors, floorList?.length])
   const theme = useTheme();
   const currentUserRole = localStorage.getItem('role');
+  const appTheme = useSelector(selectApplicationTheme);
+  const contentColor = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
+  const buttonColor = appTheme?.application_theme?.button || '#232323';
+  const isDefaultWhiteTheme = isWhiteAreaPickerChrome(contentColor);
+  const actionButtonColor = isDefaultWhiteTheme ? '#1565C0' : buttonColor;
   
   // Get available roles based on current user's permissions
   const availableRoles = getAvailableRoles(currentUserRole);
@@ -110,6 +139,7 @@ export default function CreateUser({ open, onClose }) {
   const [selectedFloorIds, setSelectedFloorIds] = useState([]);
   const [sharedAccessLevel, setSharedAccessLevel] = useState(permissionOptions[0]);
   const [emailError, setEmailError] = useState("");
+  const [nameError, setNameError] = useState("");
   
   // Snackbar state
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -142,7 +172,8 @@ export default function CreateUser({ open, onClose }) {
       }
       setSelectedFloorIds([]);
       setSharedAccessLevel(permissionOptions[0]);
-      setEmailError("");            // clear email error as well
+      setEmailError("");
+      setNameError("");
       setSnackbarOpen(false);       // clear any existing snackbar
       dispatch(resetCreateState());
     }
@@ -194,6 +225,12 @@ export default function CreateUser({ open, onClose }) {
     "Monitoring, edit and control": "monitor_control_edit",
   };
   const handleSave = () => {
+    if (!name.trim()) {
+      setNameError("Name is required");
+      showSnackbar("Name is required", "error");
+      return;
+    }
+    setNameError("");
     const payload = {
       name: name.trim(),
       email: email.trim(),
@@ -215,24 +252,25 @@ export default function CreateUser({ open, onClose }) {
     PaperProps: { style: { maxHeight: 320 } },
   };
 
-  return (
-    <Dialog
-      open={open}
-      onClose={() => {
-        onClose();
-        setSnackbarOpen(false);
-        dispatch(resetCreateState());
-      }}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{
-        sx: {
-          backgroundColor: theme.palette.custom.containerBg,
-          borderRadius: 2,
-          maxHeight: '80vh',
-        },
-      }}
-    >
+  const handleDialogClose = () => {
+    onClose();
+    setSnackbarOpen(false);
+    dispatch(resetCreateState());
+  };
+
+  const defaultPaperProps = {
+    sx: {
+      backgroundColor: theme.palette.custom.containerBg,
+      borderRadius: 2,
+      maxHeight: '80vh',
+    },
+  };
+
+  const dialogPaperProps = usersDialogChrome?.dialogProps?.PaperProps ?? defaultPaperProps;
+  const dialogBackdropProps = usersDialogChrome?.dialogProps?.BackdropProps;
+
+  const dialogInner = (
+    <>
       <DialogTitle sx={{ color: theme.palette.text.primary, pb: 1 }}>
         <Typography component="span" variant="h6" sx={{ display: "block", fontWeight: 600 }}>
           Create new user
@@ -252,6 +290,12 @@ export default function CreateUser({ open, onClose }) {
           padding: 2
         }}
       >
+        <Box
+          component="form"
+          noValidate
+          autoComplete="off"
+          onSubmit={(e) => e.preventDefault()}
+        >
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <Typography sx={{ mb: 1, fontWeight: 500 }}>Name</Typography>
@@ -260,8 +304,17 @@ export default function CreateUser({ open, onClose }) {
               size="small"
               variant="outlined"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              sx={{ backgroundColor: "#fff", borderRadius: 1 }}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError("");
+              }}
+              onBlur={() => {
+                if (!name.trim()) setNameError("Name is required");
+              }}
+              sx={userDialogFieldSx}
+              error={Boolean(nameError)}
+              helperText={nameError}
+              FormHelperTextProps={userDialogHelperTextProps}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -279,9 +332,10 @@ export default function CreateUser({ open, onClose }) {
               onBlur={(e) => {
                 setEmailError(validateEmail(e.target.value));
               }}
-              sx={{ backgroundColor: "#fff", borderRadius: 1 }}
+              sx={userDialogFieldSx}
               error={Boolean(emailError)}
               helperText={emailError}
+              FormHelperTextProps={userDialogHelperTextProps}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -293,14 +347,23 @@ export default function CreateUser({ open, onClose }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              sx={{ backgroundColor: "#fff", borderRadius: 1 }}
+              sx={userDialogFieldSx}
             />
           </Grid>
 
           <Grid item xs={12} sm={6}>
             <Typography sx={{ mb: 1, fontWeight: 500 }}>Role</Typography>
-            <FormControl fullWidth size="small" sx={{ backgroundColor: "#fff", borderRadius: 1 }}>
-
+            <FormControl
+              fullWidth
+              size="small"
+              sx={{
+                borderRadius: 1,
+                "& .MuiOutlinedInput-root": {
+                  backgroundColor: "#fff",
+                  borderRadius: 1,
+                },
+              }}
+            >
               <Select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -496,14 +559,11 @@ export default function CreateUser({ open, onClose }) {
             </Grid>
           )}
         </Grid>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={() => {
-            onClose();
-            setSnackbarOpen(false);
-            dispatch(resetCreateState());
-          }}
+          onClick={handleDialogClose}
           sx={{ textTransform: "none" }}
         >
           Cancel
@@ -513,9 +573,20 @@ export default function CreateUser({ open, onClose }) {
           onClick={handleSave}
           disabled={!canSave || createLoading}
           sx={{
-            backgroundColor: theme.palette.custom.buttonBg,
-            color: theme.palette.text.secondary,
-            textTransform: "none",
+            backgroundColor: actionButtonColor,
+            color: '#FFFFFF',
+            textTransform: 'none',
+            borderRadius: '6px',
+            boxShadow: 'none',
+            '&:hover': {
+              backgroundColor: isDefaultWhiteTheme ? '#0d47a1' : actionButtonColor,
+              opacity: isDefaultWhiteTheme ? 1 : 0.92,
+              boxShadow: 'none',
+            },
+            '&.Mui-disabled': {
+              backgroundColor: isDefaultWhiteTheme ? 'rgba(21, 101, 192, 0.35)' : '#9aa3b0',
+              color: '#FFFFFF',
+            },
           }}
         >
           {createLoading ? (
@@ -525,7 +596,7 @@ export default function CreateUser({ open, onClose }) {
           )}
         </Button>
       </DialogActions>
-      {/* Snackbar for notifications */}
+      {/* Snackbar for notifications — match advanced white/readable toast */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={6000}
@@ -535,11 +606,47 @@ export default function CreateUser({ open, onClose }) {
         <Alert 
           onClose={handleSnackbarClose} 
           severity={snackbarSeverity}
-          sx={{ width: '100%' }}
+          variant="outlined"
+          sx={{
+            width: '100%',
+            backgroundColor: '#ffffff',
+            color: '#111111',
+            border: '1px solid rgba(0, 0, 0, 0.18)',
+            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.18)',
+            '& .MuiAlert-icon': {
+              color: snackbarSeverity === 'error' ? '#c62828' : '#2e7d32',
+            },
+            '& .MuiAlert-message': {
+              color: '#111111',
+            },
+          }}
         >
           {snackbarMessage}
         </Alert>
       </Snackbar>
+    </>
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      fullWidth
+      maxWidth="md"
+      disableScrollLock={usersDialogChrome?.disableScrollLock}
+      BackdropProps={dialogBackdropProps}
+      PaperProps={dialogPaperProps}
+    >
+      {usersDialogChrome?.useModalShell ? (
+        <Box
+          className="users-modal-shell"
+          sx={usersDialogChrome.getModalShellSx?.(theme) ?? {}}
+        >
+          {dialogInner}
+        </Box>
+      ) : (
+        dialogInner
+      )}
     </Dialog>
   );
 }

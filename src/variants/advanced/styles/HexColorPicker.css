@@ -151,3 +151,23 @@
     width: 100%;
     max-width: 100%;
 }
+
+/* Advanced theme page — slightly shorter picker cards (scoped). */
+.advanced-theme-page .color-picker-card {
+    min-height: 368px;
+    padding: 16px 20px;
+    gap: 10px;
+}
+
+.advanced-theme-page .hex-picker-surface {
+    gap: 10px;
+    padding: 14px !important;
+}
+
+.advanced-theme-page .pill-tab-container {
+    margin-bottom: 10px;
+}
+
+.advanced-theme-page .gray-row {
+    padding-top: 2px;
+}

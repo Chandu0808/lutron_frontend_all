@@ -19,7 +19,6 @@ import {
   createThemeContext,
   createNormalizeUiColors,
   createNormalizedBackgroundResolvers,
-  getPaletteRemountKey,
   ThemeMuiProviderShell,
   useThemeProviderBootstrap,
 } from "../../../../../shared/theme/context";
@@ -99,7 +98,7 @@ export const ThemeProviderCustom = ({ children }) => {
 
   return (
     <ThemeContext.Provider value={{ theme, backgroundImage, reloadTheme }}>
-      <ThemeMuiProviderShell theme={theme} remountKey={getPaletteRemountKey(theme)}>
+      <ThemeMuiProviderShell theme={theme}>
         {children}
       </ThemeMuiProviderShell>
     </ThemeContext.Provider>

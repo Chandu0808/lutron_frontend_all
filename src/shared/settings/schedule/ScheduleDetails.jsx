@@ -1,5 +1,28 @@
 import { getScheduleSettingsBindings } from './bindScheduleSettingsModule';
+import { getScheduleFormTheme, scheduleFormSectionCard, scheduleFormSectionsColumn, scheduleFieldCardShell, scheduleRightPanelShell, scheduleModalPanelStyle, scheduleModalTitleStyle, scheduleModalLabelStyle, scheduleModalSelectStyle, scheduleModalRadioLabelStyle, scheduleLegacyModalPanelStyle, scheduleLegacyModalTitleStyle } from './scheduleFormTheme';
+import { renderScheduleModalLayer, SCHEDULE_MODAL_OVERLAY_Z_INDEX } from './scheduleModalLayer';
+import { scheduleFilterMenuProps, scheduleModalFilterMenuProps, resolveScheduleModalFilterMenuProps, scheduleSelectFieldSx } from './scheduleSelectMenuProps';
+import { MenuItem, Select } from '@mui/material';
+import {
+  loadAreaTreeIndex,
+  mapAreasToScheduleLocations,
+  formatScheduleLocationLabel,
+} from '../../../utils/scheduleLocationPath';
+import { detailsRowActionControlsStyle } from '../../../utils/detailsRowActionControlsStyle';
+import { dispatchFetchFloorsOnce } from '../../utils/bootstrapFetchGuards';
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import ScheduleLocationsPanel from './ScheduleLocationsPanel';
+import ActionChooserModal from '../../quickcontrols/ActionChooserModal';
+import { getQuickControlActionShortLabel } from '../../quickcontrols/quickControlActionLabels';
+import {
+  convertApiActionToUiAction,
+  expandQuickControlActionData,
+  lightStatusSettingsFromAreaAction,
+  locationHasSceneAction,
+  locationHasZoneAction,
+  mergeExpandedActionsIntoLocation,
+} from '../../quickcontrols/zoneActionHelpers';
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome, onContentColors } from "../../theme/utils/themeOnSurface";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
@@ -27,9 +50,32 @@ const ScheduleDetails = () => {
     quickcontrols: { AreaTreeDialog, Action },
     BaseUrl,
     themeSlice: { selectApplicationTheme },
-    fixedActionBarStyles: { scheduleFixedActionBarStyle, schedulePageWithFixedActionBarStyle },
+    fixedActionBarStyles: {
+      scheduleFixedActionBarStyle,
+      schedulePageWithFixedActionBarStyle,
+      scheduleRightListScrollStyle,
+      DETAILS_FIXED_ACTION_BAR_BOTTOM_CLEARANCE,
+    },
     scheduleActionPriority: { applyCommonActionToActions, stripActionSource, tagLoadedActions, withIndividualSource },
+    scheduleFormLayout,
+    scheduleCalendarChrome = 'dark',
+    scheduleAdvancedLocationsPanel = null,
+    useFixedPageActionBar = false,
   } = getScheduleSettingsBindings();
+  // Use Quick Control–style merging for all variants (basic/advanced/customized).
+  const useQuickControlActionMerging = true;
+  const isBasicScheduleForm = scheduleCalendarChrome === 'light';
+  const formTheme = getScheduleFormTheme(scheduleCalendarChrome);
+  const isLightScheduleForm = formTheme.isLight;
+  const isAdvancedScheduleForm = Boolean(formTheme.useAdvancedFormChrome);
+  const isCustomizedScheduleForm = scheduleCalendarChrome === 'customized';
+  const useAdvancedLocationsPanel =
+    isAdvancedScheduleForm && Boolean(scheduleAdvancedLocationsPanel);
+  const {
+    getAdvancedQuickControlDetailsActionBarStyle,
+    schedulePrimaryButtonStyle: advancedPrimaryButtonStyle,
+  } = scheduleAdvancedLocationsPanel || {};
+  const usePortaledScheduleModals = isAdvancedScheduleForm || isCustomizedScheduleForm;
   const { ConfirmDialog, Toast } = FeedbackUI;
   const { selectProfile } = userlogin;
   const { fetchScheduleDetails, updateSchedule, deleteSchedule, triggerSchedule, createSchedule, fetchScheduleGroups, enableSchedule, disableSchedule, fetchSchedules } = scheduleSlice;
@@ -48,16 +94,20 @@ const ScheduleDetails = () => {
     width: window.innerWidth,
     height: window.innerHeight
   });
+  const [isTablet, setIsTablet] = useState(false);
 
   // Add window resize listener for responsive design
   useEffect(() => {
     const handleResize = () => {
+      const width = window.innerWidth;
       setWindowSize({
-        width: window.innerWidth,
+        width,
         height: window.innerHeight
       });
+      setIsTablet(width >= 768 && width <= 1024);
     };
 
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -66,7 +116,8 @@ const ScheduleDetails = () => {
   const isLargeScreen = windowSize.width >= 1920; // 4K and large screens
   const isDesktop = windowSize.width >= 1366; // Desktop screens
   const isLaptop = windowSize.width >= 1024; // Laptop screens
-  const buttonColor = 'var(--app-button)';
+  const buttonColor = formTheme.buttonColor;
+  const radioFill = formTheme.radioSelected;
 
   const {
     selectedScheduleDetails: event,
@@ -87,30 +138,14 @@ const ScheduleDetails = () => {
   // Fetch floors from Redux
   const floors = useSelector(selectFloors);
 
-  // Fetch groups on mount if not already loaded
-  useEffect(() => {
-    if (!groups || groups.length === 0) {
-      dispatch(fetchScheduleGroups());
-    }
-  }, [dispatch, groups]);
-
-  // Fetch floors on mount
-  useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
-
   const [editMode, setEditMode] = useState(false);
   const [isCopyMode, setIsCopyMode] = useState(false);
   const [editableEvent, setEditableEvent] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "" });
-  
-  // Add confirmation dialog states for delete operations
   const [showDeleteScheduleDialog, setShowDeleteScheduleDialog] = useState(false);
   const [showDeleteLocationDialog, setShowDeleteLocationDialog] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
-
-  // Form state for editing
   const [scheduleName, setScheduleName] = useState("");
   const [scheduleGroup, setScheduleGroup] = useState("");
   const [scheduleType, setScheduleType] = useState("weekly");
@@ -121,25 +156,83 @@ const ScheduleDetails = () => {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [specificDates, setSpecificDates] = useState([]);
-
-  // Locations and actions state
   const [locations, setLocations] = useState([]);
+  const [areaTreeIndex, setAreaTreeIndex] = useState(null);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [actionDialogIdx, setActionDialogIdx] = useState(null);
   const [selectedActionData, setSelectedActionData] = useState(null);
-
-  // New state for common action functionality
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editAllMode, setEditAllMode] = useState(false);
+  const [actionChooser, setActionChooser] = useState(null); // { mode, locationIdx }
+  const [showDeleteActionDialog, setShowDeleteActionDialog] = useState(false);
+  const [actionToDelete, setActionToDelete] = useState(null);
   const [showCommonActionDialog, setShowCommonActionDialog] = useState(false);
+  const [editingAreaStatus, setEditingAreaStatus] = useState(null);
   const [selectedCommonActionType, setSelectedCommonActionType] = useState('light_status');
   const [selectedOccupancySetting, setSelectedOccupancySetting] = useState(null);
-
-  // NEW: Add state for light status functionality
   const [selectedZoneType, setSelectedZoneType] = useState('switched');
   const [lightStatusSettings, setLightStatusSettings] = useState({
     switched: { on_off: 'On' },
     dimmed: { brightness: 50, fadeTime: '02', delayTime: '00' },
     whitetune: { brightness: 50, cct: 2700, fadeTime: '02', delayTime: '00' }
   });
+
+  const resetCommonActionDialog = () => {
+    setShowCommonActionDialog(false);
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+  };
+
+  // Fetch groups once on mount. Do NOT key off groups.length — an empty
+  // groups[] from the API is valid and would otherwise infinite-loop.
+  useEffect(() => {
+    dispatch(fetchScheduleGroups());
+  }, [dispatch]);
+
+  // Fetch floors once (reuse Redux cache across Dashboard / Schedule / etc.)
+  useEffect(() => {
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, fetchFloors, floors?.length]);
+
+  const decodeHtmlEntities = (text) => {
+    if (!text) return text;
+    return String(text)
+      .replace(/&gt;/g, '>')
+      .replace(/&lt;/g, '<')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  };
+
+  const buildLocationsFromAreas = (areaList) =>
+    mapAreasToScheduleLocations(areaList, floors, areaTreeIndex);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!floors?.length) return undefined;
+
+    (async () => {
+      try {
+        const map = await loadAreaTreeIndex(floors, (floorId) =>
+          BaseUrl.get(`/floor/area_tree/${floorId}`)
+        );
+        if (!cancelled) setAreaTreeIndex(map);
+      } catch {
+        if (!cancelled) setAreaTreeIndex(new Map());
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [floors]);
+
+  useEffect(() => {
+    if (!areas?.length || editMode) return;
+    setLocations(buildLocationsFromAreas(areas));
+  }, [areas, floors, areaTreeIndex, editMode]);
 
   // Get the current enable/disable status for this schedule
   // For internal schedules, use the schedule ID directly
@@ -344,17 +437,6 @@ const ScheduleDetails = () => {
         setCustomEndDate("");
       }
 
-      // Set locations from areas
-      if (areas && areas.length > 0) {
-        const locs = areas.map(area => ({
-          floorId: area.floor_id,
-          areaId: area.area_id,
-          floorName: area.floor_name,
-          areaName: area.area_name,
-          actions: area.actions || []
-        }));
-        setLocations(locs);
-      }
     }
   }, [event, areas]);
 
@@ -505,16 +587,9 @@ const ScheduleDetails = () => {
       setCustomEndDate("");
     }
 
-    // Set locations from areas
+    // Set locations from areas (resolved via floors / area tree like Quick Control details)
     if (areas && areas.length > 0) {
-      const locs = areas.map(area => ({
-        floorId: area.floor_id,
-        areaId: area.area_id,
-        floorName: area.floor_name,
-        areaName: area.area_name,
-        actions: area.actions || []
-      }));
-      setLocations(locs);
+      setLocations(buildLocationsFromAreas(areas));
     }
   };
 
@@ -575,6 +650,9 @@ const ScheduleDetails = () => {
         floor_id: loc.floorId,
         area_id: loc.areaId,
         actions: loc.actions.map(action => {
+          if (useQuickControlActionMerging) {
+            action = stripActionSource(action);
+          }
           // Convert action data to the correct format for the API
           if (action.type === "zone_status") {
             if (action.zone_type === "switched") {
@@ -728,10 +806,148 @@ const ScheduleDetails = () => {
     }
   };
 
-  // Open action dialog
+  // Open action dialog (add new action)
   const handleOpenActionDialog = (idx) => {
+    setEditingActionIdx(null);
+    setEditAllMode(false);
     setActionDialogIdx(idx);
     setSelectedActionData(null);
+  };
+
+  // Add / update action(s) on a location (supports All Zones expand + multi-action merge)
+  const handleAddAction = (idx, actionData) => {
+    const expanded = expandQuickControlActionData(actionData);
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== idx) return loc;
+        return {
+          ...loc,
+          actions: mergeExpandedActionsIntoLocation(loc.actions, expanded, {
+            editingActionIdx: editAllMode ? null : editingActionIdx,
+            editAllMode,
+            withSource: useQuickControlActionMerging ? withIndividualSource : null,
+          }),
+        };
+      })
+    );
+    setActionDialogIdx(null);
+    setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
+  };
+
+  const openEditForAction = (locationIdx, actionIdx) => {
+    const location = locations[locationIdx];
+    const action = location?.actions?.[actionIdx];
+    if (!action) return;
+
+    if (action.type === 'area_status') {
+      setEditingAreaStatus({ locationIdx });
+      setSelectedCommonActionType('light_status');
+      setSelectedOccupancySetting(null);
+      setSelectedZoneType('switched');
+      setLightStatusSettings((prev) => ({
+        ...prev,
+        ...lightStatusSettingsFromAreaAction(action),
+      }));
+      setShowCommonActionDialog(true);
+      return;
+    }
+
+    const convertedAction = convertApiActionToUiAction(action);
+    setEditingActionIdx(actionIdx);
+    setEditAllMode(false);
+    setSelectedActionData(convertedAction);
+    setActionDialogIdx(locationIdx);
+  };
+
+  const handleEditButtonClick = (locationIdx, actionsArg) => {
+    const actions = actionsArg ?? locations[locationIdx]?.actions ?? [];
+    if (actions.length === 0) {
+      handleOpenActionDialog(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      openEditForAction(locationIdx, 0);
+      return;
+    }
+    setActionChooser({ mode: 'edit', locationIdx });
+  };
+
+  const handleDeleteButtonClick = (locationIdx, actionsArg) => {
+    const location = locations[locationIdx];
+    const actions = actionsArg ?? location?.actions ?? [];
+    if (actions.length === 0) {
+      handleDeleteLocation(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      setActionToDelete({
+        locationIdx,
+        location,
+        actionIndex: 0,
+        action: actions[0],
+      });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    setActionChooser({ mode: 'delete', locationIdx });
+  };
+
+  const handleChooserPickEdit = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    if (pick === 'all') {
+      setEditAllMode(true);
+      setEditingActionIdx(null);
+      setSelectedActionData(null);
+      setActionDialogIdx(locationIdx);
+      return;
+    }
+    openEditForAction(locationIdx, pick);
+  };
+
+  const handleChooserPickDelete = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    const location = locations[locationIdx];
+    if (pick === 'all') {
+      setLocations((prev) =>
+        prev.map((loc, i) => (i === locationIdx ? { ...loc, actions: [] } : loc))
+      );
+      return;
+    }
+    setActionToDelete({
+      locationIdx,
+      location,
+      actionIndex: pick,
+      action: location.actions[pick],
+    });
+    setShowDeleteActionDialog(true);
+  };
+
+  const confirmDeleteAction = () => {
+    if (!actionToDelete) return;
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== actionToDelete.locationIdx) return loc;
+        return {
+          ...loc,
+          actions: (loc.actions || []).filter((_, ai) => ai !== actionToDelete.actionIndex),
+        };
+      })
+    );
+    setShowDeleteActionDialog(false);
+    setActionToDelete(null);
+  };
+
+  const closeActionDialog = () => {
+    setActionDialogIdx(null);
+    setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
   };
 
 // ... existing code ...
@@ -932,119 +1148,6 @@ const renderActionDisplay = (action) => {
   return <div style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>Unknown action</div>;
 };
 
-  // Handle edit action - UPDATED FUNCTION to properly convert updated action data
-  const handleEditAction = (locationIdx, actionIdx) => {
-    // Add null checks to prevent errors
-    if (!locations || !locations[locationIdx]) {
-      console.error('Location not found at index:', locationIdx);
-      return;
-    }
-    
-    const location = locations[locationIdx];
-    if (!location.actions || !location.actions[actionIdx]) {
-      console.error('Action not found at index:', actionIdx, 'for location:', locationIdx);
-      return;
-    }
-    
-    const action = location.actions[actionIdx];
-    if (!action || !action.type) {
-      console.error('Invalid action object:', action);
-      return;
-    }
-    
-    // Convert action to the format expected by Action component
-    let convertedAction = null;
-    
-    if (action.type === "set_scene") {
-      convertedAction = {
-        type: "scene",
-        scene: {
-          id: action.scene_code || action.scene_id,
-          name: action.scene_name
-        }
-      };
-    } else if (action.type === "area_status") {
-      // For area_status, convert to zone action with switched type for editing
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: null,
-          name: "Area",
-          type: "switched"
-        },
-        values: {
-          on_off: action.area_status || "Off"
-        }
-      };
-    } else if (action.type === "zone_status") {
-      // Use actual values from the action - NO DEFAULTS
-      let brightness = undefined;
-      let cct = undefined;
-      
-      if (action.zone_brightness) {
-        if (typeof action.zone_brightness === "string") {
-          const parsed = parseInt(action.zone_brightness.replace('%', '').trim());
-          brightness = isNaN(parsed) ? undefined : parsed;
-        } else if (typeof action.zone_brightness === "number") {
-          brightness = isNaN(action.zone_brightness) ? undefined : action.zone_brightness;
-        }
-      }
-      
-      if (action.zone_temperature) {
-        if (typeof action.zone_temperature === "string") {
-          const parsed = parseInt(action.zone_temperature.replace('K', '').trim());
-          cct = isNaN(parsed) ? undefined : parsed;
-        } else if (typeof action.zone_temperature === "number") {
-          cct = isNaN(action.zone_temperature) ? undefined : action.zone_temperature;
-        }
-      }
-      
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: action.zone_id,
-          name: action.zone_name,
-          type: action.zone_type
-        },
-        values: {
-          on_off: action.zone_status || "On",
-          brightness: brightness, // Use actual value, not default
-          cct: cct, // Use actual value, not default
-          fadeTime: action.fade_time || '02',
-          delayTime: action.delay_time || '00'
-        }
-      };
-    } else if (action.type === "occupancy") {
-      convertedAction = {
-        type: "occupancy",
-        action: action.occupancy_setting
-      };
-    } else if (action.type === "shade_group_status") {
-      // Fix shade level conversion
-      let shadeValue = 0;
-      if (action.shade_level) {
-        if (typeof action.shade_level === "string") {
-          const parsed = parseInt(action.shade_level.replace('%', '').trim());
-          shadeValue = isNaN(parsed) ? 0 : parsed;
-        } else if (typeof action.shade_level === "number") {
-          shadeValue = isNaN(action.shade_level) ? 0 : action.shade_level;
-        }
-      }
-      
-      convertedAction = {
-        type: "shade",
-        shade: {
-          id: action.shade_group_id,
-          name: action.shade_group_name
-        },
-        value: Number(shadeValue) // Ensure it's a number
-      };
-    }
-    
-    setSelectedActionData(convertedAction);
-    setActionDialogIdx(locationIdx);
-  };
-
   // Handle common action selection
   const handleCommonActionTypeSelect = async (actionType) => {
     setSelectedCommonActionType(actionType);
@@ -1058,6 +1161,18 @@ const renderActionDisplay = (action) => {
     // Don't auto-apply - wait for "Apply to All" button
   };
 
+  const openCommonActionDialog = () => {
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+    setLightStatusSettings((prev) => ({
+      ...prev,
+      switched: { on_off: 'On' },
+    }));
+    setShowCommonActionDialog(true);
+  };
+
   // Handle occupancy setting selection
   const handleOccupancySettingSelect = (setting) => {
     // Only update the state, don't apply to locations yet - wait for "Apply to All" button
@@ -1067,7 +1182,27 @@ const renderActionDisplay = (action) => {
   // Apply common action to all areas - UPDATED to ensure action is applied
   const handleApplyCommonAction = () => {
     if (locations.length === 0) {
-      setShowCommonActionDialog(false);
+      resetCommonActionDialog();
+      return;
+    }
+
+    if (editingAreaStatus != null && selectedCommonActionType === 'light_status') {
+      const { locationIdx } = editingAreaStatus;
+      const commonAction = {
+        type: "area_status",
+        area_status: lightStatusSettings.switched.on_off
+      };
+      setLocations(prev => prev.map((location, i) =>
+        i === locationIdx
+          ? {
+              ...location,
+              actions: useQuickControlActionMerging
+                ? applyCommonActionToActions(location.actions, commonAction)
+                : [commonAction]
+            }
+          : location
+      ));
+      resetCommonActionDialog();
       return;
     }
     
@@ -1080,7 +1215,9 @@ const renderActionDisplay = (action) => {
       
       setLocations(prev => prev.map(location => ({
         ...location,
-        actions: [commonAction]
+        actions: useQuickControlActionMerging
+          ? applyCommonActionToActions(location.actions, commonAction)
+          : [commonAction]
       })));
     } else if (selectedCommonActionType === 'occupancy' && selectedOccupancySetting) {
       const commonAction = {
@@ -1090,91 +1227,17 @@ const renderActionDisplay = (action) => {
       
       setLocations(prev => prev.map(location => ({
         ...location,
-        actions: [commonAction]
+        actions: useQuickControlActionMerging
+          ? applyCommonActionToActions(location.actions, commonAction)
+          : [commonAction]
       })));
     }
     
     // Close the dialog and reset
-    setShowCommonActionDialog(false);
-    setSelectedCommonActionType('light_status');
-    setSelectedOccupancySetting(null);
-    setSelectedZoneType('switched');
+    resetCommonActionDialog();
   };
 
   // Don't auto-apply when dialog opens - wait for "Apply to All" button
-
-  // Add action to location - UPDATED to completely replace old action with new value
-  const handleAddAction = (idx, actionData) => {
-    setLocations(prev => prev.map((loc, i) => {
-      if (i !== idx) return loc;
-      
-      // Convert action data to the correct format for the API
-      let newAction = actionData;
-      
-      if (actionData.type === "scene" && actionData.scene) {
-        newAction = {
-          type: "set_scene",
-          scene_code: Number(actionData.scene.id), // Convert to number
-          scene_name: actionData.scene.name
-        };
-      } else if (actionData.type === "zone" && actionData.zone) {
-        // Check if this is a simple On/Off for switched zone without zone_id (area-level control)
-        if (actionData.zone.type === "switched" && 
-            (!actionData.zone.id || actionData.zone.id === null) &&
-            actionData.values?.on_off &&
-            !actionData.values.brightness &&
-            !actionData.values.cct) {
-          // Use area_status for simple On/Off area control (uses /area/zone_on-off API)
-          newAction = {
-            type: "area_status",
-            area_status: actionData.values.on_off
-          };
-        } else {
-          // For specific zone controls, use zone_status
-          newAction = {
-            type: "zone_status",
-            zone_id: Number(actionData.zone.id || actionData.zone.zone_id),
-            zone_type: actionData.zone.type,
-            zone_name: actionData.zone.name,
-            zone_status: actionData.values?.on_off || "Off"
-          };
-          
-          // ONLY set brightness if user actually provided a value
-          if (actionData.values && actionData.values.brightness !== undefined && actionData.values.brightness !== null) {
-            newAction.zone_brightness = actionData.values.brightness.toString().includes('%') ? actionData.values.brightness : `${actionData.values.brightness}%`;
-          }
-          
-          // ONLY set temperature if user actually provided a value
-          if (actionData.values && actionData.values.cct !== undefined && actionData.values.cct !== null) {
-            newAction.zone_temperature = actionData.values.cct.toString().includes('K') ? actionData.values.cct : `${actionData.values.cct}K`;
-          }
-          
-          // Add fade and delay times for dimmed and whitetune zones
-          if (actionData.zone.type === "dimmed" || actionData.zone.type === "whitetune") {
-            newAction.fade_time = actionData.values?.fadeTime || "02";
-            newAction.delay_time = actionData.values?.delayTime || "00";
-          }
-        }
-      } else if (actionData.type === "occupancy" && actionData.action) {
-        newAction = {
-          type: "occupancy",
-          occupancy_setting: actionData.action
-        };
-      } else if (actionData.type === "shade" && actionData.shade) {
-        newAction = {
-          type: "shade_group_status",
-          shade_group_id: Number(actionData.shade.id || actionData.shade.zone_id),
-          shade_group_name: actionData.shade.name,
-          shade_level: actionData.value.toString().includes('%') ? actionData.value : `${actionData.value}%`
-        };
-      }
-      
-      // COMPLETELY REPLACE all actions with the new one (remove all old actions)
-      return { ...loc, actions: [newAction] };
-    }));
-    setActionDialogIdx(null);
-    setSelectedActionData(null);
-  };
 
   // Add handler for adding specific dates (you can add a calendar picker later)
   const handleAddSpecificDate = (dateStr) => {
@@ -1245,24 +1308,266 @@ const renderActionDisplay = (action) => {
     );
   }
 
-  return (
-    <div style={{
-      maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,
-      margin: "0 auto",
-      padding: isLargeScreen ? 40 : isDesktop ? 32 : 24,
-      borderRadius: 20,
-      minHeight: 500,
-      background: "none",
-      position: "relative"
-    }}>
-      {/* 1. Top right: Enable/Disable and Trigger */}
-      <div style={{
+  const customizedDetailsShellStyle = isCustomizedScheduleForm && scheduleFormLayout
+    ? scheduleFormLayout.getScheduleDetailsViewportShellStyle({ isLargeScreen, isDesktop })
+    : null;
+
+  const detailsPagePad = isLargeScreen ? 40 : isDesktop ? 32 : 24;
+  const detailsOuterStyle = customizedDetailsShellStyle ?? {
+    maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,
+    margin: "0 auto",
+    // Longhands only — fixed action bar also sets paddingBottom/paddingRight.
+    paddingTop: detailsPagePad,
+    paddingLeft: detailsPagePad,
+    paddingBottom: detailsPagePad,
+    paddingRight: detailsPagePad,
+    borderRadius: 20,
+    minHeight: useAdvancedLocationsPanel ? 0 : 500,
+    background: "none",
+    position: "relative",
+    ...(useAdvancedLocationsPanel ? {
+      flex: 1,
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+    } : {}),
+    ...(useFixedPageActionBar
+      ? {
+          ...schedulePageWithFixedActionBarStyle(isLargeScreen, isDesktop, isTablet),
+          paddingBottom: DETAILS_FIXED_ACTION_BAR_BOTTOM_CLEARANCE,
+        }
+      : {}),
+  };
+
+  const detailsMainRowStyle = isCustomizedScheduleForm
+    ? {
+        display: "flex",
+        gap: isLargeScreen ? 32 : isDesktop ? 28 : 24,
+        alignItems: "stretch",
+        flex: 1,
+        minHeight: 0,
+        overflow: "hidden",
+      }
+    : useAdvancedLocationsPanel
+      ? {
+          display: "flex",
+          gap: isLargeScreen ? 32 : isDesktop ? 24 : 20,
+          alignItems: "stretch",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+        }
+      : {
+          display: "flex",
+          gap: isLargeScreen ? 32 : isDesktop ? 28 : 24,
+          alignItems: "flex-start",
+        };
+
+  const detailsActionBarStyle = isCustomizedScheduleForm && scheduleFormLayout
+    ? scheduleFormLayout.getScheduleDetailsActionBarStyle(isLargeScreen, isDesktop, false)
+    : {
         display: "flex",
         justifyContent: "flex-end",
-        alignItems: "center",
         gap: isLargeScreen ? 20 : isDesktop ? 18 : 16,
-        marginBottom: isLargeScreen ? 32 : isDesktop ? 28 : 24
-      }}>
+        marginTop: isLargeScreen ? 40 : isDesktop ? 35 : 32,
+      };
+
+  const detailsSaveDisabled =
+    !scheduleName.trim() ||
+    locations.length === 0 ||
+    updateStatus === 'loading' ||
+    locations.some((location) => !location.actions || location.actions.length === 0);
+
+  const fixedActionBlue = '#1565C0';
+
+  const detailsPermissionButtonStyle = (enabled) =>
+    useFixedPageActionBar
+      ? {
+          background: enabled ? fixedActionBlue : '#666',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 8,
+          padding: '10px 28px',
+          fontWeight: 500,
+          fontSize: 14,
+          cursor: enabled ? 'pointer' : 'not-allowed',
+          opacity: enabled ? 1 : 0.6,
+        }
+      : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+        ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop, { disabled: !enabled })
+        : {
+            padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
+            borderRadius: 8,
+            border: "none",
+            background: enabled ? buttonColor : "#666",
+            color: enabled ? "#fff" : "#999",
+            fontWeight: 500,
+            fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+            cursor: enabled ? "pointer" : "not-allowed",
+            opacity: enabled ? 1 : 0.7,
+          };
+
+  const detailsActionBar = (
+    <div
+      className={useAdvancedLocationsPanel ? 'quick-control-details-action-bar' : undefined}
+      style={
+        useFixedPageActionBar
+          ? scheduleFixedActionBarStyle(isLargeScreen, isDesktop, isTablet)
+          : useAdvancedLocationsPanel && getAdvancedQuickControlDetailsActionBarStyle
+            ? getAdvancedQuickControlDetailsActionBarStyle()
+            : detailsActionBarStyle
+      }
+    >
+      {!editMode ? (
+        <>
+          <button
+            onClick={canEditSchedule() ? handleCopy : undefined}
+            disabled={!canEditSchedule()}
+            style={detailsPermissionButtonStyle(canEditSchedule())}
+          >
+            Copy
+          </button>
+          <button
+            onClick={canEditSchedule() ? handleModify : undefined}
+            disabled={!canEditSchedule()}
+            style={detailsPermissionButtonStyle(canEditSchedule())}
+          >
+            Modify
+          </button>
+          <button
+            onClick={canEditSchedule() ? handleDelete : undefined}
+            disabled={deleteStatus === 'loading' || !canEditSchedule()}
+            style={detailsPermissionButtonStyle(
+              deleteStatus !== 'loading' && canEditSchedule()
+            )}
+          >
+            {deleteStatus === 'loading' ? 'Deleting...' : 'Delete'}
+          </button>
+          <button
+            onClick={handleCancel}
+            style={
+              useFixedPageActionBar
+                ? {
+                    background: fixedActionBlue,
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 28px',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }
+                : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+                  ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop)
+                  : {
+                      padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: buttonColor,
+                      color: "#fff",
+                      fontWeight: 500,
+                      fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                      cursor: "pointer",
+                    }
+            }
+          >
+            Close
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            onClick={handleCancel}
+            style={
+              useFixedPageActionBar
+                ? {
+                    background: '#fff',
+                    color: fixedActionBlue,
+                    border: `1px solid ${fixedActionBlue}`,
+                    borderRadius: 8,
+                    padding: '10px 28px',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }
+                : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+                  ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop)
+                  : {
+                      padding: "10px 28px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: buttonColor,
+                      color: "#fff",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }
+            }
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={detailsSaveDisabled}
+            style={
+              useFixedPageActionBar
+                ? {
+                    background: detailsSaveDisabled ? '#888' : fixedActionBlue,
+                    color: '#fff',
+                    border: detailsSaveDisabled ? '1px solid #888' : `1px solid ${fixedActionBlue}`,
+                    borderRadius: 8,
+                    padding: '10px 28px',
+                    fontWeight: 500,
+                    fontSize: 14,
+                    cursor: detailsSaveDisabled ? 'not-allowed' : 'pointer',
+                  }
+                : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+                  ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop, { disabled: detailsSaveDisabled })
+                  : {
+                      padding: "10px 28px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: detailsSaveDisabled ? "#888" : buttonColor,
+                      color: "#fff",
+                      fontWeight: 500,
+                      cursor: detailsSaveDisabled ? "not-allowed" : "pointer",
+                    }
+            }
+          >
+            {updateStatus === 'loading' ? 'Saving...' : 'Save'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  const renderDetailsActionButtons = () => detailsActionBar;
+
+  return (
+    <div
+      className={
+        isCustomizedScheduleForm
+          ? 'schedule-details-shell'
+          : useAdvancedLocationsPanel
+            ? 'schedule-form-shell schedule-form-shell--details'
+            : undefined
+      }
+      style={detailsOuterStyle}
+    >
+      {/* 1. Top right: Enable/Disable and Trigger */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: isLargeScreen ? 20 : isDesktop ? 18 : 16,
+          marginBottom: useAdvancedLocationsPanel
+            ? (isLargeScreen ? 16 : isDesktop ? 14 : 12)
+            : (isLargeScreen ? 32 : isDesktop ? 28 : 24),
+          flexShrink: 0,
+        }}
+      >
         {/* Enable/Disable Toggle - Show but disable based on permissions */}
         <label style={{ 
           display: 'flex', 
@@ -1326,25 +1631,36 @@ const renderActionDisplay = (action) => {
       </div>
 
       {/* 2. Main details section */}
-      <div style={{
-        display: "flex",
-        gap: isLargeScreen ? 32 : isDesktop ? 28 : 24,
-        alignItems: "flex-start",
-    
-        //marginTop: 24 // push details down
-      }}>
+      <div style={detailsMainRowStyle}>
         {/* Left column: Schedule details */}
-        <div style={{
-          flex: "0 1 400px",
+        <div
+          className={useAdvancedLocationsPanel ? 'schedule-form-left-panel' : undefined}
+          style={{
+          flex: useAdvancedLocationsPanel ? "0 0 400px" : "0 1 400px",
           minWidth: isLargeScreen ? 380 : isDesktop ? 360 : 340,
           maxWidth: isLargeScreen ? 480 : isDesktop ? 440 : 420,
-          padding: 0
+          padding: formTheme.panelShellPadding,
+          ...(isCustomizedScheduleForm ? {
+            alignSelf: 'stretch',
+            overflowY: 'auto',
+            minHeight: 0,
+          } : {}),
+          ...(formTheme.useSeparateFieldCards ? {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: formTheme.fieldCardGap,
+          } : {}),
+          ...(formTheme.panelShellBg ? {
+            background: formTheme.panelShellBg,
+            borderRadius: 16,
+            boxSizing: 'border-box',
+          } : {}),
         }}>
           {/* Schedule Name */}
-          <div style={{ marginBottom: isLargeScreen ? 15 : isDesktop ? 12 : 10 }}>
+          <div style={scheduleFieldCardShell(formTheme)}>
             <label style={{ 
               fontWeight: 500, 
-              color: 'black', 
+              color: formTheme.labelColor, 
               display: 'block', 
               marginBottom: isLargeScreen ? 10 : 8,
               fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14
@@ -1361,16 +1677,17 @@ const renderActionDisplay = (action) => {
                 width: '100%',
                 padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
                 borderRadius: 8,
-                border: '1px solid #ccc',
+                border: formTheme.inputBorder || '1px solid #ccc',
                 fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                background: editMode ? 'white' : '#e0dbce',
-                color: editMode ? buttonColor : '#888'
+                background: editMode ? (formTheme.dayUnselectedBg || 'white') : formTheme.inputDisabledBg,
+                color: editMode ? formTheme.inputColor : '#888',
+                boxSizing: 'border-box',
               }}
             />
           </div>
           {/* Part of (Group) */}
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ fontWeight: 500, color: 'black', display: 'block', marginBottom: 8 }}>
+          <div style={scheduleFieldCardShell(formTheme)}>
+            <label style={{ fontWeight: 500, color: formTheme.labelColor, display: 'block', marginBottom: 8 }}>
               Part of
             </label>
             {editMode ? (
@@ -1382,10 +1699,11 @@ const renderActionDisplay = (action) => {
                   width: '100%',
                   padding: 12,
                   borderRadius: 8,
-                  border: '1px solid #ccc',
+                  border: formTheme.inputBorder || '1px solid #ccc',
                   fontSize: 14,
-                  backgroundColor: 'white',
-                  color: buttonColor
+                  backgroundColor: formTheme.dayUnselectedBg || 'white',
+                  color: formTheme.inputColor,
+                  boxSizing: 'border-box',
                 }}
               >
                 {groups && groups.map((group) => (
@@ -1398,11 +1716,12 @@ const renderActionDisplay = (action) => {
                   width: '100%',
                   padding: 12,
                   borderRadius: 8,
-                  border: '1px solid #ccc',
+                  border: formTheme.inputBorder || '1px solid #ccc',
                   fontSize: 14,
-                  background: '#e0dbce',
-                  color: buttonColor,
-                  minHeight: 44
+                  background: formTheme.readonlyFieldBg,
+                  color: formTheme.inputColor,
+                  minHeight: 44,
+                  boxSizing: 'border-box',
                 }}
               >
                 {groupName}
@@ -1410,23 +1729,14 @@ const renderActionDisplay = (action) => {
             )}
           </div>
           {/* Grouped Card for Day/Date, Time, Keep Until */}
-          <div style={{
-            background: 'white',
-            borderRadius: 12,
-            padding: 18,
-            marginBottom: 0,
-            marginTop: 18,
-            display: "flex",
-            flexDirection: "column",
-            gap: 18
-          }}>
+          <div style={scheduleFormSectionsColumn(formTheme, { isLargeScreen, isDesktop })}>
             {/* Select Day / Date */}
-            <div style={{ backgroundColor: '#807864', padding: 5, borderRadius: 5 }}>
-              <label style={{ fontWeight: 500, fontSize: 14, color: 'white', display: 'block', marginBottom: 5 }}>
+            <div style={scheduleFormSectionCard(formTheme)}>
+              <label style={{ fontWeight: 500, fontSize: 14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 5 }}>
                 Select Day / Date
               </label>
               <div style={{ display: 'flex', fontSize: 14, gap: 10, marginBottom: 12, alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', color: 'white', marginRight: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor, marginRight: 10 }}>
                   <input
                     type="radio"
                     value="weekly"
@@ -1435,20 +1745,20 @@ const renderActionDisplay = (action) => {
                     disabled={!editMode}
                     style={{ 
                       marginRight: 8,
-                      accentColor: '#000000',
+                      accentColor: radioFill,
                       WebkitAppearance: 'none',
                       appearance: 'none',
                       width: '12px',
                       height: '12px',
                       border: '2px solid #ccc',
                       borderRadius: '50%',
-                      backgroundColor: scheduleType === "weekly" ? '#000000' : 'transparent',
+                      backgroundColor: scheduleType === "weekly" ? radioFill : 'transparent',
                       position: 'relative'
                     }}
                   />
                   Weekly
                 </label>
-                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white', marginRight: 6 }}>
+                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor, marginRight: 6 }}>
                   <input
                     type="radio"
                     value="annual"
@@ -1457,14 +1767,14 @@ const renderActionDisplay = (action) => {
                     disabled={!editMode}
                     style={{ 
                       marginRight: 8,
-                      accentColor: '#000000',
+                      accentColor: radioFill,
                       WebkitAppearance: 'none',
                       appearance: 'none',
                       width: '12px',
                       height: '12px',
                       border: '2px solid #ccc',
                       borderRadius: '50%',
-                      backgroundColor: scheduleType === "annual" ? '#000000' : 'transparent',
+                      backgroundColor: scheduleType === "annual" ? radioFill : 'transparent',
                       position: 'relative'
                     }}
                   />
@@ -1478,8 +1788,8 @@ const renderActionDisplay = (action) => {
                         width: 22,
                         height: 22,
                         borderRadius: "50%",
-                        border: "1px solid #a89c81",
-                      background: "#f7f4ed",
+                        border: formTheme.annualAddBorder,
+                        background: formTheme.annualAddBg,
                       color: buttonColor,
                         fontWeight: 700,
                         fontSize: 16,
@@ -1503,8 +1813,8 @@ const renderActionDisplay = (action) => {
                       style={{
                         padding: '5px 10px',
                         borderRadius: 6,
-                        border: '1px solid #ccc',
-                        background: selectedDays.includes(day) ? buttonColor : 'white',
+                        border: formTheme.dayUnselectedBorder,
+                        background: selectedDays.includes(day) ? buttonColor : (formTheme.dayUnselectedBg || 'white'),
                         color: selectedDays.includes(day) ? 'white' : buttonColor,
                         cursor: editMode ? 'pointer' : 'not-allowed',
                         fontSize: 12,
@@ -1552,7 +1862,7 @@ const renderActionDisplay = (action) => {
                             fontWeight: 700,
                             fontSize: 13,
                             color: "#fff",
-                            background: "#a89c81",
+                            background: formTheme.annualChipRemoveBg,
                             borderRadius: "50%",
                             width: 16,
                             height: 16,
@@ -1571,8 +1881,8 @@ const renderActionDisplay = (action) => {
             </div>
 
             {/* Select Time */}
-            <div style={{ backgroundColor: '#807864', padding: 5, borderRadius: 5 }}>
-              <label style={{ fontWeight: 500, fontSize: 14, color: 'white', display: 'block', marginBottom: 8 }}>
+            <div style={scheduleFormSectionCard(formTheme)}>
+              <label style={{ fontWeight: 500, fontSize: 14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 8 }}>
                 Time
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1590,10 +1900,10 @@ const renderActionDisplay = (action) => {
                     borderRadius: 4,
                     border: '1px solid #ccc',
                     textAlign: 'center',
-                    background: editMode ? 'white' : '#e0dbce'
+                    background: editMode ? 'white' : formTheme.inputDisabledBg
                   }}
                 />
-                <span style={{ color: 'white', fontSize: 18 }}>:</span>
+                <span style={{ color: formTheme.colonColor, fontSize: 18 }}>:</span>
                 <input
                   type="number"
                   value={timeMinutes}
@@ -1608,19 +1918,19 @@ const renderActionDisplay = (action) => {
                     borderRadius: 4,
                     border: '1px solid #ccc',
                     textAlign: 'center',
-                    background: editMode ? 'white' : '#e0dbce'
+                    background: editMode ? 'white' : formTheme.inputDisabledBg
                   }}
                 />
               </div>
             </div>
 
             {/* Keep Until */}
-            <div style={{ backgroundColor: '#807864', padding: 5, borderRadius: 5, marginTop: 18 }}>
-              <label style={{ fontWeight: 500, fontSize: 14, color: 'white', display: 'block', marginBottom: 8 }}>
+            <div style={scheduleFormSectionCard(formTheme)}>
+              <label style={{ fontWeight: 500, fontSize: 14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 8 }}>
                 Keep Until
               </label>
               <div style={{ display: 'flex', gap: 16 }}>
-                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white' }}>
+                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor }}>
                   <input
                     type="radio"
                     value="forever"
@@ -1629,20 +1939,20 @@ const renderActionDisplay = (action) => {
                     disabled={!editMode || specificDates.length > 0}
                     style={{ 
                       marginRight: 8,
-                      accentColor: '#000000',
+                      accentColor: radioFill,
                       WebkitAppearance: 'none',
                       appearance: 'none',
                       width: '12px',
                       height: '12px',
                       border: '2px solid #ccc',
                       borderRadius: '50%',
-                      backgroundColor: (keepUntil === "forever" && specificDates.length === 0) ? '#000000' : 'transparent',
+                      backgroundColor: (keepUntil === "forever" && specificDates.length === 0) ? radioFill : 'transparent',
                       position: 'relative'
                     }}
                   />
                   Forever
                 </label>
-                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white' }}>
+                <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor }}>
                   <input
                     type="radio"
                     value="custom"
@@ -1651,14 +1961,14 @@ const renderActionDisplay = (action) => {
                     disabled={!editMode}
                     style={{ 
                       marginRight: 8,
-                      accentColor: '#000000',
+                      accentColor: radioFill,
                       WebkitAppearance: 'none',
                       appearance: 'none',
                       width: '12px',
                       height: '12px',
                       border: '2px solid #ccc',
                       borderRadius: '50%',
-                      backgroundColor: (keepUntil === "custom" || specificDates.length > 0) ? '#000000' : 'transparent',
+                      backgroundColor: (keepUntil === "custom" || specificDates.length > 0) ? radioFill : 'transparent',
                       position: 'relative'
                     }}
                   />
@@ -1688,7 +1998,7 @@ const renderActionDisplay = (action) => {
                         >
                           {minDate}
                         </div>
-                        <span style={{ color: 'white', alignSelf: 'center' }}>to</span>
+                        <span style={{ color: formTheme.colonColor, alignSelf: 'center' }}>to</span>
                         <div
                           style={{
                             padding: '8px 12px',
@@ -1719,12 +2029,12 @@ const renderActionDisplay = (action) => {
                           borderRadius: 6,
                           border: '1px solid #ccc',
                           fontSize: 14,
-                          background: editMode ? 'white' : '#e0dbce',
-                          color: editMode ? buttonColor : '#888',
+                          background: editMode ? 'white' : formTheme.inputDisabledBg,
+                          color: editMode ? formTheme.inputColor : '#888',
                           minWidth: 120
                         }}
                       />
-                      <span style={{ color: 'white', alignSelf: 'center' }}>to</span>
+                      <span style={{ color: formTheme.colonColor, alignSelf: 'center' }}>to</span>
                       <input
                         type="date"
                         value={customEndDate}
@@ -1735,8 +2045,8 @@ const renderActionDisplay = (action) => {
                           borderRadius: 6,
                           border: '1px solid #ccc',
                           fontSize: 14,
-                          background: editMode ? 'white' : '#e0dbce',
-                          color: editMode ? buttonColor : '#888',
+                          background: editMode ? 'white' : formTheme.inputDisabledBg,
+                          color: editMode ? formTheme.inputColor : '#888',
                           minWidth: 120
                         }}
                       />
@@ -1749,37 +2059,39 @@ const renderActionDisplay = (action) => {
         </div>
 
         {/* Right column: Location/Action, etc. */}
+        {isCustomizedScheduleForm ? (
         <div style={{
           flex: 1,
           minWidth: 0,
-          padding: 0,
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-start",
           height: "100%",
           overflow: "hidden",
-          maxWidth: isLargeScreen ? 800 : isDesktop ? 700 : 600
+          maxWidth: isLargeScreen ? 800 : isDesktop ? 700 : 600,
+          ...scheduleRightPanelShell(formTheme, { isLargeScreen, isDesktop }),
         }}>
-          {/* Add Location and Common Action buttons when in edit mode */}
-          {editMode && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              marginBottom: 16
-            }}>
-             
-            </div>
-          )}
-
           {/* Table-like header */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            color: 'white',
-            borderBottom: '1px solid #ccc',
-            paddingBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
-            marginBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
+            flexShrink: 0,
+            ...(formTheme.listHeaderBg ? {
+              background: formTheme.listHeaderBg,
+              color: formTheme.listHeaderColor,
+              borderBottom: formTheme.listHeaderBorderBottom,
+              padding: formTheme.listHeaderPadding,
+              fontWeight: formTheme.listHeaderFontWeight,
+              borderTopLeftRadius: 8,
+              borderTopRightRadius: 8,
+              marginBottom: 8,
+            } : {
+              color: formTheme.headerTextColor,
+              borderBottom: formTheme.listHeaderBorderBottom || '1px solid #ccc',
+              paddingBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
+              marginBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
+              fontWeight: formTheme.listHeaderFontWeight || 500,
+            }),
             fontSize: isLargeScreen ? 17 : isDesktop ? 16 : 15,
             gap: 16
           }}>
@@ -1807,7 +2119,7 @@ const renderActionDisplay = (action) => {
                   textAlign: 'left', 
                   whiteSpace: 'nowrap'
                 }}
-                onClick={() => setShowCommonActionDialog(true)}
+                onClick={openCommonActionDialog}
               >
                 + Add Common Action
               </span>
@@ -1815,38 +2127,40 @@ const renderActionDisplay = (action) => {
           </div>
 
           {/* Table-like list of locations and actions */}
-          <div>
+          <div style={scheduleRightListScrollStyle}>
             {locations.map((loc, idx) => (
               <div key={idx} style={{
                 display: 'flex',
                 alignItems: 'center',
-                borderBottom: '1px solid #b2a98b',
-                padding: '10px 0',
+                borderBottom: `1px solid ${formTheme.listBorderColor}`,
+                padding: '8px 0',
                 minHeight: 44,
-                background: idx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent',
+                background: idx % 2 === 0 ? formTheme.listRowAltBg : 'transparent',
                 gap: 16
               }}>
-                {/* Location column */}
                 <div style={{
                   flex: '0 0 300px',
                   fontSize: 15,
-                  color: '#fff',
+                  color: formTheme.listTextColor,
                   textAlign: 'left',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {loc.floorName} &gt; {loc.areaName}
+                  {decodeHtmlEntities(formatScheduleLocationLabel(loc))}
                 </div>
-                {/* Action column */}
                 <div style={{
                   flex: '1 1 300px',
                   fontSize: 15,
-                  color: '#fff',
-                  textAlign: 'left'
+                  color: formTheme.listTextColor,
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
                 }}>
-                  {(loc.actions && loc.actions.length > 0)
-                    ? loc.actions.map((a, i) => (
+                  {(loc.actions && loc.actions.length > 0) ? (
+                    <>
+                      {loc.actions.map((a, i) => (
                         <div key={i} style={{
                           marginBottom: 4,
                           wordWrap: 'break-word',
@@ -1855,28 +2169,32 @@ const renderActionDisplay = (action) => {
                         }}>
                           {renderActionDisplay(a)}
                         </div>
-                      ))
-                    : <span style={{ color: '#888' }}>No actions</span>
-                  }
-                </div>
-                {/* Edit/Delete buttons */}
-                {editMode && (
-                  <div style={{
-                    flex: '0 0 120px',
-                    textAlign: 'right',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}>
+                      ))}
+                      {editMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenActionDialog(idx)}
+                          style={{
+                            background: 'transparent',
+                            color: buttonColor,
+                            border: `1px solid ${buttonColor}`,
+                            borderRadius: 4,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            alignSelf: 'flex-start',
+                            marginTop: 4,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          + Add Action
+                        </button>
+                      )}
+                    </>
+                  ) : editMode ? (
                     <button
-                      onClick={() => {
-                        if (loc.actions && loc.actions.length > 0) {
-                          handleEditAction(idx, 0); // Edit the first action
-                        } else {
-                          setActionDialogIdx(idx);
-                          setSelectedActionData(null);
-                        }
-                      }}
+                      type="button"
+                      onClick={() => handleOpenActionDialog(idx)}
                       style={{
                         background: buttonColor,
                         border: 'none',
@@ -1885,17 +2203,41 @@ const renderActionDisplay = (action) => {
                         padding: '4px 8px',
                         cursor: 'pointer',
                         fontSize: 12,
-                        whiteSpace: 'nowrap'
+                        alignSelf: 'flex-start',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      {loc.actions && loc.actions.length > 0 ? 'Edit' : 'Add'} Action
+                      Add Action
                     </button>
+                  ) : (
+                    <span style={{ color: '#888' }}>No actions</span>
+                  )}
+                </div>
+                {editMode && (
+                  <div style={detailsRowActionControlsStyle(180)}>
+                    {loc.actions && loc.actions.length > 0 && (
+                      <button
+                        onClick={() => handleEditButtonClick(idx, loc.actions)}
+                        style={{
+                          background: buttonColor,
+                          border: 'none',
+                          borderRadius: 4,
+                          color: '#fff',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Edit Action
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleDeleteLocation(idx)}
+                      onClick={() => handleDeleteButtonClick(idx, loc.actions)}
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#fff',
+                        color: formTheme.listTextColor,
                         padding: 0,
                         cursor: 'pointer',
                         fontSize: 18,
@@ -1910,179 +2252,117 @@ const renderActionDisplay = (action) => {
               </div>
             ))}
           </div>
-
-          {/* Action Buttons */}
-          <div style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: isLargeScreen ? 20 : isDesktop ? 18 : 16,
-            marginTop: isLargeScreen ? 40 : isDesktop ? 35 : 32
-          }}>
-            {!editMode ? (
-              <>
-                {/* Copy Button - Show but disable based on permissions */}
-                <button
-                  onClick={canEditSchedule() ? handleCopy : undefined}
-                  disabled={!canEditSchedule()}
-                  style={{
-                    padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: canEditSchedule() ? buttonColor : "#666",
-                    color: canEditSchedule() ? "#fff" : "#999",
-                    fontWeight: 500,
-                    fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                    cursor: canEditSchedule() ? "pointer" : "not-allowed",
-                    opacity: canEditSchedule() ? 1 : 0.7
-                  }}
-                >
-                  Copy
-                </button>
-                {/* Modify Button - Show but disable based on permissions */}
-                <button
-                  onClick={canEditSchedule() ? handleModify : undefined}
-                  disabled={!canEditSchedule()}
-                  style={{
-                    padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: canEditSchedule() ? buttonColor : "#666",
-                    color: canEditSchedule() ? "#fff" : "#999",
-                    fontWeight: 500,
-                    fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                    cursor: canEditSchedule() ? "pointer" : "not-allowed",
-                    opacity: canEditSchedule() ? 1 : 0.7
-                  }}
-                >
-                  Modify
-                </button>
-                {/* Delete Button - Show but disable based on permissions */}
-                <button
-                  onClick={canEditSchedule() ? handleDelete : undefined}
-                  disabled={deleteStatus === 'loading' || !canEditSchedule()}
-                  style={{
-                    padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: (deleteStatus === 'loading' || !canEditSchedule()) ? "#666" : buttonColor,
-                    color: (deleteStatus === 'loading' || !canEditSchedule()) ? "#999" : "#fff",
-                    fontWeight: 500,
-                    fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                    cursor: (deleteStatus === 'loading' || !canEditSchedule()) ? "not-allowed" : "pointer",
-                    opacity: (deleteStatus === 'loading' || !canEditSchedule()) ? 0.7 : 1
-                  }}
-                >
-                  {deleteStatus === 'loading' ? 'Deleting...' : 'Delete'}
-                </button>
-                <button
-                  onClick={handleCancel}
-                  style={{
-                    padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: buttonColor,
-                    color: "#fff",
-                    fontWeight: 500,
-                    fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                    cursor: "pointer"
-                  }}
-                >
-                  Close
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={handleCancel}
-                  style={{
-                    padding: "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: buttonColor,
-                    color: "#fff",
-                    fontWeight: 500,
-                    cursor: "pointer"
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={!scheduleName.trim() || locations.length === 0 || updateStatus === 'loading' || locations.some(location => !location.actions || location.actions.length === 0)}
-                  style={{
-                    padding: "10px 28px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: (scheduleName.trim() && locations.length > 0 && updateStatus !== 'loading' && !locations.some(location => !location.actions || location.actions.length === 0)) ? buttonColor : "#888",
-                    color: "#fff",
-                    fontWeight: 500,
-                    cursor: (scheduleName.trim() && locations.length > 0 && updateStatus !== 'loading' && !locations.some(location => !location.actions || location.actions.length === 0)) ? "pointer" : "not-allowed"
-                  }}
-                >
-                  {updateStatus === 'loading' ? 'Saving...' : 'Save'}
-                </button>
-              </>
-            )}
-          </div>
         </div>
+        ) : (
+        <ScheduleLocationsPanel
+          locations={locations}
+          formTheme={formTheme}
+          buttonColor={buttonColor}
+          isLargeScreen={isLargeScreen}
+          isDesktop={isDesktop}
+          useAdvancedLayout={useAdvancedLocationsPanel}
+          layoutHelpers={scheduleAdvancedLocationsPanel}
+          editMode={editMode}
+          onAddLocation={() => setShowLocationDialog(true)}
+          onAddCommonAction={openCommonActionDialog}
+          onOpenActionDialog={handleOpenActionDialog}
+          onEditAction={handleEditButtonClick}
+          onDeleteLocation={handleDeleteButtonClick}
+          renderActionDisplay={renderActionDisplay}
+          formatLocationLabel={(loc) => decodeHtmlEntities(formatScheduleLocationLabel(loc))}
+          emptyActionLabel="No actions"
+          useFixedActionBarListScroll={useFixedPageActionBar && !useAdvancedLocationsPanel}
+          actionBar={useFixedPageActionBar ? null : detailsActionBar}
+        />
+        )}
 
         {/* Common Action Dialog */}
-        {showCommonActionDialog && (
+        {renderScheduleModalLayer(
+          usePortaledScheduleModals,
+          showCommonActionDialog && (
           <div style={{
             position: 'fixed',
             left: 0, top: 0, right: 0, bottom: 0,
             background: "rgba(0,0,0,0.25)",
-            zIndex: 1000,
+            zIndex: usePortaledScheduleModals ? SCHEDULE_MODAL_OVERLAY_Z_INDEX : 1000,
             display: "flex",
             alignItems: "center",
             justifyContent: "center"
           }}>
-            <div style={{
-              background: "#CDC0A0",
-              borderRadius: 18,
-              padding: 28,
-              minWidth: 400,
-              maxWidth: 600,
-              maxHeight: '80vh',
-              overflow: 'auto',
-              boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-              position: "relative",
-              color: buttonColor
-            }}>
-              <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: buttonColor }}>
-                Add Common Action
+            <div
+              style={isAdvancedScheduleForm
+                ? scheduleModalPanelStyle(formTheme, {
+                  minWidth: 400,
+                  maxWidth: 600,
+                  maxHeight: '80vh',
+                  overflow: 'auto',
+                })
+                : scheduleLegacyModalPanelStyle(formTheme, buttonColor, {
+                  minWidth: 400,
+                  maxWidth: 600,
+                  maxHeight: '80vh',
+                  overflow: 'auto',
+                })}
+            >
+              <div style={isAdvancedScheduleForm
+                ? scheduleModalTitleStyle(formTheme)
+                : scheduleLegacyModalTitleStyle(buttonColor)}>
+                {editingAreaStatus ? 'Edit Action' : 'Add Common Action'}
               </div>
               
               {/* Action Type Dropdown */}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Select Action Type</div>
-                <select
-                  value={selectedCommonActionType}
-                  onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    border: "1px solid #ccc",
-                    background: "white",
-                    fontSize: 14
-                  }}
-                >
-                <option value="light_status">Light Status</option>
-                <option value="occupancy">Occupancy Setting</option>
-                </select>
+                <div style={isAdvancedScheduleForm
+                  ? scheduleModalLabelStyle(formTheme)
+                  : { fontWeight: 600, marginBottom: 8, color: buttonColor }}>
+                  Select Action Type
+                </div>
+                {isAdvancedScheduleForm ? (
+                  <Select
+                    className="schedule-filter-select"
+                    value={selectedCommonActionType}
+                    onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
+                    fullWidth
+                    disabled={!!editingAreaStatus}
+                    MenuProps={isAdvancedScheduleForm ? scheduleModalFilterMenuProps : scheduleFilterMenuProps}
+                    sx={scheduleSelectFieldSx}
+                  >
+                    <MenuItem value="light_status">Light Status</MenuItem>
+                    {!editingAreaStatus && <MenuItem value="occupancy">Occupancy Setting</MenuItem>}
+                  </Select>
+                ) : (
+                  <select
+                    value={selectedCommonActionType}
+                    onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
+                    disabled={!!editingAreaStatus}
+                    style={scheduleModalSelectStyle(formTheme)}
+                  >
+                    <option value="light_status">Light Status</option>
+                    {!editingAreaStatus && <option value="occupancy">Occupancy Setting</option>}
+                  </select>
+                )}
               </div>
 
               {/* Light Status Options */}
               {selectedCommonActionType === 'light_status' && (
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Light Status (On/Off)</div>
+                  {isLightScheduleForm && (
+                    <div style={scheduleModalLabelStyle(formTheme)}>
+                      Light Status (On/Off)
+                    </div>
+                  )}
                   
                   {/* Simplified: Only On/Off options */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Light State</div>
+                    <div style={isAdvancedScheduleForm
+                      ? scheduleModalLabelStyle(formTheme)
+                      : { fontWeight: 600, marginBottom: 8, color: isLightScheduleForm ? formTheme.modalSectionLabelColor : formTheme.sectionTextColor }}>
+                      Light State
+                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
+                      <label style={isAdvancedScheduleForm
+                        ? scheduleModalRadioLabelStyle(formTheme)
+                        : { display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor }}>
                         <input
                           type="radio"
                           value="On"
@@ -2090,20 +2370,22 @@ const renderActionDisplay = (action) => {
                           onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
                           style={{ 
                             marginRight: 8,
-                            accentColor: '#000000',
+                            accentColor: radioFill,
                             WebkitAppearance: 'none',
                             appearance: 'none',
                             width: '12px',
                             height: '12px',
                             border: '2px solid #ccc',
                             borderRadius: '50%',
-                            backgroundColor: lightStatusSettings.switched.on_off === 'On' ? '#000000' : 'transparent',
+                            backgroundColor: lightStatusSettings.switched.on_off === 'On' ? radioFill : 'transparent',
                             position: 'relative'
                           }}
                         />
                         On
                       </label>
-                      <label style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
+                      <label style={isAdvancedScheduleForm
+                        ? scheduleModalRadioLabelStyle(formTheme)
+                        : { display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor }}>
                         <input
                           type="radio"
                           value="Off"
@@ -2111,14 +2393,14 @@ const renderActionDisplay = (action) => {
                           onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
                           style={{ 
                             marginRight: 8,
-                            accentColor: '#000000',
+                            accentColor: radioFill,
                             WebkitAppearance: 'none',
                             appearance: 'none',
                             width: '12px',
                             height: '12px',
                             border: '2px solid #ccc',
                             borderRadius: '50%',
-                            backgroundColor: lightStatusSettings.switched.on_off === 'Off' ? '#000000' : 'transparent',
+                            backgroundColor: lightStatusSettings.switched.on_off === 'Off' ? radioFill : 'transparent',
                             position: 'relative'
                           }}
                         />
@@ -2132,7 +2414,11 @@ const renderActionDisplay = (action) => {
               {/* Occupancy Setting Options */}
               {selectedCommonActionType === 'occupancy' && (
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Occupancy Setting</div>
+                  <div style={isAdvancedScheduleForm
+                    ? scheduleModalLabelStyle(formTheme)
+                    : { fontWeight: 600, marginBottom: 8, color: formTheme.sectionTextColor }}>
+                    Occupancy Setting
+                  </div>
                   <div style={{ display: "flex", gap: 16 }}>
                     {["disabled", "auto", "vacancy"].map((setting) => (
                       <button
@@ -2179,15 +2465,10 @@ const renderActionDisplay = (action) => {
                       (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "pointer" : "not-allowed"
                   }}
                 >
-                  Apply to All
+                  {editingAreaStatus ? 'Update' : 'Apply to All'}
                 </button>
                 <button
-                  onClick={() => { 
-                    setShowCommonActionDialog(false); 
-                    setSelectedCommonActionType('light_status'); 
-                    setSelectedOccupancySetting(null);
-                    setSelectedZoneType('switched');
-                  }}
+                  onClick={resetCommonActionDialog}
                   style={{
                     padding: "10px 28px",
                     borderRadius: 8,
@@ -2203,35 +2484,49 @@ const renderActionDisplay = (action) => {
               </div>
             </div>
           </div>
+          )
         )}
 
         {/* Action Dialog */}
-        {actionDialogIdx !== null && (
+        {renderScheduleModalLayer(
+          usePortaledScheduleModals,
+          actionDialogIdx !== null && (
           <div style={{
             position: 'fixed',
             left: 0, top: 0, right: 0, bottom: 0,
             background: "rgba(0,0,0,0.25)",
-            zIndex: 1000,
+            zIndex: usePortaledScheduleModals ? SCHEDULE_MODAL_OVERLAY_Z_INDEX : 1000,
             display: "flex",
             alignItems: "center",
             justifyContent: "center"
           }}>
-            <div style={{
-              background: "#CDC0A0",
-              borderRadius: 18,
-              padding: 28,
-              minWidth: 340,
-              boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-              position: "relative",
-            color: buttonColor
-            }}>
-              <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: buttonColor }}>
-                {locations[actionDialogIdx]?.actions?.length > 0 ? 'Edit' : 'Add'} Action
+            <div
+              style={isAdvancedScheduleForm
+                ? scheduleModalPanelStyle(formTheme, { minWidth: 340 })
+                : scheduleLegacyModalPanelStyle(formTheme, buttonColor, { minWidth: 340 })}
+            >
+              <div style={isAdvancedScheduleForm
+                ? scheduleModalTitleStyle(formTheme)
+                : scheduleLegacyModalTitleStyle(buttonColor)}>
+                {selectedActionData || editingActionIdx != null || editAllMode ? 'Edit' : 'Add'} Action
               </div>
               <Action
                 areaId={locations[actionDialogIdx]?.areaId}
                 onActionSelect={action => setSelectedActionData(action)}
                 initialAction={selectedActionData}
+                menuProps={usePortaledScheduleModals
+                  ? resolveScheduleModalFilterMenuProps(scheduleCalendarChrome)
+                  : scheduleFilterMenuProps}
+                hideZoneOption={
+                  !editAllMode &&
+                  editingActionIdx == null &&
+                  locationHasSceneAction(locations[actionDialogIdx]?.actions)
+                }
+                hideSceneOption={
+                  !editAllMode &&
+                  editingActionIdx == null &&
+                  locationHasZoneAction(locations[actionDialogIdx]?.actions)
+                }
               />
               <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
                 <button
@@ -2256,10 +2551,10 @@ const renderActionDisplay = (action) => {
                     cursor: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? "pointer" : "not-allowed"
                   }}
                 >
-                  {locations[actionDialogIdx]?.actions?.length > 0 ? 'Update' : 'Add'} Action
+                  {selectedActionData || editingActionIdx != null || editAllMode ? 'Update' : 'Add'} Action
                 </button>
                 <button
-                  onClick={() => { setActionDialogIdx(null); setSelectedActionData(null); }}
+                  onClick={closeActionDialog}
                   style={{
                     padding: "10px 28px",
                     borderRadius: 8,
@@ -2275,6 +2570,7 @@ const renderActionDisplay = (action) => {
               </div>
             </div>
           </div>
+          )
         )}
 
         {/* Area Tree Dialog */}
@@ -2306,12 +2602,39 @@ const renderActionDisplay = (action) => {
         <ConfirmDialog
           open={showDeleteLocationDialog}
           title="Delete Location"
-          message={`Are you sure you want to delete location "${locationToDelete?.location?.floorName} > ${locationToDelete?.location?.areaName}"?`}
+          message={`Are you sure you want to delete location "${decodeHtmlEntities(formatScheduleLocationLabel(locationToDelete?.location || {}))}"?`}
           onConfirm={confirmDeleteLocation}
           onCancel={() => {
             setShowDeleteLocationDialog(false);
             setLocationToDelete(null);
           }}
+        />
+
+        <ConfirmDialog
+          open={showDeleteActionDialog}
+          title="Delete Action"
+          message={`Are you sure you want to delete "${getQuickControlActionShortLabel(actionToDelete?.action)}" from "${decodeHtmlEntities(formatScheduleLocationLabel(actionToDelete?.location || {}))}"?`}
+          onConfirm={confirmDeleteAction}
+          onCancel={() => {
+            setShowDeleteActionDialog(false);
+            setActionToDelete(null);
+          }}
+        />
+
+        <ActionChooserModal
+          open={Boolean(actionChooser)}
+          mode={actionChooser?.mode || 'edit'}
+          actions={
+            actionChooser != null
+              ? locations[actionChooser.locationIdx]?.actions || []
+              : []
+          }
+          buttonColor={buttonColor}
+          onPick={(pick) => {
+            if (actionChooser?.mode === 'delete') handleChooserPickDelete(pick);
+            else handleChooserPickEdit(pick);
+          }}
+          onCancel={() => setActionChooser(null)}
         />
 
         <Toast
@@ -2355,6 +2678,11 @@ const renderActionDisplay = (action) => {
           </div>
         )}
       </div>
+
+      {isCustomizedScheduleForm && renderDetailsActionButtons()}
+      {useFixedPageActionBar &&
+        typeof document !== 'undefined' &&
+        createPortal(renderDetailsActionButtons(), document.body)}
     </div>
   );
 };

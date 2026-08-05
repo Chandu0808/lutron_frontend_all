@@ -1,5 +1,12 @@
 /** Shared layout for Settings → Theme color-picker columns (visible gap between cards). */
 
+/** Advanced theme page hex picker — slightly shorter than default 220px height. */
+export const ADVANCED_THEME_PICKER_HEX = {
+  width: 200,
+  height: 208,
+  hexRadius: 8,
+};
+
 export const themePickerCardsGridSx = (columns = 3) => ({
   display: 'grid',
   width: '100%',
@@ -35,4 +42,13 @@ export const themePickerCardSurfaceSx = {
   display: 'flex',
   flexDirection: 'column',
   boxSizing: 'border-box',
+  minHeight: 368,
+};
+
+export const themePickerActionsSx = {
+  mt: 'auto',
+  pt: 1.5,
+  minHeight: 36,
+  display: 'flex',
+  alignItems: 'center',
 };

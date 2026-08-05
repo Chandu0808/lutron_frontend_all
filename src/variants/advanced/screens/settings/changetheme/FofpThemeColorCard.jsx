@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
-import { themePickerCardCellSx, themePickerCardColumnSx, themePickerCardSurfaceSx } from './themePickerLayout';
+import { themePickerCardCellSx, themePickerCardColumnSx, themePickerCardSurfaceSx, ADVANCED_THEME_PICKER_HEX, themePickerActionsSx } from './themePickerLayout';
 import { useDispatch, useSelector } from 'react-redux';
 import HexColorPicker from '../../../utils/HexColorPicker';
 import {
@@ -89,11 +89,11 @@ const FofpThemeColorCard = ({
                     selectedColor={selectedFofpColor}
                     setSelectedColor={setSelectedFofpColor}
                     activeTarget={activeFofpTab}
-                    width={200}
-                    height={220}
-                    hexRadius={8}
+                    width={ADVANCED_THEME_PICKER_HEX.width}
+                    height={ADVANCED_THEME_PICKER_HEX.height}
+                    hexRadius={ADVANCED_THEME_PICKER_HEX.hexRadius}
                 />
-                <Box sx={{ mt: 'auto', pt: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 40 }}>
+                <Box sx={{ ...themePickerActionsSx, justifyContent: 'center' }}>
                     <Button
                         className="save-button"
                         onClick={handleFofpColorSave}

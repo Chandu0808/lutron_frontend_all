@@ -1,6 +1,6 @@
 import { getScheduleSettingsBindings } from './bindScheduleSettingsModule';
-import React, { useEffect, useState, useRef } from 'react';
-import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome, onContentColors } from "../../theme/utils/themeOnSurface";
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { resolveScheduleCalendarColors } from './scheduleCalendarTheme';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -97,6 +97,7 @@ function ScheduleComponent() {
     themeSlice: { selectApplicationTheme },
     fixedActionBarStyles: { scheduleFixedActionBarStyle, schedulePageWithFixedActionBarStyle },
     scheduleActionPriority: { applyCommonActionToActions, stripActionSource, tagLoadedActions, withIndividualSource },
+    scheduleCalendarChrome = 'dark',
   } = getScheduleSettingsBindings();
   const { ConfirmDialog, Toast } = FeedbackUI;
   const { selectProfile } = userlogin;
@@ -117,6 +118,9 @@ function ScheduleComponent() {
     selectedScheduleAreas,
     detailsLoading,
   } = useSelector((state) => state.schedule);
+
+  const applicationTheme = useSelector(selectApplicationTheme)?.application_theme ?? {};
+  const themeBackground = applicationTheme.background || '#ffffff';
 
   // Get user role and profile for role-based filtering
   const { role: currentUserRole } = UseAuth();
@@ -195,7 +199,15 @@ function ScheduleComponent() {
   const isLargeScreen = windowSize.width >= 1920; // 4K and large screens
   const isDesktop = windowSize.width >= 1366; // Desktop screens (including large laptops)
   const isLaptop = windowSize.width >= 1024 && windowSize.width < 1366; // Laptop screens only
-  const buttonColor = 'var(--app-button)';
+
+  const colors = useMemo(
+    () =>
+      resolveScheduleCalendarColors({
+        scheduleCalendarChrome,
+        themeBackground,
+      }),
+    [scheduleCalendarChrome, themeBackground]
+  );
 
   // Always show all 24 hours with scroll functionality
   const getTimeSlots = () => {
@@ -403,10 +415,10 @@ function ScheduleComponent() {
               if (!newCalendar[dateKey]) {
                 newCalendar[dateKey] = {};
               }
-              if (!newCalendar[dateKey][time]) {
-                newCalendar[dateKey][time] = [];
+              if (!newCalendar[dateKey][displayTimeSlot]) {
+                newCalendar[dateKey][displayTimeSlot] = [];
               }
-              newCalendar[dateKey][time].push(event);
+              newCalendar[dateKey][displayTimeSlot].push(event);
             }
           }
         }
@@ -589,7 +601,7 @@ function ScheduleComponent() {
       }}>
         {/* Schedule Label */}
         <h2 style={{
-          color: '#fff',
+          color: colors.pageText,
           fontWeight: 600,
           fontSize: 24,
           letterSpacing: 0.5,
@@ -612,15 +624,16 @@ function ScheduleComponent() {
           flexShrink: 0
         }}>
           <select
+            className="schedule-filter-select"
             value={selectedFilter}
             onChange={e => setSelectedFilter(e.target.value)}
             style={{
               padding: '8px 12px',
               borderRadius: 8,
-              border: '1px solid #e0e0e0',
+              border: `1px solid ${colors.filterBorder}`,
               fontSize: 14,
-              background: '#fafbfc',
-              color: '#222',
+              background: colors.filterBg,
+              color: colors.filterText,
               fontWeight: 500,
               outline: 'none',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
@@ -640,8 +653,9 @@ function ScheduleComponent() {
           }}>
             <button 
               style={{
-                backgroundColor: buttonColor, 
-                color: '#fff', 
+                background: colors.actionButtonColor,
+                backgroundColor: colors.actionButtonColor,
+                color: colors.buttonTextColor, 
                 border: 'none', 
                 borderRadius: 8, 
                 padding: isLargeScreen ? '10px 20px' : '8px 16px', 
@@ -656,7 +670,7 @@ function ScheduleComponent() {
               Previous Week
             </button>
             <span style={{ 
-              color: '#fff', 
+              color: colors.pageText, 
               fontWeight: 600, 
               fontSize: isLargeScreen ? 16 : 14
             }}>
@@ -664,8 +678,9 @@ function ScheduleComponent() {
             </span>
             <button 
               style={{
-                backgroundColor: buttonColor, 
-                color: '#fff', 
+                background: colors.actionButtonColor,
+                backgroundColor: colors.actionButtonColor,
+                color: colors.buttonTextColor, 
                 border: 'none', 
                 borderRadius: 8, 
                 padding: isLargeScreen ? '10px 20px' : '8px 16px', 
@@ -720,8 +735,9 @@ function ScheduleComponent() {
               <button
                 onClick={handleAddEvent}
                 style={{
-                  background: buttonColor,
-                  color: '#fff',
+                  background: colors.actionButtonColor,
+                  backgroundColor: colors.actionButtonColor,
+                  color: colors.buttonTextColor,
                   border: 'none',
                   borderRadius: 8,
                   padding: isLargeScreen ? '12px 32px' : '10px 28px',
@@ -743,9 +759,9 @@ function ScheduleComponent() {
           style={{
             flex: 1,
             borderRadius: 14,
-            background: '#676050',
+            background: colors.panelBg,
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-            border: '1px solid #e0e0e0',
+            border: `1px solid ${colors.gridBorder}`,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
@@ -770,7 +786,7 @@ function ScheduleComponent() {
               height: 'auto',
               borderCollapse: 'separate',
               borderSpacing: 0,
-              color: '#222',
+              color: colors.tableText,
               fontSize: 14
             }}>
               <thead>
@@ -780,26 +796,33 @@ function ScheduleComponent() {
                     fontSize: 14,
                     textAlign: 'center',
                     padding: 10,
-                    background: '#676050',
+                    background: colors.headerBg,
                     border: 'none',
+                    borderBottom: `1px solid ${colors.gridLineColor}`,
+                    borderRight: `1px solid ${colors.gridLineColor}`,
                     position: 'sticky',
                     left: 0,
                     top: 0,
                     zIndex: 3
                   }}></th>
-                  {daysOfWeek.map((dayLabel, idx) => (
+                  {daysOfWeek.map((dayLabel, idx) => {
+                    const todayHeader = isToday(weekDates[idx]);
+                    const headerLabelColor = todayHeader ? colors.todayText : colors.headerText;
+                    return (
                     <th key={dayLabel} style={{
                       fontSize: 14,
                       textAlign: 'center',
                       padding: '12px 8px',
-                      background: '#676050',
+                      background: colors.headerBg,
                       border: 'none',
+                      borderBottom: `1px solid ${colors.gridLineColor}`,
+                      borderRight: `1px solid ${colors.gridLineColor}`,
                       minWidth: 120,
                       fontWeight: 500,
                       position: 'sticky',
                       top: 0,
                       zIndex: 3,
-                      ...(isToday(weekDates[idx]) ? { background: '#1E75BB', color: '#fff' } : {})
+                      ...(todayHeader ? { background: colors.todayBg, color: colors.todayText } : {})
                     }}>
                       <div style={{
                         display: 'flex',
@@ -808,11 +831,12 @@ function ScheduleComponent() {
                         justifyContent: 'center',
                         gap: 6
                       }}>
-                        <span style={{ fontWeight: 500, fontSize: 14, color: 'white' }}>{dayLabel}</span>
-                        <span style={{ fontWeight: 500, fontSize: 14, color: 'white' }}>{weekDates[idx].getDate()}</span>
+                        <span style={{ fontWeight: 500, fontSize: 14, color: headerLabelColor }}>{dayLabel}</span>
+                        <span style={{ fontWeight: 500, fontSize: 14, color: headerLabelColor }}>{weekDates[idx].getDate()}</span>
                       </div>
                     </th>
-                  ))}
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -844,9 +868,11 @@ function ScheduleComponent() {
                   return (
                     <tr key={row.time + '-' + rowIdx}>
                       <td style={{
-                        background: '#676050',
+                        background: colors.gridBg,
                         minWidth: 80,
                         border: 'none',
+                        borderBottom: `1px solid ${colors.gridLineColor}`,
+                        borderRight: `1px solid ${colors.gridLineColor}`,
                         position: 'sticky',
                         left: 0,
                         zIndex: 2,
@@ -865,7 +891,7 @@ function ScheduleComponent() {
                           padding: '0 8px'
                         }}>
                           <span style={{
-                            color: 'white',
+                            color: colors.timeText,
                             fontWeight: 500,
                             fontSize: 14,
                             width: '100%',
@@ -918,8 +944,9 @@ function ScheduleComponent() {
                             minWidth: 120,
                             verticalAlign: 'top',
                             padding: 4,
-                            border: '1px solid #e0e0e0',
-                            background: '#676050',
+                            borderBottom: `1px solid ${colors.gridLineColor}`,
+                            borderRight: `1px solid ${colors.gridLineColor}`,
+                            background: colors.gridBg,
                             height: rowHeight,
                             position: 'relative'
                           }}>
@@ -945,8 +972,8 @@ function ScheduleComponent() {
                               }
                               
                               const bgColor = isEventEnabled
-                                ? 'linear-gradient(90deg, #1E75BB 0%, #3A8DFF 100%)'
-                                : 'linear-gradient(90deg, #b0b0b0 0%, #d3d3d3 100%)';
+                                ? colors.eventActiveBg
+                                : colors.eventInactiveBg;
                               
                               return (
                                 <div
@@ -956,7 +983,7 @@ function ScheduleComponent() {
                                     borderRadius: 6,
                                     margin: '1px 0',
                                     padding: '4px 6px',
-                                    color: '#fff',
+                                    color: colors.eventActiveText,
                                     fontSize: 12,
                                     fontWeight: 500,
                                     boxShadow: '0 2px 4px rgba(0,0,0,0.08)',

@@ -55,6 +55,24 @@ export function isTopbarNavItemActive(item, pathname, settingsPath) {
 
   if (
     item.path === settingsPath &&
+    settingsPath.startsWith("/setting") &&
+    (pathname === "/setting" ||
+      pathname.startsWith("/setting/") ||
+      pathname === "/createusers" ||
+      pathname.startsWith("/createusers/") ||
+      pathname === "/createfloor" ||
+      pathname.startsWith("/createfloor/") ||
+      pathname.startsWith("/editfloor/") ||
+      pathname.startsWith("/correct-coordinate/") ||
+      pathname.startsWith("/area-calculation/") ||
+      pathname === "/get-help" ||
+      pathname.startsWith("/get-help/"))
+  ) {
+    return true;
+  }
+
+  if (
+    item.path === settingsPath &&
     (pathname === "/main" ||
       pathname === "/theme-change" ||
       pathname === "/rename-widget/" ||
@@ -79,6 +97,8 @@ export function isTopbarNavItemActive(item, pathname, settingsPath) {
       pathname.startsWith("/manage-modules/") ||
       pathname === "/processors" ||
       pathname.startsWith("/processors/") ||
+      pathname === "/maintenance" ||
+      pathname.startsWith("/maintenance/") ||
       pathname === "/alerts" ||
       pathname.startsWith("/alerts/") ||
       pathname === "/fofp" ||

@@ -53,6 +53,7 @@ export function buildAdvancedSpaceWidgetOptions(runtime) {
       metricPanelBorder: runtime.metricPanelBorder,
       isLargeScreen: runtime.isLargeScreen,
       utilizationByAreaLayoutMode: 'fill',
+      chartSurface: runtime.spaceUtilLight ? 'light' : 'dark',
     },
   };
 }
@@ -244,7 +245,7 @@ export function buildBasicSpaceSections({ orchestration, runtime, activeTab }) {
   const layoutContext = resolveDualTabSpaceLayoutContext(activeTab, orchestration);
   const SpaceLayoutRenderer = runtime.SpaceLayoutRenderer;
 
-  return (
+  const layout = (
     <SpaceLayoutRenderer
       activeTab={activeTab}
       layoutContext={layoutContext}
@@ -252,9 +253,20 @@ export function buildBasicSpaceSections({ orchestration, runtime, activeTab }) {
       runtime={runtime.layoutRuntime}
     />
   );
+
+  if (typeof runtime.wrapSpaceLayout === 'function') {
+    return runtime.wrapSpaceLayout(layout, { activeTab, orchestration });
+  }
+  return layout;
 }
 
 export function buildAdvancedSpaceSections({ orchestration, runtime, activeTab }) {
+  const renderSpaceSection =
+    runtime.renderSpaceSection || runtime.layoutRuntime?.renderSpaceSection;
+  if (typeof renderSpaceSection === 'function') {
+    return renderSpaceSection({ orchestration, runtime, activeTab });
+  }
+
   const SpaceLayoutRenderer = runtime.SpaceLayoutRenderer;
 
   return (

@@ -31,9 +31,12 @@ function resolveCardBorder(spaceUtilLight) {
   return spaceUtilLight ? '1px solid #e8e8e8' : '1px solid #ccc';
 }
 
-function resolveExportColor(spaceUtilLight, slotId) {
-  if (slotId === 'instant_occupancy_count' && spaceUtilLight) return '#1565C0';
-  return '#fff';
+function resolveExportColor(spaceUtilLight) {
+  return spaceUtilLight ? '#1565C0' : '#fff';
+}
+
+function resolveExportButtonHoverBg(spaceUtilLight) {
+  return spaceUtilLight ? 'rgba(21, 101, 192, 0.08)' : 'rgba(255, 255, 255, 0.1)';
 }
 
 function resolveTitle(slotId, layoutContext, exportMeta) {
@@ -76,8 +79,8 @@ const SLOT_EXPORT = {
 function resolveChartLoaderHeight(slotId, layoutContext) {
   const heights = layoutContext.chartLoaderHeights || {};
   if (heights[slotId]) return heights[slotId];
-  if (slotId === 'utilization' || slotId === 'instant_occupancy_count') return '350px';
-  if (slotId === 'utilization_by_area_group') return '400px';
+  if (slotId === 'utilization' || slotId === 'instant_occupancy_count') return '180px';
+  if (slotId === 'utilization_by_area_group') return '210px';
   return undefined;
 }
 
@@ -115,12 +118,13 @@ export function renderBasicSpaceWidgetSlot(slotId, meta, layoutContext, api) {
   const title = exportMeta ? resolveTitle(slotId, layoutContext, exportMeta) : slotId;
   const cardBg = resolveCardBackground(spaceUtilLight);
   const cardBorder = resolveCardBorder(spaceUtilLight);
-  const exportColor = resolveExportColor(spaceUtilLight, slotId);
+  const exportColor = resolveExportColor(spaceUtilLight);
+  const exportHoverBg = resolveExportButtonHoverBg(spaceUtilLight);
 
   const minHeights = {
-    utilization: { xs: '400px', sm: '430px', md: '450px', lg: '470px', xl: '500px' },
-    instant_occupancy_count: { xs: '400px', sm: '430px', md: '450px', lg: '470px', xl: '500px' },
-    utilization_by_area_group: { xs: '350px', sm: '380px', md: '400px', lg: '420px', xl: '450px' },
+    utilization: { xs: '220px', sm: '230px', md: '250px', lg: '260px', xl: '280px' },
+    instant_occupancy_count: { xs: '220px', sm: '230px', md: '250px', lg: '260px', xl: '280px' },
+    utilization_by_area_group: { xs: '200px', sm: '210px', md: '230px', lg: '240px', xl: '260px' },
     utilization_by_area: undefined,
   };
 
@@ -132,10 +136,11 @@ export function renderBasicSpaceWidgetSlot(slotId, meta, layoutContext, api) {
       sx={{
         backgroundColor: instantLightCard ? '#ffffff' : cardBg,
         borderRadius: '8px',
-        padding: { xs: 2, sm: 2.5, md: 3, lg: 4, xl: 5 },
+        padding: { xs: 1.25, sm: 1.5, md: 1.75, lg: 2, xl: 2.25 },
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
         border: instantLightCard ? '1px solid #e8e8e8' : cardBorder,
         minHeight: minHeights[slotId] || 0,
+        overflow: 'visible',
       }}
     >
       <Box
@@ -145,8 +150,8 @@ export function renderBasicSpaceWidgetSlot(slotId, meta, layoutContext, api) {
           alignItems: 'center',
           marginBottom:
             slotId === 'utilization_by_area_group'
-              ? { xs: 1.5, sm: 2, md: 2.5, lg: 3, xl: 3.5 }
-              : { xs: 2, sm: 2.5, md: 3, lg: 4, xl: 5 },
+              ? { xs: 1, sm: 1.25, md: 1.5, lg: 1.75, xl: 2 }
+              : { xs: 1.25, sm: 1.5, md: 1.75, lg: 2, xl: 2.25 },
         }}
       >
         <Box component="h3" sx={chartHeaderStyle}>
@@ -157,12 +162,13 @@ export function renderBasicSpaceWidgetSlot(slotId, meta, layoutContext, api) {
             <button
               type="button"
               data-export-menu="true"
-              onClick={() =>
+              onClick={(event) => {
+                event.stopPropagation();
                 setShowExportDropdown((prev) => ({
                   ...prev,
                   [exportMeta.dropdownKey]: !prev[exportMeta.dropdownKey],
-                }))
-              }
+                }));
+              }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -175,6 +181,12 @@ export function renderBasicSpaceWidgetSlot(slotId, meta, layoutContext, api) {
                 padding: isLargeScreen ? '8px 12px' : '6px 10px',
                 borderRadius: '4px',
                 transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = exportHoverBg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               <FileUploadOutlined
@@ -293,7 +305,7 @@ export function renderBasicInstantUtilizationCombined(api) {
             chartSurface: spaceUtilLight ? 'light' : 'dark',
             enableUtilizationFooter: true,
           }}
-          chartLoaderHeight={showChartsTab ? 'clamp(200px, 36vh, 300px)' : '350px'}
+          chartLoaderHeight={showChartsTab ? 'clamp(140px, 26vh, 200px)' : '220px'}
         />
       }
       areaSection={

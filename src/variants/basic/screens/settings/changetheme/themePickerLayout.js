@@ -1,16 +1,22 @@
 /** Shared layout for Settings → Theme color-picker columns (visible gap between cards). */
 
+export const BASIC_THEME_PICKER_HEX = {
+  width: 175,
+  height: 200,
+  hexRadius: 7,
+};
+
 export const themePickerCardsGridSx = (columns = 3) => ({
   display: 'grid',
   width: '100%',
   alignItems: 'stretch',
-  columnGap: { xs: 2, md: 3 },
-  rowGap: { xs: 2, md: 3 },
+  columnGap: { xs: 1.5, md: 2 },
+  rowGap: { xs: 1.5, md: 2 },
   gridTemplateColumns: {
     xs: '1fr',
     md: columns === 2 ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
   },
-  margin: '1em',
+  margin: '0.5em 0.5em 0',
   boxSizing: 'border-box',
 });
 
@@ -31,7 +37,7 @@ export const themePickerCardColumnSx = {
 export const themePickerCardSurfaceSx = {
   backgroundColor: 'white',
   padding: '1em',
-  borderRadius: '1em',
+  borderRadius: '0.85em',
   width: '100%',
   flex: 1,
   display: 'flex',
@@ -44,8 +50,16 @@ export const themePickerTitleSpacerSx = {
   fontWeight: 'bold',
   fontSize: '1rem',
   color: 'text.primary',
-  mb: 1,
-  minHeight: 28,
-  lineHeight: 1.4,
+  mb: 0.5,
+  minHeight: 12,
+  lineHeight: 1.2,
   visibility: 'hidden',
+};
+
+export const themePickerActionsSx = {
+  mt: 'auto',
+  pt: 1.5,
+  minHeight: 36,
+  display: 'flex',
+  alignItems: 'center',
 };

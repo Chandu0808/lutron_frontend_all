@@ -124,11 +124,13 @@ export function useDashboardAreaTreeOrchestration({
       ...(selectAllContextExtras ?? {}),
     });
     dispatch(clearDataCache());
+    // setSelectedFloor clears selectedAreas in each dashboard slice. Commit the
+    // floor first so an explicit area-only selection remains in Redux.
+    dispatch(setSelectedFloor(resolution.redux.selectedFloor));
     dispatch(setSelectedAreas(resolution.redux.selectedAreas));
     dispatch(setSelectedFloorIds(resolution.redux.selectedFloorIds));
     dispatch(setSelectedGroups(resolution.redux.selectedGroups));
     dispatch(setSelectedGroupIds(resolution.redux.selectedGroupIds));
-    dispatch(setSelectedFloor(resolution.redux.selectedFloor));
     if (
       extraReduxActions?.setCustomWidgetFilters &&
       Object.prototype.hasOwnProperty.call(resolution.redux, 'customWidgetFilters')

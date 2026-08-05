@@ -3,12 +3,15 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { BaseUrl } from "../../../../BaseUrl";
 
 export function formatApiError(err) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.statusText ||
-    err?.message ||
-    "Request failed"
-  );
+  const data = err?.response?.data;
+  const detail = data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
+  }
+  if (typeof detail === "string") {
+    return detail;
+  }
+  return data?.message || err?.response?.statusText || err?.message || "Request failed";
 }
 
 // Thunk to fetch users with Bearer token
@@ -134,6 +137,9 @@ const usersSlice = createSlice({
     clearDeleteError: (state) => {
       state.deleteError = null;
     },
+    clearUpdateError: (state) => {
+      state.updateError = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -185,7 +191,7 @@ const usersSlice = createSlice({
   },
 });
 
-export const { clearDeleteError } = usersSlice.actions;
+export const { clearDeleteError, clearUpdateError } = usersSlice.actions;
 export default usersSlice.reducer;
 
 // Selectors so components can read exactly what they need:

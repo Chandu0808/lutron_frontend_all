@@ -37,6 +37,7 @@ export const SETTINGS_SIDEBAR_ITEM_ORDER = [
   "Floor",
   "Alerts",
   "Processors",
+  "Maintenance",
   "FOFP",
   "Help",
   "Manage Sensors",

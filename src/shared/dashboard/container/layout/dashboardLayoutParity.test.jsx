@@ -72,12 +72,45 @@ describe('DashboardLayoutRenderer parity', () => {
       />
     );
     expect(screen.getByTestId(expectedTestId)).toBeInTheDocument();
+    // First visit: only the active section is mounted (advanced keep-alive is lazy).
     const otherSections = ['section-overview', 'section-energy', 'section-charts', 'section-alerts'].filter(
       (id) => id !== expectedTestId
     );
     for (const id of otherSections) {
       expect(screen.queryByTestId(id)).not.toBeInTheDocument();
     }
+  });
+
+  it('advanced keep-alive leaves previously visited sections mounted but hidden', () => {
+    const { rerender } = render(
+      <DashboardLayoutRenderer
+        activeTab="energy"
+        variant="advanced"
+        sections={sections}
+        adapter={ADVANCED_DASHBOARD_LAYOUT_ADAPTER}
+      />
+    );
+    expect(screen.getByTestId('section-energy')).toBeInTheDocument();
+
+    rerender(
+      <DashboardLayoutRenderer
+        activeTab="charts"
+        variant="advanced"
+        sections={sections}
+        adapter={ADVANCED_DASHBOARD_LAYOUT_ADAPTER}
+      />
+    );
+    expect(screen.getByTestId('section-charts')).toBeInTheDocument();
+    expect(screen.getByTestId('section-energy')).toBeInTheDocument();
+    const energyKeepAlive = screen
+      .getByTestId('section-energy')
+      .closest('[data-dashboard-section-keep-alive]');
+    expect(energyKeepAlive).toHaveStyle({ visibility: 'hidden', position: 'absolute' });
+    const chartsKeepAlive = screen
+      .getByTestId('section-charts')
+      .closest('[data-dashboard-section-keep-alive]');
+    expect(chartsKeepAlive).toHaveStyle({ visibility: 'visible', position: 'absolute' });
+    expect(screen.queryByTestId('section-alerts')).not.toBeInTheDocument();
   });
 
   it('customized routes space-utilization tab to charts section content', () => {

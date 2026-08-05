@@ -30,8 +30,8 @@ const PLOT_EVENT_HANDLERS = {
 
 const BASIC_ENERGY_SLOT = {
   width: '100%',
-  minHeight: 540,
-  height: 540,
+  minHeight: 360,
+  height: 360,
   boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column',
@@ -83,6 +83,7 @@ export function PieChartCardShell({
   titleStyleOverride = {},
   plotStyleOverride = {},
   cardShellStyle = {},
+  cardHeaderStyle = {},
 }) {
   if (shellVariant === 'basic-energy') {
     const outerStyle = {
@@ -102,7 +103,7 @@ export function PieChartCardShell({
         <div style={outerStyle}>
           <div style={BASIC_HEADER_ROW}>
             <h3 style={titleStyle}>{title}</h3>
-            {exportControl}
+            <div style={{ position: 'relative' }}>{exportControl}</div>
           </div>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {LoaderComponent ? (
@@ -124,7 +125,7 @@ export function PieChartCardShell({
         <div style={outerStyle}>
           <div style={BASIC_HEADER_ROW}>
             <h3 style={titleStyle}>{title}</h3>
-            {exportControl}
+            <div style={{ position: 'relative' }}>{exportControl}</div>
           </div>
           <div
             style={{
@@ -145,7 +146,7 @@ export function PieChartCardShell({
       <div style={outerStyle}>
         <div style={BASIC_HEADER_ROW}>
           <h3 style={titleStyle}>{title}</h3>
-          {exportControl}
+          <div style={{ position: 'relative' }}>{exportControl}</div>
         </div>
         <div
           style={{ ...plotStyle, padding: '24px 24px 16px', position: 'relative' }}
@@ -238,13 +239,24 @@ export function PieChartCardShell({
 
   // customized-builtin
   const cardStyle = { ...cardShellStyle, ...outerStyleOverride };
-  const headerStyle = titleStyleOverride;
+  const headerRowStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px',
+    ...cardHeaderStyle,
+  };
+  const titleTextStyle = {
+    margin: 0,
+    color: theme.header,
+    ...titleStyleOverride,
+  };
 
   if (status === 'loading') {
     return (
       <div style={cardStyle}>
-        <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
+        <div style={headerRowStyle}>
+          <h3 style={titleTextStyle}>{title}</h3>
           <div style={{ position: 'relative' }}>{exportControl}</div>
         </div>
         {LoaderComponent ? (
@@ -257,7 +269,7 @@ export function PieChartCardShell({
   if (status === 'error') {
     return (
       <div style={cardStyle}>
-        <h3 style={{ margin: 0, ...headerStyle }}>{title}</h3>
+        <h3 style={titleTextStyle}>{title}</h3>
         <div
           style={{
             ...plotStyleOverride,
@@ -276,8 +288,8 @@ export function PieChartCardShell({
     const message = status === 'zero-segments' ? zeroSegmentsMessage : emptyMessage;
     return (
       <div style={cardStyle}>
-        <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
+        <div style={{ ...headerRowStyle, marginBottom: '10px' }}>
+          <h3 style={titleTextStyle}>{title}</h3>
           <div style={{ position: 'relative' }}>{exportControl}</div>
         </div>
         <div style={plotStyleOverride}>{message}</div>
@@ -287,8 +299,8 @@ export function PieChartCardShell({
 
   return (
     <div style={cardStyle}>
-      <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
+      <div style={headerRowStyle}>
+        <h3 style={titleTextStyle}>{title}</h3>
         <div style={{ position: 'relative' }}>{exportControl}</div>
       </div>
       <div style={plotStyleOverride} {...PLOT_EVENT_HANDLERS}>

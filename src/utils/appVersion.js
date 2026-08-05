@@ -1,5 +1,5 @@
 /** Footer version label — shared by basic, advanced, and customized variants. */
-export const APP_DISPLAY_VERSION = '26.06.01';
+export const APP_DISPLAY_VERSION = '26.07.44';
 
 /** Footer “Version …” text size (px) — all variants. */
 export const FOOTER_VERSION_FONT_SIZE = 14;

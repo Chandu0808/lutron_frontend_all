@@ -4,7 +4,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import HexColorPicker, { HEX_PICKER_DEFAULT_WHITE_SWATCH } from '../../../utils/HexColorPicker';
 import '../../../styles/HexColorPicker.css';
-import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
+import {
+    BASIC_MANAGE_AREA_GROUPS_PATH,
+} from '../../../utils/basicSettingsPaths';
+import { getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import {
     fetchApplicationTheme,
     fetchBackgroundImage,
@@ -20,6 +23,12 @@ import { Snackbar, Alert } from '@mui/material';
 import { ThemeContext } from '../theme/ThemeContext';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
+import {
+    dispatchFetchApplicationThemeOnce,
+    dispatchFetchBackgroundImageOnce,
+    dispatchFetchClientOnce,
+    dispatchFetchHeatMapThemeOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
 import {
     DEFAULT_APP_BACKGROUND,
     DEFAULT_APP_CONTENT,
@@ -99,7 +108,10 @@ const ThemeChange = () => {
     const [themePickerKey, setThemePickerKey] = useState(0);
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
-        dispatch(getLutronDataClient());
+        dispatchFetchClientOnce(dispatch, getLutronDataClient);
+    }, [dispatch]);
+
+    useEffect(() => {
         setDynamicButtonColor(themeColorMap?.Button || '#232323');
     }, [themeColorMap?.Button]);
 
@@ -114,13 +126,13 @@ const ThemeChange = () => {
     useEffect(() => {
         // Only fetch if not already loaded
         if (!appTheme || !appTheme.application_theme) {
-            dispatch(fetchApplicationTheme());
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
         }
         if (!heatMapTheme || !heatMapTheme.application_theme) {
-            dispatch(fetchHeatMapTheme());
+            dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
         }
         if (!apibgImage || !apibgImage.background_image) {
-            dispatch(fetchBackgroundImage());
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
     useEffect(() => {
@@ -238,19 +250,6 @@ const ThemeChange = () => {
             // Optionally handle error feedback here
         }
     };
-    const sidebarItemPaths = {
-        "Home": "/main",
-        "Alerts": "/alerts",
-        "Email Server": "/email-server/",
-        "Theme": "/theme-change",
-        "User Management": "/users",
-        "Area Size for Energy": "/area-size-load",
-        "Area Groups": "/manage-area-groups",
-        "Widgets": "/rename-widget/",
-        "Floors": "/floor",
-        "Processors": "/processors",
-        "Help": "/create-help/",
-    };
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
     const fileInputRef = React.useRef();
@@ -311,7 +310,7 @@ const ThemeChange = () => {
 
     useEffect(() => {
         if (!canAccessTheme) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(BASIC_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessTheme, navigate]);
 

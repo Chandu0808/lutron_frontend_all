@@ -93,7 +93,8 @@ function ConsumptionPieChartAdapterInner({
         LoaderComponent={ChartLoader}
         exportControl={exportControl}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
       />
     );
   }
@@ -107,7 +108,8 @@ function ConsumptionPieChartAdapterInner({
         title={title}
         errorMessage={fetchError}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
         plotStyleOverride={plotStyleOverride}
       />
     );
@@ -123,7 +125,8 @@ function ConsumptionPieChartAdapterInner({
         emptyMessage={`No data available for ${title}`}
         exportControl={exportControl}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
         plotStyleOverride={plotStyleOverride}
       />
     );
@@ -139,7 +142,8 @@ function ConsumptionPieChartAdapterInner({
         zeroSegmentsMessage={ZERO_SEGMENTS_MESSAGE}
         exportControl={exportControl}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
         plotStyleOverride={plotStyleOverride}
       />
     );
@@ -153,7 +157,8 @@ function ConsumptionPieChartAdapterInner({
       title={title}
       exportControl={exportControl}
       outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-      titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+      titleStyleOverride={titleStyleOverride}
+      cardHeaderStyle={cardHeaderStyle}
       plotStyleOverride={plotStyleOverride}
     >
       <ConsumptionPieChartView

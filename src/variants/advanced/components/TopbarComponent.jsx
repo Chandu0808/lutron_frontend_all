@@ -1,5 +1,5 @@
 // src/components/TopbarComponent.jsx
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -23,6 +23,7 @@ import {
   buildAppPageBackground,
   resolveApplicationNavbarBackground,
 } from "../utils/themePageBackground";
+import { ADVANCED_VIEWPORT_GUTTER_PX } from "../utils/advancedViewportGutters";
 import { isTopbarNavItemActive, isSettingsAppRoute } from "../utils/topbarNavActive";
 import SharedSidebar from "../../../shared/layout/app/SharedSidebar";
 import { useSidebarDrawer } from "../../../shared/layout/app/useSidebarDrawer";
@@ -47,9 +48,19 @@ import {
 import { getLutronDataClient, homeDataClient } from "../redux/slice/home/homeSlice";
 import { fetchApplicationTheme, selectApplicationTheme } from "../redux/slice/theme/themeSlice";
 import {
+  dispatchFetchApplicationThemeOnce,
+  dispatchFetchClientOnce,
+  dispatchFetchProfileOnce,
+} from "../../../shared/utils/bootstrapFetchGuards";
+import {
   readUiVariantRaw,
   restoreUiVariantAfterStorageClear,
 } from "../../../utils/uiVariant";
+import {
+  snapshotAllVariantWidgetVisibilityForLogout,
+  restoreAllVariantWidgetVisibilityAfterStorageClear,
+} from "../../../shared/dashboard/utils/widgetVisibilityLogoutPreserve";
+import { ADVANCED_SETTINGS_HOME_PATH } from "../utils/advancedSettingsPaths";
 
 export default function TopbarComponent() {
   const theme = useTheme();
@@ -63,16 +74,19 @@ export default function TopbarComponent() {
   const clientData = useSelector(homeDataClient);
   const appTheme = useSelector(selectApplicationTheme);
 
-  const logoUrl = clientData?.logo_image?.startsWith("http")
-    ? clientData.logo_image
-    : process.env.REACT_APP_API_URL
-      ? process.env.REACT_APP_API_URL + clientData.logo_image
-      : clientData.logo_image;
+  const ADVANCED_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+  const logoUrl = (() => {
+    const logoImage = clientData?.logo_image;
+    if (!logoImage) return null;
+    return logoImage.startsWith("http")
+      ? logoImage
+      : `${ADVANCED_API_URL}${logoImage}`;
+  })();
 
   useEffect(() => {
-    // Only fetch theme if not already loaded
+    // Only fetch theme if not already loaded (join SharedMainLayout in-flight)
     if (!appTheme || !appTheme.application_theme) {
-      dispatch(fetchApplicationTheme());
+      dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
     }
   }, [dispatch, appTheme]);
 
@@ -80,7 +94,7 @@ export default function TopbarComponent() {
     // Don't fetch profile if logout is in progress or if there's no valid token
     const validToken = getValidToken();
     if (!profile && !profileLoading && !logoutLoading && validToken) {
-      dispatch(fetchProfile());
+      dispatchFetchProfileOnce(dispatch, fetchProfile);
     }
   }, [dispatch, profile, profileLoading, logoutLoading]);
 
@@ -90,15 +104,9 @@ export default function TopbarComponent() {
     // Don't fetch during logout process
     const validToken = getValidToken();
     if (validToken && profile && !clientData?.name && !logoutLoading) {
-      // Only fetch if we haven't tried recently (prevent multiple failed calls)
-      const lastFetchTime = sessionStorage.getItem('clientDataFetchTime');
-      const now = Date.now();
-      if (!lastFetchTime || (now - parseInt(lastFetchTime)) > 60000) { // Only retry after 1 minute
-        sessionStorage.setItem('clientDataFetchTime', now.toString());
-        dispatch(getLutronDataClient()).catch(() => {
-          // Silently handle errors - endpoint might not be available
-        });
-      }
+      dispatchFetchClientOnce(dispatch, getLutronDataClient).catch(() => {
+        // Silently handle errors - endpoint might not be available
+      });
     }
   }, [dispatch, profile, clientData?.name, logoutLoading]);
 
@@ -106,16 +114,7 @@ export default function TopbarComponent() {
   const roleFromStorage = localStorage.getItem('role');
   const currentRole = roleFromProfile || roleFromStorage;
   // Determine settings path based on user role
-  const getSettingsPath = (role) => {
-    if (role === 'Superadmin') {
-      return '/main'; // Home component
-    } else if (role === 'Admin') {
-      return '/main'; // Manage Area Groups component
-    } else {
-      // Operator - redirect to first available option
-      return '/main'; // Manage Area Groups component
-    }
-  };
+  const getSettingsPath = () => ADVANCED_SETTINGS_HOME_PATH;
 
   const settingsPath = getSettingsPath(currentRole);
 
@@ -182,6 +181,9 @@ export default function TopbarComponent() {
       return;
     }
 
+    // Preserve all variant widget prefs across logout — clearing only restored
+    // Advanced before, so Basic/Customized selections were wiped (and vice versa).
+    const widgetVisibilitySnapshot = snapshotAllVariantWidgetVisibilityForLogout();
     const uiVariantRaw = readUiVariantRaw();
 
     try {
@@ -196,16 +198,17 @@ export default function TopbarComponent() {
       // Clear local storage after successful logout API call
       localStorage.clear();
       restoreUiVariantAfterStorageClear(uiVariantRaw);
+      restoreAllVariantWidgetVisibilityAfterStorageClear(widgetVisibilitySnapshot);
       sessionStorage.clear();
 
       // Navigate to login page
       navigate("/", { replace: true });
-
     } catch (error) {
       // Even if logout API fails, clear local state and redirect for security
       console.warn("Logout error:", error);
       localStorage.clear();
       restoreUiVariantAfterStorageClear(uiVariantRaw);
+      restoreAllVariantWidgetVisibilityAfterStorageClear(widgetVisibilitySnapshot);
       sessionStorage.clear();
       navigate("/", { replace: true });
     }
@@ -223,12 +226,8 @@ export default function TopbarComponent() {
     { label: "Help", path: "/get-help" },
   ];
 
-  // Sliding indicator pill for top navbar tabs (same feel as dashboard Energy/Space/Alerts)
-  const navTabsContainerRef = useRef(null);
+  // Top navbar tabs — keyboard roving focus (no sliding pill on active tab)
   const navTabRefs = useRef({});
-  const prevActiveNavLabelRef = useRef(null);
-  const [navIndicator, setNavIndicator] = useState({ left: 0, width: 0, ready: false });
-  const [navIndicatorAnimate, setNavIndicatorAnimate] = useState(false);
 
   const getActiveNavLabel = () => {
     for (const item of menuItems) {
@@ -332,44 +331,6 @@ export default function TopbarComponent() {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [isMdDown, activeNavLabel, navItemKeys, location.pathname, menuItems, navigate, settingsPath]);
 
-  useLayoutEffect(() => {
-    if (isMdDown) return;
-    if (!activeNavLabel) return;
-
-    const previousLabel = prevActiveNavLabelRef.current;
-    const shouldAnimate =
-      previousLabel != null && previousLabel !== activeNavLabel;
-
-    const measure = () => {
-      const containerEl = navTabsContainerRef.current;
-      const activeEl = navTabRefs.current[activeNavLabel];
-      if (!containerEl || !activeEl) return false;
-      const width = activeEl.offsetWidth;
-      if (width <= 0) return false;
-      setNavIndicatorAnimate(shouldAnimate);
-      setNavIndicator({ left: activeEl.offsetLeft, width, ready: true });
-      prevActiveNavLabelRef.current = activeNavLabel;
-      return true;
-    };
-
-    if (measure()) return;
-    const rafId = requestAnimationFrame(() => { measure(); });
-    return () => cancelAnimationFrame(rafId);
-  }, [activeNavLabel, isMdDown]);
-
-  useEffect(() => {
-    if (isMdDown) return;
-    const handleResize = () => {
-      if (!activeNavLabel) return;
-      const activeEl = navTabRefs.current[activeNavLabel];
-      if (!activeEl) return;
-      setNavIndicatorAnimate(false);
-      setNavIndicator({ left: activeEl.offsetLeft, width: activeEl.offsetWidth, ready: true });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [activeNavLabel, isMdDown]);
-
   return (
     <Box
       key={`topbar-${clientData?.name || "default"}`}
@@ -406,19 +367,7 @@ export default function TopbarComponent() {
           },
           mx: "auto",
           width: "100%",
-          px: {
-            xs: 2,
-            sm: 3,
-            md: 4,
-            lg: 5,
-            xl: 6,
-            xxl: 8,
-            "2xl": 10,
-            "3xl": 12,
-            "4xl": 16,
-            "5xl": 20,
-            "6xl": 24
-          },
+          px: ADVANCED_VIEWPORT_GUTTER_PX,
         }}
       >
         <AppBar
@@ -484,15 +433,27 @@ export default function TopbarComponent() {
               overflow: "hidden",
             }}
           >
-            {/* Logo - Flex 1 for perfect centering */}
+            {/* Logo + hamburger (tablet) — left cluster */}
             <Box sx={{
               display: "flex",
               alignItems: "center",
-              flex: 1,
+              flex: isMdDown ? "0 0 auto" : 1,
               justifyContent: "flex-start",
               overflow: "hidden",
-              padding: "15px"
+              padding: "15px",
+              gap: 0.5,
             }}>
+              {isMdDown && (
+                <IconButton
+                  edge="start"
+                  color="inherit"
+                  aria-label="menu"
+                  onClick={openDrawer}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <MenuIcon />
+                </IconButton>
+              )}
               {clientData?.logo_image && (
                 <RouterLink to="/lutron" style={{ display: "flex", alignItems: "center", width: "100%" }}>
                   <img
@@ -504,7 +465,6 @@ export default function TopbarComponent() {
                       maxWidth: "100%",
                       objectFit: "contain",
                       cursor: "pointer",
-                      mixBlendMode: "multiply",
                       backgroundColor: "transparent"
                     }}
                   />
@@ -515,7 +475,6 @@ export default function TopbarComponent() {
             {/* Center menu - Desktop only, single line */}
             {!isMdDown && (
               <Box
-                ref={navTabsContainerRef}
                 className="topbar-main-nav"
                 role="tablist"
                 aria-label="Main navigation"
@@ -533,25 +492,6 @@ export default function TopbarComponent() {
                   px: 1,
                 }}
               >
-                <Box
-                  aria-hidden="true"
-                  sx={{
-                    position: "absolute",
-                    top: { xs: 6, md: 8 },
-                    bottom: { xs: 6, md: 8 },
-                    left: `${navIndicator.left}px`,
-                    width: `${navIndicator.width}px`,
-                    backgroundColor: "var(--topbar-nav-pill-bg, rgba(214, 221, 232, 0.95))",
-                    boxShadow: "var(--topbar-nav-pill-shadow, 0 2px 10px rgba(0, 0, 0, 0.12))",
-                    borderRadius: "999px",
-                    opacity: navIndicator.ready ? 0.95 : 0,
-                    pointerEvents: "none",
-                    zIndex: 0,
-                    transition: navIndicator.ready && navIndicatorAnimate
-                      ? "left 0.8s cubic-bezier(0.4, 0, 0.2, 1), width 0.8s cubic-bezier(0.4, 0, 0.2, 1)"
-                      : "none",
-                  }}
-                />
                 {menuItems.map((item) => {
                   const isActive = isTopbarNavItemActive(
                     item,
@@ -572,10 +512,8 @@ export default function TopbarComponent() {
                       ref={(el) => { navTabRefs.current[item.label] = el; }}
                       onKeyDown={handleNavTabKeyDown}
                       sx={{
-                        color: isActive
-                          ? "var(--topbar-nav-active-text, #1a2a42)"
-                          : "var(--topbar-nav-inactive-text, #ffffff)",
-                        fontWeight: 500,
+                        color: "var(--topbar-nav-inactive-text, #ffffff)",
+                        fontWeight: isActive ? 600 : 500,
                         fontSize: {
                           xs: 11,
                           sm: 12,
@@ -602,9 +540,7 @@ export default function TopbarComponent() {
                           width: 5,
                           height: 5,
                           borderRadius: "50%",
-                          backgroundColor: isActive
-                            ? "var(--topbar-nav-active-text, #1a2a42)"
-                            : "var(--topbar-nav-inactive-text, #ffffff)",
+                          backgroundColor: "var(--topbar-nav-inactive-text, #ffffff)",
                           opacity: isActive ? 1 : 0,
                           transition: "opacity 0.2s ease",
                           pointerEvents: "none",
@@ -660,20 +596,9 @@ export default function TopbarComponent() {
               </Box>
             )}
 
-            {/* Mobile menu - Only on very small screens */}
-            {isMdDown && (
-              <IconButton
-                edge="start"
-                color="inherit"
-                aria-label="menu"
-                onClick={openDrawer}
-                sx={{ ml: 1, mr: 1 }}
-              >
-                <MenuIcon />
-              </IconButton>
-            )}
+            {/* Mobile menu moved next to logo (tablet) */}
 
-            {/* Right profile - Flex 1 for perfect centering */}
+            {/* Right profile */}
             <Box sx={{
               display: "flex",
               alignItems: "center",
@@ -844,9 +769,9 @@ export default function TopbarComponent() {
                       color: "var(--topbar-profile-menu-text)",
                       borderRadius: "8px",
                       boxShadow: "var(--premium-card-shadow, 0 4px 12px rgba(0, 0, 0, 0.15))",
-                      width: `${menuWidth || 0}px`,
-                      minWidth: `${menuWidth || 0}px`,
-                      maxWidth: `${menuWidth || 0}px`,
+                      width: "max-content",
+                      minWidth: `${Math.max(menuWidth || 0, 160)}px`,
+                      maxWidth: "none",
                       mt: 0,
                       overflow: "hidden",
                       border: "1px solid var(--topbar-profile-menu-border)",
@@ -884,6 +809,7 @@ export default function TopbarComponent() {
                     color: "var(--topbar-profile-menu-text)",
                     fontWeight: 500,
                     justifyContent: "center",
+                    whiteSpace: "nowrap",
                     borderBottom: "1px solid var(--topbar-profile-menu-border)",
                     py: 1.5,
                     minHeight: "48px",
@@ -903,6 +829,7 @@ export default function TopbarComponent() {
                       mr: 1.5,
                       fontSize: 18,
                       color: "var(--topbar-profile-menu-icon)",
+                      flexShrink: 0,
                     }}
                   />
                   Reset Password
@@ -920,6 +847,7 @@ export default function TopbarComponent() {
                     color: logoutLoading ? "#9ca3af" : "#ef4444",
                     fontWeight: 600,
                     justifyContent: "center",
+                    whiteSpace: "nowrap",
                     py: 1.5,
                     minHeight: "48px",
                     opacity: logoutLoading ? 0.7 : 1,

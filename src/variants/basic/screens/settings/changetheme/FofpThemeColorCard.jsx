@@ -14,6 +14,7 @@ import {
     resolveFofpThemePickerColor,
 } from '../../heatmap/fofpColorUtils';
 import {
+    BASIC_THEME_PICKER_HEX,
     themePickerCardCellSx,
     themePickerCardColumnSx,
     themePickerCardSurfaceSx,
@@ -66,8 +67,8 @@ const FofpThemeColorCard = ({
 
     const actionsSx = themePickerActionsSx ?? {
         mt: 'auto',
-        pt: 2,
-        minHeight: 40,
+        pt: 1,
+        minHeight: 32,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -107,9 +108,9 @@ const FofpThemeColorCard = ({
                         selectedColor={selectedFofpColor}
                         setSelectedColor={setSelectedFofpColor}
                         activeTarget={activeFofpTab}
-                        width={200}
-                        height={220}
-                        hexRadius={8}
+                        width={BASIC_THEME_PICKER_HEX.width}
+                        height={BASIC_THEME_PICKER_HEX.height}
+                        hexRadius={BASIC_THEME_PICKER_HEX.hexRadius}
                     />
                     <Box sx={actionsSx}>
                         <Button

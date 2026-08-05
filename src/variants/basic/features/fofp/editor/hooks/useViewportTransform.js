@@ -76,14 +76,17 @@ export const useViewportTransform = ({
       });
       transformRef.current = constrained;
 
+      // Apply immediately so Fit / + / − and initial fit survive React re-renders.
+      const content = contentRef.current;
+      if (content) {
+        const { x, y, scale } = constrained;
+        content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+      }
+
       if (rafRef.current != null) return;
       rafRef.current = window.requestAnimationFrame(() => {
         rafRef.current = null;
-        const content = contentRef.current;
-        if (!content) return;
-        const { x, y, scale } = transformRef.current;
-        content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
-        notifyZoomChange(scale);
+        notifyZoomChange(transformRef.current.scale);
       });
     },
     [constrainTransform, contentRef, notifyZoomChange]

@@ -42,12 +42,15 @@ export const advancedSettingsLayoutAdapter = {
           ctx.settingsSidebarMdUp
         )
       : {}),
+    borderRight: { xs: "none", md: "none" },
     position: { xs: "static", md: "sticky" },
     top: { xs: "auto", md: "20px" },
     alignSelf: "flex-start",
   }),
   getContentOuterSx: (ctx) => ({
     order: { xs: 2, md: 2 },
+    alignSelf: { xs: "stretch", md: "flex-start" },
+    width: "100%",
     backgroundColor: ctx.useThemedSidebarChrome
       ? "var(--settings-panel-outer-bg, #f5e8bc)"
       : ctx.isDefaultWhiteTheme
@@ -65,13 +68,14 @@ export const advancedSettingsLayoutAdapter = {
     borderRadius: { xs: "4px", sm: "6px", md: "8px", lg: "10px" },
     p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
     width: "100%",
-    flex: 1,
-    minHeight: { xs: "auto", md: "calc(100vh - 120px)" },
+    flex: "0 1 auto",
+    minHeight: "auto",
     display: "flex",
     flexDirection: "column",
-    overflow: { xs: "auto", md: "hidden" },
+    overflow: "visible",
     minWidth: 0,
     maxWidth: "100%",
+    boxSizing: "border-box",
   }),
   getSidebarClassName: (ctx) =>
     ctx.useThemedSidebarChrome ? "settings-sidebar-column" : undefined,

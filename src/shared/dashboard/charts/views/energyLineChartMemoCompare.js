@@ -6,8 +6,10 @@ export function energyLineChartPropsAreEqual(prevProps, nextProps) {
   if (prevProps.title !== nextProps.title) return false;
   if (prevProps.isLoading !== nextProps.isLoading) return false;
   if (prevProps.colors !== nextProps.colors) return false;
+  if (prevProps.energyMode !== nextProps.energyMode) return false;
   if (prevProps.onEmail !== nextProps.onEmail) return false;
   if (prevProps.onDownload !== nextProps.onDownload) return false;
+  if (prevProps.exportControl !== nextProps.exportControl) return false;
 
   if ('chartSurface' in prevProps || 'chartSurface' in nextProps) {
     if (prevProps.chartSurface !== nextProps.chartSurface) return false;

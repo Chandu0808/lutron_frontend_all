@@ -114,9 +114,12 @@ describe('dashboard adapter date options parity', () => {
 });
 
 describe('dashboard adapter export options parity', () => {
-  it('basic adapter uses basic outside-click profile and group export key', () => {
+  it('basic adapter uses space-aligned outside-click profile and group export key', () => {
     const result = basicDashboardContainerAdapter.resolveExportsOptions({ ...baseCtx });
-    expect(result.outsideClickProfile).toBe(EXPORT_MENU_OUTSIDE_CLICK_PROFILES.basic);
+    expect(result.outsideClickProfile).toEqual({
+      buttonSelector: 'button[data-export-menu]',
+      panelSelector: '[data-export-dropdown-panel]',
+    });
     expect(result.keys.consumption).toEqual(DEFAULT_CONSUMPTION_EXPORT_KEYS);
     expect(result.keys.totalConsumptionByGroup.loadingPrefix).toBe(
       BASIC_TOTAL_CONSUMPTION_BY_GROUP_EXPORT_KEY
@@ -141,7 +144,7 @@ describe('dashboard adapter export options parity', () => {
 
   it('customized adapter enables custom graph export', () => {
     const result = customizedDashboardContainerAdapter.resolveExportsOptions({ ...baseCtx });
-    expect(result.outsideClickProfile).toBe(EXPORT_MENU_OUTSIDE_CLICK_PROFILES.customizedLegacy);
+    expect(result.outsideClickProfile).toBe(EXPORT_MENU_OUTSIDE_CLICK_PROFILES.basic);
     expect(result.enableCustomGraphExport).toBe(true);
   });
 

@@ -1,6 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import {
+  dispatchFetchFloorsOnce,
+  dispatchFetchApplicationThemeOnce,
+  dispatchFetchHeatMapThemeOnce,
+} from "../../../../shared/utils/bootstrapFetchGuards";
 import {
   Box, CircularProgress, IconButton, Typography, Slider, Badge, Button, useMediaQuery, useTheme,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert,
@@ -12,7 +17,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import { configurePdfJsWorker, buildPdfDocumentFile } from "../../../../shared/pdf/floorPlanPdf";
 import { getPolygonRings, flattenAreaCoords } from '../../utils/floorplanCoordinates';
 import {
   fetchFloorMapData,
@@ -35,6 +41,7 @@ import {
   renameArea,
   refreshAllHeatmapData,
   selectHeatmapLoading,
+  selectHeatmapError,
   optimisticallyUpdateAreaStatus,
   selectHeatmapSearchTerm, // added
 } from '../../redux/slice/settingsslice/heatmap/HeatmapSlice';
@@ -65,6 +72,7 @@ import {
   getLightLevelFillColor,
   resolveLightModeFill,
 } from './heatmapLightStyles';
+import { isMapProcessorUnreachable } from '../../../../shared/heatmap/processorReachable';
 import {
   areaRenameDialogActionsSx,
   areaRenameDialogContentSx,
@@ -77,17 +85,50 @@ import {
   isFofpZonePanelHighlighted,
 } from './fofpZoneInteraction';
 import { fetchFofpConfig, selectFofpConfig } from '../../redux/slice/fofp/fofpSlice';
+import {
+  ZONE_CONTROL_CARD_WIDTH_SX,
+  ZONE_CONTROL_MAIN_PANEL_SX,
+  ZONE_CONTROL_FADE_DELAY_COLUMN_SX,
+  ZONE_CONTROL_SLIDER_WRAP_SX,
+  HEATMAP_ZONES_SECTION_SX,
+  HEATMAP_ZONES_LIST_SCROLL_SX,
+  HEATMAP_ZONES_LIST_PAGINATED_SX,
+  CUSTOMIZED_HEATMAP_SIDEBAR_SX,
+  CUSTOMIZED_HEATMAP_SIDEBAR_STICKY_HEADER_SX,
+  CUSTOMIZED_HEATMAP_SIDEBAR_BODY_SX,
+} from './zoneControlCardLayout';
+import {
+  buildShadesUpdatePayload,
+  parseShadeLevel,
+  resolveShadeZoneId,
+} from '../../../../utils/heatmapSidebarUtils';
+import HeatmapShadesPanel from '../../../../components/heatmap/HeatmapShadesPanel';
+import { normalizeHeatmapColor } from '../../../../shared/utils/normalizeHeatmapColor';
 
 
 const isWhitening = (type) => ['whitening', 'white tune', 'whitetune', 'white_tune', 'White Tune', 'WhiteTune'].includes((type || '').toLowerCase());
 const isDimmed = (type) => (type || '').toLowerCase() === 'dimmed';
 const isSwitched = (type) => (type || '').toLowerCase() === 'switched';
 
+/** Sidebar zone list: always paginate 2 zones per page when more are available. */
+const SIDEBAR_ZONES_PER_PAGE = 2;
+
+const buildSidebarZonesToShow = (zones) => {
+  const list = zones || [];
+  const whiteTuneZones = list.filter((z) => isWhitening(z.type));
+  const dimmedZones = list.filter((z) => isDimmed(z.type));
+  const switchedZones = list.filter((z) => isSwitched(z.type));
+  if (whiteTuneZones.length > 0 || dimmedZones.length > 0) {
+    return [...whiteTuneZones, ...dimmedZones];
+  }
+  return switchedZones;
+};
+
 
 // Add the missing TOP_PADDING constant
 const TOP_PADDING = 60; // Adjust this value based on your header height
 
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+configurePdfJsWorker();
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (txt) =>
@@ -117,6 +158,7 @@ const HeatMap = () => {
   const areaStatusLoading = useSelector(selectAreaStatusLoading);
   const areaStatusError = useSelector(selectAreaStatusError);
   const heatmapLoading = useSelector(selectHeatmapLoading);
+  const heatmapError = useSelector(selectHeatmapError);
   const searchTerm = useSelector(selectHeatmapSearchTerm); // added
   const activeAlerts = useSelector(selectAlerts); // added for alert indicators
 
@@ -341,12 +383,10 @@ const HeatMap = () => {
     setContentBBox(null);
   }, [pdfUrl]);
 
-  // Ensure floors are loaded
+  // Ensure floors are loaded (once-guarded)
   useEffect(() => {
-    if (!floors || floors.length === 0) {
-      dispatch(fetchFloors());
-    }
-  }, [dispatch, floors]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   // Fetch active alerts on component mount
   useEffect(() => {
@@ -375,65 +415,31 @@ const HeatMap = () => {
   };
 
   const ZONES_PER_PAGE = getZonesPerPage();
-  const SHADES_PER_PAGE = isMobile ? 2 : isTablet ? 3 : 4;
-
-  const [shadesPage, setShadesPage] = useState(0);
 
   const shades = areaStatus?.zones?.filter(z => (z.type || '').toLowerCase() === 'shade') || [];
-  const pagedShades = shades.slice(shadesPage * SHADES_PER_PAGE, (shadesPage + 1) * SHADES_PER_PAGE);
 
   //heatmap api calling
   const heatMapTheme = useSelector(selectHeatMapTheme);
-  const normalizeColor = (color) => {
-    if (!color) {
-      return '#e88330'; // Default fallback
-    }
-
-    if (typeof color === 'string' && color.startsWith('hsl')) {
-      const [h, s, l] = color.match(/\d+/g).map(Number);
-      const hexColor = hslToHex(h, s, l);
-      return hexColor;
-    }
-
-    // Ensure it's a valid hex color
-    if (typeof color === 'string' && color.startsWith('#')) {
-      return color;
-    }
-
-    return '#e88330'; // Default fallback
-  };
-
-  const hslToHex = (h, s, l) => {
-    s /= 100;
-    l /= 100;
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-    const m = l - c / 2;
-    let r, g, b;
-    if (0 <= h && h < 60) [r, g, b] = [c, x, 0];
-    else if (60 <= h && h < 120) [r, g, b] = [x, c, 0];
-    else if (120 <= h && h < 180) [r, g, b] = [0, c, x];
-    else if (180 <= h && h < 240) [r, g, b] = [0, x, c];
-    else if (240 <= h && h < 300) [r, g, b] = [x, 0, c];
-    else[r, g, b] = [c, 0, x];
-    const toHex = n => {
-      const hex = Math.round((n + m) * 255).toString(16);
-      return hex.length === 1 ? '0' + hex : hex;
-    };
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-  };
-  const lightColor = normalizeColor(heatMapTheme?.application_theme?.light || '#f2ff00');
-  const occupancyColor = normalizeColor(heatMapTheme?.application_theme?.occupancy || '#ea3ebf');
-  const energyBaseColor = normalizeColor(heatMapTheme?.application_theme?.energy || '#a71ee6');
+  const lightColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.light || '#f2ff00');
+  const occupancyColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.occupancy || '#ea3ebf');
+  const energyBaseColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.energy || '#a71ee6');
 
   // Monitor theme changes
   useEffect(() => {
     // Theme change handling
   }, [heatMapTheme, lightColor, occupancyColor, energyBaseColor]);
   useEffect(() => {
-    dispatch(fetchHeatMapTheme());
-    dispatch(fetchApplicationTheme());
+    dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
+    dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
   }, [dispatch]);
+
+  const lastFloorMapFloorIdRef = useRef(null);
+  const lastAreaStatusSnapshotRef = useRef({
+    areaId: null,
+    light: null,
+    occ: null,
+    scene: null,
+  });
 
   const applyButtonSx = {
     background: '#222',
@@ -475,82 +481,55 @@ const HeatMap = () => {
     return Math.max(sw, sh) + 0.01;
   };
 
+  // Effect A — floor change only (do not re-hit light_status on mode switch)
   useEffect(() => {
     if (!selectedFloorId) return;
+    if (lastFloorMapFloorIdRef.current === selectedFloorId) return;
+    lastFloorMapFloorIdRef.current = selectedFloorId;
+    lastAreaStatusSnapshotRef.current = {
+      areaId: null,
+      light: null,
+      occ: null,
+      scene: null,
+    };
 
     setPdfLoaded(false);
     setPdfLoading(true);
     setFilteredAreas([]);
+    setHasFit(false);
 
-    // Always fetch base floor map data first (includes PDF and coordinates)
     dispatch(fetchFloorMapData({ floorId: selectedFloorId }))
-      .then(() => {
-        // Fetch boundary values for all display modes to enable proper zoom fit-to-window
-        BaseUrl.get(`/floor/light_status?floor_id=${selectedFloorId}`)
-          .then(response => {
-            if (response.data.status === 'success' && response.data.boundary_values) {
-              setBoundaryValues(response.data.boundary_values);
-            } else {
-              setBoundaryValues(null);
-            }
-          })
-          .catch((error) => {
-            // Silently handle expected errors:
-            // - 403 Forbidden (permission denied for operators)
-            // - 401 Unauthorized (authentication issues)
-            // - "No valid authentication token" (token expired or missing)
-            const isExpectedError =
-              error.response?.status === 403 ||
-              error.response?.status === 401 ||
-              error.message?.includes('authentication token') ||
-              error.message?.includes('No valid authentication token');
-
-            // Only log unexpected errors in development
-            if (!isExpectedError && process.env.NODE_ENV === 'development') {
-              console.warn('Failed to fetch boundary values:', error.message);
-            }
-            setBoundaryValues(null);
-          });
-
-        // Then fetch mode-specific data
-        if (displayMode === "Light") {
-          setPdfLoading(false);
-        } else if (displayMode === "Occupancy") {
-          dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }))
-            .then(() => {
-              setPdfLoading(false);
-            })
-            .catch((error) => {
-              setPdfLoading(false);
-            });
-        } else if (displayMode === "Energy") {
-          dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }))
-            .then(() => {
-              setPdfLoading(false);
-            })
-            .catch((error) => {
-              setPdfLoading(false);
-            });
+      .then((action) => {
+        const bv = action?.payload?.boundary_values;
+        if (action?.meta?.requestStatus === 'fulfilled' && bv) {
+          setBoundaryValues(bv);
+        } else {
+          setBoundaryValues(null);
         }
+        setPdfLoading(false);
       })
-      .catch((error) => {
+      .catch(() => {
         setPdfLoading(false);
       });
+  }, [dispatch, selectedFloorId]);
 
-    setHasFit(false);
+  // Effect B — mode-specific data only (occupancy / energy)
+  useEffect(() => {
+    if (!selectedFloorId) return;
+    if (displayMode === "Occupancy") {
+      dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
+    } else if (displayMode === "Energy") {
+      dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
+    }
   }, [dispatch, selectedFloorId, displayMode]);
 
-  // Calculate available height so the heatmap column fits the viewport exactly
+  // Sidebar / heatmap column height = remaining viewport below this layout (do not subtract header again; `top` already accounts for it).
   useEffect(() => {
     const recalc = () => {
       if (!layoutRef.current) return;
       const top = layoutRef.current.getBoundingClientRect().top;
-      // Use full viewport height minus the top offset to prevent scrolling
-      // Account for header height, footer height, and small padding
-      const headerHeight = 60; // Adjust based on your header height
-      const footerHeight = 40; // Further reduced footer height
-      const padding = 10; // Further reduced padding for better space utilization
-      const h = Math.max(0, window.innerHeight - top - headerHeight - footerHeight - padding);
+      const footerReserve = 28;
+      const h = Math.max(240, Math.floor(window.innerHeight - top - footerReserve));
       setAvailableHeight(h);
     };
     recalc();
@@ -996,24 +975,13 @@ const HeatMap = () => {
     if (!highlightedFofpZone || !areaStatus?.zones?.length) return;
     if (Number(areaStatus.area_id) !== Number(highlightedFofpZone.areaId)) return;
 
-    let zonesPerPageForFofp = ZONES_PER_PAGE;
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      zonesPerPageForFofp = 4;
-    } else {
-      zonesPerPageForFofp = 2;
-    }
-
     const idx = findFofpZoneIndexInPanelList(areaStatus.zones, highlightedFofpZone);
     if (idx >= 0) {
-      setZonePage(Math.floor(idx / zonesPerPageForFofp));
+      setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
     }
   }, [
     areaStatus,
     highlightedFofpZone,
-    is1440Screen,
-    isUltraWide,
-    is2560Screen,
-    ZONES_PER_PAGE,
   ]);
 
   useEffect(() => {
@@ -1024,11 +992,9 @@ const HeatMap = () => {
     if (areaStatus && areaStatus.zones) {
       setShadesLocalValues(
         shades.reduce((acc, shade) => {
-          let val = shade.level;
-          if (typeof val === "string" && val.endsWith("%")) val = parseInt(val);
-          if (typeof val === "string") val = parseInt(val);
-          if (typeof val !== "number" || isNaN(val)) val = 0;
-          acc[shade.id] = Math.round(val); // Round to whole number
+          const zoneId = resolveShadeZoneId(shade);
+          if (zoneId == null) return acc;
+          acc[zoneId] = parseShadeLevel(shade.level);
           return acc;
         }, {})
       );
@@ -1060,22 +1026,49 @@ const HeatMap = () => {
     setContentBBox({ minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY });
   }, [heatmapData.areas, pageDims]);
 
+  // Refresh floor mode data only after controls change status on the *same* area.
+  // Area click/select must not re-hit light_status / occupancy / energy.
   useEffect(() => {
-    if (areaStatus && areaStatus.area_id && selectedFloorId) {
-      const refreshMapData = async () => {
-        try {
-          await dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
-          await dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
-          await dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
-        } catch (error) {
-          // Failed to refresh map data
-        }
-      };
+    if (!areaStatus?.area_id || !selectedFloorId) return;
 
-      const timeoutId = setTimeout(refreshMapData, 1000);
-      return () => clearTimeout(timeoutId);
+    const prev = lastAreaStatusSnapshotRef.current;
+    const next = {
+      areaId: areaStatus.area_id,
+      light: areaStatus.light_status,
+      occ: areaStatus.occupancy_status,
+      scene: areaStatus.active_scene,
+    };
+
+    if (prev.areaId !== next.areaId) {
+      lastAreaStatusSnapshotRef.current = next;
+      return;
     }
-  }, [areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId]);
+
+    const statusChanged =
+      prev.light !== next.light ||
+      prev.occ !== next.occ ||
+      prev.scene !== next.scene;
+
+    lastAreaStatusSnapshotRef.current = next;
+    if (!statusChanged) return;
+
+    const refreshMapData = async () => {
+      try {
+        if (displayMode === "Occupancy") {
+          await dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
+        } else if (displayMode === "Energy") {
+          await dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
+        } else {
+          await dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
+        }
+      } catch (error) {
+        // Failed to refresh map data
+      }
+    };
+
+    const timeoutId = setTimeout(refreshMapData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [areaStatus?.area_id, areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId, displayMode]);
 
   const handleZoom = (direction) => {
     setScale((prev) => {
@@ -1140,6 +1133,9 @@ const HeatMap = () => {
   };
 
   const getFill = (area) => {
+    if (isMapProcessorUnreachable(area)) {
+      return 'transparent';
+    }
     if (displayMode === 'Occupancy') {
       const occ = (area.occupancy_status || '').toLowerCase().trim();
       if (occ === 'occupied') {
@@ -1215,17 +1211,8 @@ const HeatMap = () => {
       return;
     }
 
+    // Area panel only — floor map already loaded by floor effect; do not re-hit light_status
     dispatch(fetchAreaStatus(area.area_id));
-
-    if (selectedFloorId) {
-      if (displayMode === "Light") {
-        dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
-      } else if (displayMode === "Occupancy") {
-        dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
-      } else if (displayMode === "Energy") {
-        dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
-      }
-    }
   };
 
 
@@ -1236,12 +1223,16 @@ const HeatMap = () => {
   const refreshAllData = async () => {
     if (!areaStatus?.area_id || !areaStatus?.floor_id) return;
 
-    await Promise.all([
-      dispatch(fetchAreaStatus(areaStatus.area_id)),
-      dispatch(fetchFloorMapData({ floorId: areaStatus.floor_id })),
-      dispatch(fetchAreaEnergyConsumption({ floorId: areaStatus.floor_id })),
-      dispatch(fetchAreaOccupancyStatus({ floorId: areaStatus.floor_id }))
-    ]);
+    const floorId = areaStatus.floor_id;
+    const tasks = [dispatch(fetchAreaStatus(areaStatus.area_id))];
+    if (displayMode === "Occupancy") {
+      tasks.push(dispatch(fetchAreaOccupancyStatus({ floorId })));
+    } else if (displayMode === "Energy") {
+      tasks.push(dispatch(fetchAreaEnergyConsumption({ floorId })));
+    } else {
+      tasks.push(dispatch(fetchFloorMapData({ floorId })));
+    }
+    await Promise.all(tasks);
   };
 
   const refreshAllDataAndMap = async () => {
@@ -1250,7 +1241,8 @@ const HeatMap = () => {
     try {
       await dispatch(refreshAllHeatmapData({
         floorId: selectedFloorId,
-        areaId: areaStatus?.area_id || null
+        areaId: areaStatus?.area_id || null,
+        displayMode,
       })).unwrap();
     } catch (error) {
       // Failed to refresh heatmap data
@@ -1342,8 +1334,8 @@ const HeatMap = () => {
     setZoneUpdating(true);
 
     // Only get zones that have been modified (have local values different from initial)
-    const zonesToUpdate = areaStatus.zones
-      .slice(zonePage * ZONES_PER_PAGE, (zonePage + 1) * ZONES_PER_PAGE)
+    const zonesToUpdate = buildSidebarZonesToShow(areaStatus.zones)
+      .slice(zonePage * SIDEBAR_ZONES_PER_PAGE, (zonePage + 1) * SIDEBAR_ZONES_PER_PAGE)
       .filter(zone => {
         const localValues = zoneLocalValues[zone.id];
         const initialValues = initialZoneValues[zone.id];
@@ -1549,7 +1541,9 @@ const HeatMap = () => {
   const handleShadesPreset = (percent) => {
     setShadesLocalValues(
       shades.reduce((acc, shade) => {
-        acc[shade.id] = percent;
+        const zoneId = resolveShadeZoneId(shade);
+        if (zoneId == null) return acc;
+        acc[zoneId] = percent;
         return acc;
       }, {})
     );
@@ -1563,34 +1557,7 @@ const HeatMap = () => {
 
     setShadesUpdating(true);
     try {
-      // Only get shades that have been modified (have local values different from original)
-      const shadesToUpdate = Object.entries(shadesLocalValues)
-        .filter(([id, position]) => {
-          const shade = shades.find(s => s.id === id);
-          if (!shade) return false;
-
-          // Get original level value
-          let originalLevel = shade.level;
-          if (typeof originalLevel === "string" && originalLevel.endsWith("%")) {
-            originalLevel = parseInt(originalLevel);
-          }
-          if (typeof originalLevel === "string") {
-            originalLevel = parseInt(originalLevel);
-          }
-          if (typeof originalLevel !== "number" || isNaN(originalLevel)) {
-            originalLevel = 0;
-          }
-
-          // Check if the position has actually changed
-          return Math.round(position) !== Math.round(originalLevel);
-        })
-        .map(([id, position]) => ({
-          zone_id: id,
-          zone_type: "Shade",
-          level: position
-        }));
-
-      // Only proceed if there are actually changes to apply
+      const shadesToUpdate = buildShadesUpdatePayload(shades, shadesLocalValues);
       if (shadesToUpdate.length === 0) {
         setShadesUpdating(false);
         return;
@@ -1611,40 +1578,20 @@ const HeatMap = () => {
     }
   };
 
-  const switchedZones = areaStatus?.zones?.filter(z => isSwitched(z.type)) || [];
-  const whiteTuneZones = areaStatus?.zones?.filter(z => isWhitening(z.type)) || [];
-  const dimmedZones = areaStatus?.zones?.filter(z => isDimmed(z.type)) || [];
+  const zonesToShow = buildSidebarZonesToShow(areaStatus?.zones);
+  const zonesPerPage = SIDEBAR_ZONES_PER_PAGE;
+  const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage) || 1;
+  const visibleSidebarZones = zonesToShow.slice(
+    zonePage * zonesPerPage,
+    (zonePage + 1) * zonesPerPage
+  );
 
-  let zonesToShow = [];
-  let zonesPerPage = ZONES_PER_PAGE;
-
-  // Smart zone display logic based on content and screen size
-  if (whiteTuneZones.length > 0 || dimmedZones.length > 0) {
-    // Order zones to prioritize CCT zones first, then dimmer zones
-    // This ensures that on large screens, if there are 2 CCT + 2 dimmer,
-    // the first page will show 2 CCT + 1 dimmer (3 total)
-    zonesToShow = [...whiteTuneZones, ...dimmedZones];
-
-    // For large screens (>= 1440px) - show 4 zones per page
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      zonesPerPage = 4;
-    } else {
-      // For laptop/tablet/mobile (< 1440px) - show 2 zones at a time with pagination
-      zonesPerPage = 2;
+  useEffect(() => {
+    const maxPage = Math.max(0, totalZonePages - 1);
+    if (zonePage > maxPage) {
+      setZonePage(maxPage);
     }
-  } else {
-    zonesToShow = switchedZones;
-
-    // For large screens and desktop (>= 1440px)
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      // Show 4 zones by default for large screens/desktop
-      zonesPerPage = 4;
-    } else {
-      // For laptop/tablet/mobile (< 1440px), show 2 zones at a time with pagination
-      zonesPerPage = 2;
-    }
-  }
-  const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage);
+  }, [zonePage, totalZonePages]);
 
   const fofpOverlayConfig = (() => {
     const fromFloor = heatmapData?.fofp_config;
@@ -1670,15 +1617,9 @@ const HeatMap = () => {
 
     const jumpToZonePage = (zones) => {
       if (!zones?.length) return;
-      let zonesPerPageForFofp = ZONES_PER_PAGE;
-      if (is1440Screen || isUltraWide || is2560Screen) {
-        zonesPerPageForFofp = 4;
-      } else {
-        zonesPerPageForFofp = 2;
-      }
       const idx = findFofpZoneIndexInPanelList(zones, highlight);
       if (idx >= 0) {
-        setZonePage(Math.floor(idx / zonesPerPageForFofp));
+        setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
       }
     };
 
@@ -1783,10 +1724,12 @@ const HeatMap = () => {
         className="heatmap-container"
         sx={{
           width: '100%',
-          height: availableHeight ? `${availableHeight}px` : 'calc(100vh - 180px)', // Slightly increased height to match settings better
+          height: availableHeight
+            ? `${availableHeight}px`
+            : { xs: 'auto', sm: 'calc(100dvh - 140px)' },
           display: 'flex',
-          flexDirection: 'row',
-          overflow: 'hidden',
+          flexDirection: { xs: 'column', sm: 'row' },
+          overflow: { xs: 'auto', sm: 'hidden' },
           p: 0,
           m: 0,
           bgcolor: 'transparent',
@@ -1796,16 +1739,17 @@ const HeatMap = () => {
           maxWidth: '100%',
           boxSizing: 'border-box',
           // Ensure the container takes full available height
-          minHeight: 'calc(100vh - 180px)', // Slightly increased height to match settings better
+          minHeight: { xs: 'auto', sm: 'calc(100dvh - 140px)' },
           position: 'relative', // Add relative positioning for absolute legends
         }}
       >
         {/* Heatmap and Legends/Navigation Column */}
         <Box
           sx={{
-            flex: '1 1 100%', // Always take full available space
+            flex: '1 1 100%',
             minWidth: 0,
-            height: '100%',
+            height: { xs: 'auto', sm: '100%' },
+            minHeight: { xs: 280, sm: '100%' },
             display: 'flex',
             flexDirection: 'column',
             p: 0,
@@ -1821,7 +1765,7 @@ const HeatMap = () => {
             flexShrink: 1,
             flexBasis: '100%',
             // Ensure the container takes full available height
-            minHeight: '100%',
+            minHeight: { xs: 280, sm: '100%' },
           }}
         >
           {/* Floor Plan Container with Left/Right Padding and Zoom Controls - Reduced Height */}
@@ -1896,6 +1840,11 @@ const HeatMap = () => {
                 pb: { xs: 2, sm: 3, md: 4 },
               }}
             >
+              {heatmapError ? (
+                <Alert severity="error" sx={{ maxWidth: 480, m: 2 }}>
+                  {heatmapError}
+                </Alert>
+              ) : (
               <HeatmapPdfSvgViewer
                 containerRef={containerRef}
                 pdfUrl={pdfUrl}
@@ -1932,6 +1881,7 @@ const HeatMap = () => {
                 highlightedFofpZone={highlightedFofpZone}
 
               />
+              )}
             </Box>
 
             {/* Legends and Floor navigation - Positioned directly on heatmap container */}
@@ -2121,8 +2071,9 @@ const HeatMap = () => {
         {/* Status Panel - responsive based on screen size */}
         {selectedAreaId && (
           <Box
+            className="heatmap-area-sidebar"
             sx={{
-              flex: '0 0 auto', // Don't grow or shrink, maintain fixed width
+              ...CUSTOMIZED_HEATMAP_SIDEBAR_SX,
               width: {
                 xs: '28%',  // Mobile - slightly wider for better usability
                 sm: '25%',  // Small tablets
@@ -2144,14 +2095,9 @@ const HeatMap = () => {
                 lg: 420,  // Large screen maximum width
                 xl: 480   // Ultra-wide maximum width
               },
-              height: '100%', // Same height as floorplan
-              display: 'flex',
-              flexDirection: 'column',
-              overflowY: 'auto',
-              minHeight: 0,
+              // Vertical scroll is enabled on this panel (see .heatmap-area-sidebar in index.css).
               boxShadow: '-2px 0 8px rgba(0,0,0,0.10)',
               background: '#a89e87',
-              overflow: 'hidden',
               p: 0,
               m: 0,
               boxSizing: 'border-box',
@@ -2161,8 +2107,9 @@ const HeatMap = () => {
               position: 'static',
             }}
           >
-            {/* Header */}
+            {/* Fixed header — body below scrolls */}
             <Box sx={{
+              ...CUSTOMIZED_HEATMAP_SIDEBAR_STICKY_HEADER_SX,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -2170,9 +2117,8 @@ const HeatMap = () => {
               py: { xs: 0.5, sm: 0.75, md: 1 },
               minHeight: { xs: 25, sm: 28, md: 32 },
               bgcolor: '#a89e87',
-              flexShrink: 0,
               width: '100%',
-              gap: 1, // Add gap between elements
+              gap: 1,
             }}>
               {/* Left side with toggle and area name */}
               <Box sx={{
@@ -2278,17 +2224,17 @@ const HeatMap = () => {
               </Box>
             </Box>
 
-            {/* Main Content - Full height without scrolling */}
-            <Box sx={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
+            {/* Scrollable body — Shades Apply reachable */}
+            <Box
+              className="heatmap-area-sidebar-body"
+              sx={{
+              ...CUSTOMIZED_HEATMAP_SIDEBAR_BODY_SX,
               gap: { xs: 0.1, sm: 0.15, md: 0.2, lg: 0.25 },
               p: { xs: 0.5, sm: 0.75, md: 1 },
+              pr: { xs: 1, sm: 1.25, md: 1.5 },
+              pb: { xs: 12, md: 14 },
               boxSizing: 'border-box',
               position: 'relative',
-              overflowY: 'auto'
             }}>
               {areaStatusLoading ? (
                 <Box sx={{
@@ -2305,6 +2251,10 @@ const HeatMap = () => {
                 }}>
                   <CircularProgress size={isMobile ? 24 : 36} />
                 </Box>
+              ) : areaStatusError ? (
+                <Alert severity="warning" sx={{ m: 1.5 }}>
+                  {areaStatusError}
+                </Alert>
               ) : (
                 <>
                   {/* Scene Section */}
@@ -2541,21 +2491,14 @@ const HeatMap = () => {
                     </Box>
                   </Box>
 
-                  {/* Zones Section - responsive height based on screen size */}
+                  {/* Zones Section - content-sized; list scrolls when cards exceed max height */}
                   <Box sx={{
                     display: 'flex',
                     flexDirection: 'row',
                     alignItems: 'stretch',
                     bgcolor: '#807864',
                     borderRadius: 0,
-                    minHeight: {
-                      xs: 55,   // Mobile - reduced
-                      sm: 65,   // Small tablet - reduced
-                      md: 80,   // Laptop - reduced
-                      lg: 95,   // Large screen - reduced
-                      xl: 120   // Ultra-wide screen - reduced
-                    },
-                    flexShrink: 0,
+                    ...HEATMAP_ZONES_SECTION_SX,
                     p: 0,
                     m: 0,
                     boxSizing: 'border-box',
@@ -2583,7 +2526,7 @@ const HeatMap = () => {
                       flex: 1,
                       display: 'flex',
                       flexDirection: 'row',
-                      alignItems: 'center',
+                      alignItems: 'stretch',
                       p: { xs: 0.3, md: 0.5 },
                       minHeight: 0,
                       position: 'relative',
@@ -2593,19 +2536,23 @@ const HeatMap = () => {
                       <Box sx={{
                         flex: 1,
                         display: 'flex',
-                        flexDirection: 'column', // Always use column layout to utilize full height
-                        gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 }, // Reduced gap
+                        flexDirection: 'column',
                         justifyContent: 'flex-start',
-                        alignItems: 'center',
-                        minHeight: 0,
-                        overflow: 'visible',
-
+                        alignItems: 'stretch',
+                        width: '100%',
+                        minWidth: 0,
                       }}>
                         {zonesToShow.length > 0 ? (
                           <>
-                            {zonesToShow
-                              .slice(zonePage * zonesPerPage, (zonePage + 1) * zonesPerPage)
-                              .map((zone, idx) => {
+                            <Box sx={{
+                              ...(totalZonePages > 1 ? HEATMAP_ZONES_LIST_PAGINATED_SX : HEATMAP_ZONES_LIST_SCROLL_SX),
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 },
+                              alignItems: 'stretch',
+                              width: '100%',
+                            }}>
+                              {visibleSidebarZones.map((zone) => {
                                 const values = zoneLocalValues[zone.id] || getDefaultZoneValues(zone);
                                 return (
                                   <ZoneControlCard
@@ -2632,11 +2579,13 @@ const HeatMap = () => {
                                   />
                                 );
                               })}
+                            </Box>
                             <Box sx={{
                               display: 'flex',
                               justifyContent: 'flex-end',
                               width: '100%',
-                              mt: 0.5
+                              mt: 0.5,
+                              flexShrink: 0,
                             }}>
                               <Button
                                 size="small"
@@ -2674,23 +2623,24 @@ const HeatMap = () => {
                           gap: 0.5,
                           minWidth: 40,
                         }}>
-                          {zonePage > 0 ? (
+                          {zonePage > 0 && (
                             <IconButton
                               size="small"
-                              onClick={() => setZonePage(zonePage - 1)}
+                              onClick={() => setZonePage((page) => page - 1)}
                               sx={{ ...navIconSx }}
                             >
                               <ArrowBackIosNewIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
                             </IconButton>
-                          ) : zonePage < totalZonePages - 1 ? (
+                          )}
+                          {zonePage < totalZonePages - 1 && (
                             <IconButton
                               size="small"
-                              onClick={() => setZonePage(zonePage + 1)}
+                              onClick={() => setZonePage((page) => page + 1)}
                               sx={{ ...navIconSx }}
                             >
                               <ArrowForwardIosIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
                             </IconButton>
-                          ) : null}
+                          )}
                         </Box>
                       )}
                     </Box>
@@ -2831,213 +2781,55 @@ const HeatMap = () => {
 
                   {/* Shades Section - Only show if shades are present */}
                   {shades.length > 0 && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        alignItems: 'stretch',
-                        bgcolor: '#807864',
-                        borderRadius: 0,
-                        minHeight: { xs: 110, md: 130 },
-                        flexShrink: 0,
-                        p: 0,
-                        m: 0,
-                        boxSizing: 'border-box',
-                        position: 'relative',
+                    <HeatmapShadesPanel
+                      variant="customized"
+                      panelClassName="customized-heatmap-shades-panel"
+                      shadeCardClassName="customized-heatmap-shade-card"
+                      shades={shades}
+                      shadesLocalValues={shadesLocalValues}
+                      onShadeChange={handleShadeSlider}
+                      onPreset={handleShadesPreset}
+                      onApply={handleApplyShades}
+                      shadesUpdating={shadesUpdating}
+                      canUpdate={canUpdateAreaStatus()}
+                      isMobile={isMobile}
+                      applyButtonSx={applyButtonSx}
+                      navIconSx={navIconSx}
+                      themeOverrides={{
+                        sectionBg: '#807864',
+                        sectionBorder: '2px solid #807864',
+                        labelColor: '#222',
+                        labelBg: '#fff',
+                        navIconColor: '#222',
+                        shadeCardBg: '#ffffff',
+                        shadeCardText: '#111111',
+                        cardBg: '#ffffff',
+                        cardText: '#111111',
+                        cardBorder: '1px solid rgba(128, 120, 100, 0.35)',
+                        cardShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                        presetButtonSx: ({ disabled, active }) => ({
+                          background: `${disabled ? '#ddd' : active ? '#807864' : '#ffffff'} !important`,
+                          color: `${disabled ? '#999' : active ? '#ffffff' : '#807864'} !important`,
+                          WebkitTextFillColor: disabled ? '#999' : active ? '#ffffff' : '#807864',
+                          border: `1px solid ${disabled ? '#ccc' : '#807864'}`,
+                          borderRadius: 0.8,
+                          fontSize: { xs: 8, md: 10 },
+                          fontWeight: active ? 600 : 400,
+                          textTransform: 'none',
+                          boxShadow: active ? 1 : 'none',
+                          minWidth: { xs: 56, md: 64 },
+                          minHeight: { xs: 18, md: 22 },
+                          lineHeight: 1.1,
+                          px: { xs: 0.5, md: 0.6 },
+                          py: { xs: 0.2, md: 0.3 },
+                          opacity: disabled ? 0.55 : 1,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          '&:hover': disabled
+                            ? {}
+                            : { background: active ? '#807864' : 'rgba(128, 120, 100, 0.08)' },
+                        }),
                       }}
-                    >
-                      {/* Vertical label */}
-                      <Box sx={{
-                        writingMode: 'vertical-rl',
-                        fontWeight: 'bold',
-                        fontSize: { xs: 10, md: 12 },
-                        color: '#222',
-                        px: 0.5,
-                        py: 0.2,
-                        minWidth: { xs: 20, md: 24 },
-                        textAlign: 'center',
-                        bgcolor: '#fff',
-                        borderRadius: '0 12px 12px 0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transform: 'rotate(180deg)',
-                        mr: 1,
-                      }}>
-                        Shades
-                      </Box>
-
-                      {/* Preset buttons */}
-                      <Box sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: { xs: 0.1, md: 0.2 },
-                        mr: 0.5,
-                        justifyContent: 'center',
-                        mb: { xs: 3, md: 4 }
-                      }}>
-                        {[100, 75, 25, 0].map((percent) => (
-                          <Button
-                            key={percent}
-                            variant="contained"
-                            onClick={() => handleShadesPreset(percent)}
-                            disabled={!canUpdateAreaStatus()}
-                            sx={{
-                              background: !canUpdateAreaStatus() ? '#ddd' : '#222',
-                              color: !canUpdateAreaStatus() ? '#999' : '#fff',
-                              borderRadius: 0.8,
-                              fontSize: { xs: 8, md: 10 },
-                              fontWeight: 400,
-                              px: { xs: 0.3, md: 0.5 },
-                              py: { xs: 0.05, md: 0.1 },
-                              textTransform: 'none',
-                              boxShadow: 1,
-                              minWidth: { xs: 32, md: 40 },
-                              minHeight: { xs: 14, md: 16 },
-                              lineHeight: 1.1,
-                              padding: { xs: 0.6, md: 0.8 },
-                              opacity: !canUpdateAreaStatus() ? 0.5 : 1,
-                              cursor: !canUpdateAreaStatus() ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            {percent}% open
-                          </Button>
-                        ))}
-                      </Box>
-
-                      {/* Sliders with paging */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          flex: 1,
-                          minHeight: 0,
-                          justifyContent: 'flex-start',
-                          position: 'relative',
-                          height: '100%',
-                        }}
-                      >
-                        {/* Left arrow */}
-                        {shadesPage > 0 && (
-                          <IconButton
-                            size="small"
-                            onClick={() => setShadesPage(shadesPage - 1)}
-                            sx={{ ...navIconSx, mr: 0.5 }}
-                          >
-                            <ArrowBackIosNewIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
-                          </IconButton>
-                        )}
-
-                        {/* Sliders */}
-                        {pagedShades.map((shade) => (
-                          <Box
-                            key={shade.id}
-                            sx={{
-                              bgcolor: '#fff',
-                              borderRadius: 0.5,
-                              minWidth: { xs: 32, md: 40 },
-                              maxWidth: { xs: 42, md: 50 },
-                              height: { xs: 80, md: 100 },
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              boxShadow: 2,
-                              justifyContent: 'center',
-                              p: { xs: 0.1, md: 0.2 },
-                              mb: { xs: 3, md: 4 }
-                            }}
-                          >
-                            <Typography
-                              fontSize={{ xs: 8, md: 10 }}
-                              fontWeight={500}
-                              sx={{
-                                mb: 0.1,
-                                textAlign: 'center',
-                                lineHeight: 1.1,
-                                maxWidth: { xs: 32, md: 40 },
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {shade.name || 'Group'}
-                            </Typography>
-                            <div
-                              style={{
-                                height: isMobile ? 70 : 90,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <input
-                                type="range"
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={100 - (shadesLocalValues[shade.id] ?? 0)}
-                                onChange={e => handleShadeSlider(shade.id, 100 - Number(e.target.value))}
-                                disabled={shadesUpdating || !canUpdateAreaStatus()}
-                                style={{
-                                  writingMode: "vertical-lr",
-                                  direction: "rtl",
-                                  width: isMobile ? 10 : 12,
-                                  height: isMobile ? 45 : 55,
-                                  margin: 0,
-                                  accentColor: "#222",
-                                  transform: 'scaleY(-1)'
-                                }}
-                              />
-                            </div>
-                            <Typography fontSize={{ xs: 8, md: 10 }} fontWeight={500}>
-                              {Math.round(shadesLocalValues[shade.id] ?? 0)}%
-                            </Typography>
-                          </Box>
-                        ))}
-
-                        {/* Right arrow */}
-                        {shades.length > SHADES_PER_PAGE &&
-                          (shadesPage + 1) * SHADES_PER_PAGE < shades.length && (
-                            <IconButton
-                              size="small"
-                              onClick={() => setShadesPage(shadesPage + 1)}
-                              sx={{ ...navIconSx, ml: 0.5 }}
-                            >
-                              <ArrowForwardIosIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
-                            </IconButton>
-                          )}
-                      </Box>
-
-                      {/* Apply Button */}
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          right: { xs: 12, md: 16 },
-                          bottom: 1,
-                          zIndex: 2,
-                          display: 'flex',
-                          justifyContent: 'flex-end',
-                          width: 'auto',
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={handleApplyShades}
-                          disabled={shadesUpdating || !canUpdateAreaStatus()}
-                          sx={{
-                            ...applyButtonSx,
-                            opacity: !canUpdateAreaStatus() ? 0.5 : 1,
-                            cursor: !canUpdateAreaStatus() ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          {shadesUpdating ? 'Applying...' : 'Apply'}
-                        </Button>
-                      </Box>
-                    </Box>
+                    />
                   )}
                 </>
               )}
@@ -3377,8 +3169,24 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
   if (isSwitchType) {
     const isOn = safeValues.on_off === 'On';
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, mb: 0.5, ...highlightSx }}>
-        <Typography fontWeight="bold" fontSize={{ xs: 11, md: 13 }} sx={{ minWidth: 20, mr: 1 }}>
+      <Box sx={{
+        bgcolor: '#fff',
+        borderRadius: 0.5,
+        pt: 0.5,
+        pb: 0.5,
+        pl: 0.5,
+        pr: 0.5,
+        ...ZONE_CONTROL_CARD_WIDTH_SX,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 1,
+        mb: 0.5,
+        justifyContent: 'flex-start',
+        boxSizing: 'border-box',
+        ...highlightSx,
+      }}>
+        <Typography fontWeight="bold" fontSize={{ xs: 11, md: 13 }} sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', mr: 0.5 }}>
           {zone.name}
         </Typography>
         <Box
@@ -3395,8 +3203,8 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
             transition: 'all 0.2s',
             padding: 1,
             position: 'relative',
-            minWidth: { xs: 40, md: 48 }, // Increased width
-            ml: 1,
+            minWidth: { xs: 40, md: 48 },
+            flexShrink: 0,
             opacity: disabled ? 0.5 : 1,
           }}
         >
@@ -3444,16 +3252,13 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
     const cctValue = safeValues.cct !== undefined ? safeValues.cct : cctMin;
 
     return (
-      <Box sx={{ mb: 0.5, width: { xs: 140, sm: 150, md: 160 }, minWidth: { xs: 140, sm: 150, md: 160 }, maxWidth: { xs: 140, sm: 150, md: 160 }, ...highlightSx }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1 }}>
+      <Box sx={{ mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX, ...highlightSx }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.5, md: 0.75 }, width: '100%', minWidth: 0 }}>
         <Box sx={{
-          flex: 1,
+          ...ZONE_CONTROL_MAIN_PANEL_SX,
           bgcolor: '#fff',
           borderRadius: 0.5,
           p: { xs: 0.5, md: 1 },
-          width: { xs: 140, sm: 150, md: 160 },
-          minWidth: { xs: 140, sm: 150, md: 160 },
-          maxWidth: { xs: 140, sm: 150, md: 160 },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-start',
@@ -3490,7 +3295,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
           </Box>
 
           {/* Brightness Slider */}
-          <Box sx={{ position: 'relative', width: '85%', mt: 0.5, pl: { xs: 1, md: 2 } }}>
+          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, mt: 0.5 }}>
             <Slider
               min={brightnessMin}
               max={brightnessMax}
@@ -3523,10 +3328,8 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
             sx={{
               display: 'flex',
               alignItems: 'center',
-              width: '100%',
+              ...ZONE_CONTROL_SLIDER_WRAP_SX,
               mt: 0.8,
-              pl: { xs: 1, md: 2 },
-              pr: 0.25,
               gap: 0.5,
             }}
           >
@@ -3573,7 +3376,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
         </Box>
 
         {/* Fade/Delay Time inputs */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 1 }, alignItems: 'flex-start', justifyContent: 'center', ml: 1, width: { xs: 80, sm: 90, md: 100 } }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 0.75 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
             <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
@@ -3624,20 +3427,16 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
 
   if (isDimmedType) {
     return (
-      <Box sx={{ mb: 0.5, width: { xs: 140, sm: 150, md: 160 }, minWidth: { xs: 140, sm: 150, md: 160 }, maxWidth: { xs: 140, sm: 150, md: 160 }, ...highlightSx }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1 }}>
+      <Box sx={{ mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX, ...highlightSx }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.5, md: 0.75 }, width: '100%', minWidth: 0 }}>
         <Box sx={{
-          flex: 1,
+          ...ZONE_CONTROL_MAIN_PANEL_SX,
           bgcolor: '#fff',
           borderRadius: 0.5,
           pt: 0.5,
           pb: 0,
           pl: 0.5,
           pr: 0.5,
-          //p: { xs: 0.5, md: 0.6 },
-          width: { xs: 140, sm: 150, md: 160 },
-          minWidth: { xs: 140, sm: 150, md: 160 },
-          maxWidth: { xs: 140, sm: 150, md: 160 },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'flex-start'
@@ -3667,7 +3466,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
             </Typography>
             {renderZoneBrightnessHeaderPercent(safeValues.brightness, { min: 0, max: 100 })}
           </Box>
-          <Box sx={{ position: 'relative', width: '85%', mt: 0.5, ml: { xs: 1, md: 2 } }}>
+          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, mt: 0.5 }}>
             <Slider
               min={0}
               max={100}
@@ -3697,7 +3496,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
         </Box>
 
         {/* Fade/Delay Time inputs for dimmed */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, alignItems: 'flex-start', justifyContent: 'center', ml: 1, width: { xs: 80, sm: 90, md: 100 } }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 0.75 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
             <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
@@ -3810,6 +3609,7 @@ function HeatmapPdfSvgViewer({
   highlightedFofpZone = null,
 }) {
 
+  const pdfFile = useMemo(() => buildPdfDocumentFile(pdfUrl), [pdfUrl]);
 
   // Use A4 dimensions as fallback for consistent rendering
   const A4_WIDTH = 794;
@@ -3978,7 +3778,7 @@ function HeatmapPdfSvgViewer({
         {/* Render full PDF with proper scaling */}
         <Box>
           {pdfUrl ? (
-            <Document file={pdfUrl} key={pdfUrl}>
+            <Document file={pdfFile} key={pdfUrl}>
               <Page
                 pageNumber={1}
                 width={pageDims ? pageDims.width : A4_WIDTH}

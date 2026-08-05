@@ -2,9 +2,15 @@ import {
   isWidgetVisibleInMap,
   normalizeDashboardWidgetKey,
 } from '../utils/dashboardWidgetVisibilityCore';
+import {
+  CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY,
+  parseCustomizedWidgetVisibilityRoot,
+} from '../../../variants/customized/utils/customizedOverviewWidgetVisibility';
 
 export const DASHBOARD_ORDER_STORAGE_KEY = 'dashboardOrder';
-export const CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY = 'widgetVisibility';
+export const ADVANCED_DASHBOARD_ORDER_STORAGE_KEY = 'dashboardOrder_advanced';
+export const BASIC_DASHBOARD_ORDER_STORAGE_KEY = 'dashboardOrder_basic';
+export { CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY };
 export const ENERGY_CHART_ORDER_STORAGE_KEY = 'dashboard-energy-chart-slot-order-v1';
 
 export const ENERGY_CHART_SLOT_ORDER_DEFAULT = [
@@ -123,9 +129,21 @@ export function applyEnergyStandaloneChartOrder(prev, visibilityMap) {
   if (isVisible('consumption_saving')) {
     return prev;
   }
-  const visibleStandalone = ENERGY_STANDALONE_CHART_ORDER.filter((id) => isVisible(id));
+  // Preserve custom rearrange among still-visible slots; append newly visible defaults.
+  const visibleStandalone = (Array.isArray(prev) ? prev : []).filter(
+    (id) => isVisible(id) && id !== 'consumption_saving'
+  );
+  for (const id of ENERGY_STANDALONE_CHART_ORDER) {
+    if (isVisible(id) && !visibleStandalone.includes(id)) {
+      visibleStandalone.push(id);
+    }
+  }
   const hidden = [
-    ...new Set(prev.filter((id) => !isVisible(id) || id === 'consumption_saving')),
+    ...new Set(
+      (Array.isArray(prev) ? prev : []).filter(
+        (id) => !isVisible(id) || id === 'consumption_saving'
+      )
+    ),
   ];
   const next = [
     ...visibleStandalone,
@@ -142,9 +160,16 @@ export function applyEnergyCombinedChartOrder(prev, visibilityMap) {
   if (!isVisible('consumption_saving')) {
     return prev;
   }
-  const rest = ENERGY_STANDALONE_CHART_ORDER.filter((id) => isVisible(id));
-  const visibleOrder = ['consumption_saving', ...rest];
-  const hidden = [...new Set(prev.filter((id) => !isVisible(id)))];
+  const visibleRest = (Array.isArray(prev) ? prev : []).filter(
+    (id) => id !== 'consumption_saving' && isVisible(id)
+  );
+  for (const id of ENERGY_STANDALONE_CHART_ORDER) {
+    if (isVisible(id) && !visibleRest.includes(id)) {
+      visibleRest.push(id);
+    }
+  }
+  const visibleOrder = ['consumption_saving', ...visibleRest];
+  const hidden = [...new Set((Array.isArray(prev) ? prev : []).filter((id) => !isVisible(id)))];
   const next = [
     ...visibleOrder,
     ...hidden.filter((id) => !visibleOrder.includes(id)),
@@ -220,16 +245,46 @@ export function buildEnergyDashboardRows(visibleIds) {
   return rows;
 }
 
-export function parseCustomizedWidgetVisibilityFromStorage(
-  storageKey = CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY
+/** Like buildEnergyDashboardRows, but slots with span 12 (or force-full ids) occupy their own row. */
+export function buildDashboardRowsWithSpan(
+  visibleIds,
+  getSpan,
+  forceFullWidthSlotIds = new Set(['consumption_saving'])
 ) {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    const obj = raw ? JSON.parse(raw) : null;
-    return obj && typeof obj === 'object' ? obj : {};
-  } catch {
-    return {};
+  const rows = [];
+  let i = 0;
+  const ids = Array.isArray(visibleIds) ? visibleIds : [];
+  const spanFor = (id) => {
+    if (forceFullWidthSlotIds.has(id)) return 12;
+    return typeof getSpan === 'function' ? getSpan(id) : 6;
+  };
+
+  while (i < ids.length) {
+    const id = ids[i];
+    if (forceFullWidthSlotIds.has(id) || spanFor(id) === 12) {
+      rows.push([id]);
+      i += 1;
+      continue;
+    }
+    const next = ids[i + 1];
+    if (next != null && (forceFullWidthSlotIds.has(next) || spanFor(next) === 12)) {
+      rows.push([id]);
+      i += 1;
+      continue;
+    }
+    if (next != null) {
+      rows.push([id, next]);
+      i += 2;
+    } else {
+      rows.push([id]);
+      i += 1;
+    }
   }
+  return rows;
+}
+
+export function parseCustomizedWidgetVisibilityFromStorage() {
+  return parseCustomizedWidgetVisibilityRoot();
 }
 
 export function readDashboardPageOrder(
@@ -302,6 +357,35 @@ export function mergeVisibleDashboardOrder(currentOrder, visibleKeys) {
   ];
 }
 
+/**
+ * When a combined widget is visible, keep it first (Basic Energy parity).
+ * No-op if the key is missing from the order.
+ */
+export function pinWidgetFirstInOrder(order, widgetKey) {
+  const list = Array.isArray(order) ? order.filter((key) => typeof key === 'string' && key) : [];
+  if (!widgetKey || !list.includes(widgetKey)) return list;
+  return [widgetKey, ...list.filter((key) => key !== widgetKey)];
+}
+
+export const ENERGY_COMBINED_WIDGET_KEY = 'consumption_saving';
+export const SPACE_COMBINED_WIDGET_KEY = 'instant_utilization_combined';
+
+/** Merge visible keys, then pin Energy Combined first when it is among them. */
+export function mergeVisibleDashboardOrderPinningEnergyCombined(currentOrder, visibleKeys) {
+  return pinWidgetFirstInOrder(
+    mergeVisibleDashboardOrder(currentOrder, visibleKeys),
+    ENERGY_COMBINED_WIDGET_KEY
+  );
+}
+
+/** Merge visible keys, then pin Space Combined first when it is among them. */
+export function mergeVisibleDashboardOrderPinningSpaceCombined(currentOrder, visibleKeys) {
+  return pinWidgetFirstInOrder(
+    mergeVisibleDashboardOrder(currentOrder, visibleKeys),
+    SPACE_COMBINED_WIDGET_KEY
+  );
+}
+
 export function sortItemsByDashboardOrder(items, mergedOrder, getKey = (item) => item?.key) {
   const orderIndex = new Map(
     (Array.isArray(mergedOrder) ? mergedOrder : []).map((key, index) => [key, index])
@@ -315,6 +399,17 @@ export function sortItemsByDashboardOrder(items, mergedOrder, getKey = (item) =>
 export function resolveOrderedVisibleDashboardCards(cards, currentOrder) {
   const visibleKeys = (Array.isArray(cards) ? cards : []).map((card) => card.key);
   const mergedOrder = mergeVisibleDashboardOrder(currentOrder, visibleKeys);
+  return {
+    mergedOrder,
+    orderedCards: sortItemsByDashboardOrder(cards, mergedOrder, (card) => card.key),
+    visibleCount: visibleKeys.length,
+  };
+}
+
+/** Advanced/Customized Energy: Combined always first when enabled (Basic parity). */
+export function resolveOrderedVisibleEnergyCardsPinningCombined(cards, currentOrder) {
+  const visibleKeys = (Array.isArray(cards) ? cards : []).map((card) => card.key);
+  const mergedOrder = mergeVisibleDashboardOrderPinningEnergyCombined(currentOrder, visibleKeys);
   return {
     mergedOrder,
     orderedCards: sortItemsByDashboardOrder(cards, mergedOrder, (card) => card.key),

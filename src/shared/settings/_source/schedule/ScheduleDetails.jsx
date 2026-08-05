@@ -87,12 +87,11 @@ const ScheduleDetails = () => {
   // Fetch floors from Redux
   const floors = useSelector(selectFloors);
 
-  // Fetch groups on mount if not already loaded
+  // Fetch groups once on mount. Do NOT key off groups.length — an empty
+  // groups[] from the API is valid and would otherwise infinite-loop.
   useEffect(() => {
-    if (!groups || groups.length === 0) {
-      dispatch(fetchScheduleGroups());
-    }
-  }, [dispatch, groups]);
+    dispatch(fetchScheduleGroups());
+  }, [dispatch]);
 
   // Fetch floors on mount
   useEffect(() => {
@@ -1848,7 +1847,7 @@ const renderActionDisplay = (action) => {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {loc.floorName} &gt; {loc.areaName}
+                  {loc.floorName} / {loc.areaName}
                 </div>
                 {/* Action column */}
                 <div style={{
@@ -2318,7 +2317,7 @@ const renderActionDisplay = (action) => {
         <ConfirmDialog
           open={showDeleteLocationDialog}
           title="Delete Location"
-          message={`Are you sure you want to delete location "${locationToDelete?.location?.floorName} > ${locationToDelete?.location?.areaName}"?`}
+          message={`Are you sure you want to delete location "${locationToDelete?.location?.floorName} / ${locationToDelete?.location?.areaName}"?`}
           onConfirm={confirmDeleteLocation}
           onCancel={() => {
             setShowDeleteLocationDialog(false);

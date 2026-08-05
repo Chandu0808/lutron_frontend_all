@@ -1,6 +1,8 @@
 /** Shared floor slice — Phase 5.1 */
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import Swal from 'sweetalert2';
+import { getFloorsList } from '../../utils/floorList';
+import { normalizeFloorListResponse } from '../../utils/normalizeFloorListResponse';
 
 
 export function createFloorModule({
@@ -14,6 +16,7 @@ export function createFloorModule({
 
   const initialState = {
     floors: [],
+    manualSortEnabled: false,
     status: 'idle',
     error: null,
     selectedProcessors: JSON.parse(localStorage.getItem('selectedProcessors')) || [], // Load from localStorage
@@ -31,15 +34,51 @@ export function createFloorModule({
     loading: true,
     processorAreaIds: {}, // Add this to track area_ids per processor
   };
-  // Fetch Floors
+  // Fetch Floors — coalesce concurrent list GETs (Dashboard + Space mount race)
+  let floorsListInflight = null;
   const fetchFloors = createAsyncThunk('floors/fetchFloors', async (_, { rejectWithValue }) => {
     try {
-      const response = await BaseUrl.get('/floor/list');
-      return response.data;
+      if (floorsListInflight) {
+        return await floorsListInflight;
+      }
+      floorsListInflight = BaseUrl.get('/floor/list')
+        .then((response) => normalizeFloorListResponse(response.data))
+        .finally(() => {
+          floorsListInflight = null;
+        });
+      return await floorsListInflight;
     } catch (err) {
       return rejectWithValue(err.response?.data?.detail || "Failed to fetch floors.");
     }
   });
+
+  const setFloorSortMode = createAsyncThunk(
+    'floors/setFloorSortMode',
+    async (manual_sort_enabled, { rejectWithValue }) => {
+      try {
+        const response = await BaseUrl.put('/floor/sort-settings', { manual_sort_enabled });
+        return normalizeFloorListResponse(response.data);
+      } catch (err) {
+        return rejectWithValue(
+          err.response?.data?.detail || 'Failed to update floor sort settings.'
+        );
+      }
+    }
+  );
+
+  const reorderFloors = createAsyncThunk(
+    'floors/reorderFloors',
+    async (floorIds, { rejectWithValue }) => {
+      try {
+        const response = await BaseUrl.put('/floor/reorder', { floor_ids: floorIds });
+        return normalizeFloorListResponse(response.data);
+      } catch (err) {
+        return rejectWithValue(
+          err.response?.data?.detail || 'Failed to reorder floors.'
+        );
+      }
+    }
+  );
   // Create Floor
   // export const createFloor = createAsyncThunk('floors/createFloor', async (formData, { rejectWithValue }) => {
   //   try {
@@ -179,13 +218,23 @@ export function createFloorModule({
       }
     }
   );
-  //get leaf data by floor id
+  //get leaf data by floor id — coalesce concurrent area_tree GETs per floor
+  const areaTreeInflightByFloor = new Map();
   const getLeafByFloorID = createAsyncThunk(
     'Leaf/getLeafByFloorID',
     async (floorId, { rejectWithValue }) => {
+      const key = String(floorId);
       try {
-        const response = await BaseUrl.get(`/floor/area_tree/${floorId}`);
-        return response.data;
+        if (areaTreeInflightByFloor.has(key)) {
+          return await areaTreeInflightByFloor.get(key);
+        }
+        const request = BaseUrl.get(`/floor/area_tree/${floorId}`)
+          .then((response) => response.data)
+          .finally(() => {
+            areaTreeInflightByFloor.delete(key);
+          });
+        areaTreeInflightByFloor.set(key, request);
+        return await request;
       } catch (err) {
         return rejectWithValue(err.response?.data?.detail || "Failed to fetch floor details.");
       }
@@ -341,11 +390,34 @@ export function createFloorModule({
         })
         .addCase(fetchFloors.fulfilled, (state, action) => {
           state.status = 'succeeded';
-          state.floors = action.payload;
+          state.floors = action.payload.floors;
+          state.manualSortEnabled = action.payload.manual_sort_enabled;
           state.error = null;
         })
         .addCase(fetchFloors.rejected, (state, action) => {
           state.status = 'failed';
+          state.error = action.payload || action.error.message;
+        })
+        .addCase(setFloorSortMode.pending, (state) => {
+          state.error = null;
+        })
+        .addCase(setFloorSortMode.fulfilled, (state, action) => {
+          state.floors = action.payload.floors;
+          state.manualSortEnabled = action.payload.manual_sort_enabled;
+          state.error = null;
+        })
+        .addCase(setFloorSortMode.rejected, (state, action) => {
+          state.error = action.payload || action.error.message;
+        })
+        .addCase(reorderFloors.pending, (state) => {
+          state.error = null;
+        })
+        .addCase(reorderFloors.fulfilled, (state, action) => {
+          state.floors = action.payload.floors;
+          state.manualSortEnabled = action.payload.manual_sort_enabled;
+          state.error = null;
+        })
+        .addCase(reorderFloors.rejected, (state, action) => {
           state.error = action.payload || action.error.message;
         })
         //fetch single floor
@@ -360,7 +432,7 @@ export function createFloorModule({
 
           // Log the payload to see the structure
 
-          const API_URL = process.env.REACT_APP_API_URL || "";
+          const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
           const rawPath = action.payload.floor_image || action.payload.floor_plan || "";
           if (rawPath) {
             const base = rawPath.startsWith("http") ? rawPath : `${API_URL}${rawPath}`;
@@ -423,7 +495,7 @@ export function createFloorModule({
           }
 
           // also refresh preview url with cache-busting token
-          const API_URL = process.env.REACT_APP_API_URL || "";
+          const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
           const rawUpd = updatedFloor.floor_image || updatedFloor.floor_plan || "";
           if (rawUpd) {
             const base = rawUpd.startsWith("http") ? rawUpd : `${API_URL}${rawUpd}`;
@@ -541,7 +613,8 @@ export function createFloorModule({
     clearProcessorAreaIds,
     setProcessorAreaIds,
    } = floorSlice.actions;
-  const selectFloors = (state) => state.floor.floors;
+  const selectFloors = (state) => getFloorsList(state.floor.floors);
+  const selectManualSortEnabled = (state) => state.floor.manualSortEnabled;
   const uniqueFloor = (state) => state.floor.singleFloor;
   const selectFloorLoading = (state) => state.floor.status;
   const fetchLeafDataByID = (state) => state.floor.leafData
@@ -549,6 +622,8 @@ export function createFloorModule({
   return {
     reducer,
     fetchFloors,
+    setFloorSortMode,
+    reorderFloors,
     createAreaGroup,
     updateFloor,
     deleteFloor,
@@ -563,6 +638,7 @@ export function createFloorModule({
     calculateAreaWithReferenceLength,
     fetchExistingCalculatedAreas,
     selectFloors,
+    selectManualSortEnabled,
     uniqueFloor,
     selectFloorLoading,
     fetchLeafDataByID,

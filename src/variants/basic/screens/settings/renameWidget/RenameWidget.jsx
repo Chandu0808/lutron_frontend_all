@@ -41,6 +41,7 @@ import {
     selectRenameWidgetError,
     selectWidgetConfigurationStatus,
 } from "../../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
+import { dispatchFetchWidgetConfigurationOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
 import { UseAuth, getVisibleSidebarItemsWithPaths } from "../../../customhooks/UseAuth";
 import { selectProfile } from "../../../redux/slice/auth/userlogin";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
@@ -51,7 +52,8 @@ import {
     useDashboardWidgetVisibility,
     inferWidgetVisibilitySection,
     normalizeDashboardWidgetKey,
-    dedupeWidgetItemsByCanonicalKey,
+    normalizeSettingsWidgetListItems,
+    resolveSettingsWidgetDisplayName,
 } from "../../../utils/dashboardWidgetVisibility";
 import {
     DEFAULT_SHADES_CO2_CONSTANT,
@@ -78,6 +80,16 @@ import {
     setCustomOverviewWidgetVisible,
     readImageFileAsDataUrl,
 } from "../../../utils/customOverviewWidgets";
+import { ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS } from "../../../config/featureFlags";
+import CustomGraphSettingsPanel from "../../../../../shared/settings/customGraph/CustomGraphSettingsPanel";
+import {
+    fetchCustomGraphs,
+    createCustomGraph,
+    deleteCustomGraph,
+    selectCustomGraphs,
+    selectCustomGraphsLoading,
+    selectCustomGraphsError,
+} from "../../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
 
 const capitalizeFirstLetter = (str) => {
     if (!str) return "";
@@ -132,7 +144,7 @@ export default function RenameWidget() {
         light_power_density: "Light Power Density",
         consumption: "Consumption",
         savings: "Savings",
-        peak_and_minimum_consumption: "Peak And Minimum Consumption",
+        peak_and_minimum_consumption: "Peak & Minimum Consumption",
         utilization: "Utilization",
         utilization_by_area_group: "Utilization By Area Group",
         utilization_by_area: "Utilization By Area",
@@ -141,33 +153,22 @@ export default function RenameWidget() {
     };
 
     const items = useMemo(() => {
-        const arr = Array.isArray(widgetList?.titles) ? widgetList.titles : [];
-        // normalize shape { key, title, dropdown_name }
-        const normalizedItems = arr.map((t) => ({
-            key: t.key,
-            title: t.title,
-            dropdown_name: t.dropdown_name ?? t.title, // fallback
-        }));
-        /**
-         * Ensure each dashboard slot can be toggled if the API omits it.
-         * - `total_consumption_by_group` / API `consumption_by_area_groups` → pie (deduped to one row)
-         * - `consumption_saving` → combined bar chart (separate from pie)
-         */
+        const arr = Array.isArray(widgetList?.titles)
+            ? widgetList.titles
+            : Array.isArray(widgetList)
+                ? widgetList
+                : [];
         const syntheticKeys = [
             "instant_utilization_combined",
             "total_consumption_by_group",
             "consumption_saving",
+            "light_power_density",
+            "peak_and_minimum_consumption",
         ];
-        for (const sk of syntheticKeys) {
-            const hasCanonical = normalizedItems.some(
-                (x) => normalizeDashboardWidgetKey(x.key) === sk
-            );
-            if (!hasCanonical) {
-                const title = widgetTitlesFallback[sk] || sk;
-                normalizedItems.push({ key: sk, title, dropdown_name: title });
-            }
-        }
-        const deduped = dedupeWidgetItemsByCanonicalKey(normalizedItems);
+        const deduped = normalizeSettingsWidgetListItems(arr, {
+            fallbackMap: widgetTitlesFallback,
+            syntheticKeys,
+        });
         return deduped.map((row) => {
             if (row.key !== "total_consumption_by_group") return row;
             const fb = widgetTitlesFallback.total_consumption_by_group;
@@ -191,6 +192,16 @@ export default function RenameWidget() {
         });
     }, [widgetList]);
 
+    const visibilityRowLabel = (row) =>
+        capitalizeFirstLetter(
+            resolveSettingsWidgetDisplayName(
+                row.canonicalKey || normalizeDashboardWidgetKey(row.key),
+                row.title,
+                row.dropdown_name || row.title,
+                widgetTitlesFallback
+            )
+        );
+
     const { isWidgetVisible, setWidgetVisible } = useDashboardWidgetVisibility();
 
     // Rule: if Consumption or Savings by Strategy is ON, Energy (Combined) must stay OFF.
@@ -199,6 +210,7 @@ export default function RenameWidget() {
         const savingsByStrategyOn = isWidgetVisible("savings_by_strategy");
         const anyEnergyIndividualOn = consumptionOn || savingsByStrategyOn;
         if (anyEnergyIndividualOn && isWidgetVisible("consumption_saving")) {
+            // Persist Combined off (remote) so Advanced/Basic stay aligned after refresh.
             setWidgetVisible("consumption_saving", false);
         }
 
@@ -423,11 +435,11 @@ export default function RenameWidget() {
         if (!selectedKey || !name.trim()) return;
 
         try {
-            const result = await dispatch(
+            await dispatch(
                 renameWidget({ widget_key: selectedKey, new_name: name.trim() })
             ).unwrap();
             // fetch fresh labels from backend; dropdown_name will update here
-            dispatch(fetchRenameWidgets());
+            await dispatch(fetchRenameWidgets()).unwrap();
             setSnackbarMessage("Widget Renamed Successfully!");
             setSnackbarOpen(true);
             // Clear the form after successful rename
@@ -447,7 +459,7 @@ export default function RenameWidget() {
 
     useEffect(() => {
         if (widgetConfigurationStatus === 'idle') {
-            dispatch(fetchWidgetConfiguration());
+            dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration);
         }
     }, [dispatch, widgetConfigurationStatus]);
 
@@ -644,7 +656,7 @@ export default function RenameWidget() {
                                     { key: "schedules", canonicalKey: "schedules", title: "Schedules", dropdown_name: "Schedules" },
                                     { key: "quick_controls", canonicalKey: "quick_controls", title: "Quick Controls", dropdown_name: "Quick Controls" },
                                     { key: "shades", canonicalKey: "shades", title: DEFAULT_SHADES_WIDGET_NAME, dropdown_name: DEFAULT_SHADES_WIDGET_NAME },
-                                    { key: "floors", canonicalKey: "floors", title: "Floors", dropdown_name: "Floors" },
+                                    // { key: "floors", canonicalKey: "floors", title: "Floors", dropdown_name: "Floors" },
                                     { key: "space_utilization", canonicalKey: "space_utilization", title: "Space Utilization", dropdown_name: "Space Utilization" },
                                 ],
                             },
@@ -701,9 +713,17 @@ export default function RenameWidget() {
                                                             }}
                                                             control={
                                                                 <Switch
-                                                                    checked={isWidgetVisible(row.key)}
+                                                                    checked={isWidgetVisible(
+                                                                        row.canonicalKey || row.key
+                                                                    )}
                                                                     onChange={(e) =>
-                                                                        setWidgetVisible(row.key, e.target.checked)
+                                                                        setWidgetVisible(
+                                                                            row.canonicalKey ||
+                                                                                normalizeDashboardWidgetKey(
+                                                                                    row.key
+                                                                                ),
+                                                                            e.target.checked
+                                                                        )
                                                                     }
                                                                     disabled={
                                                                         disableCombinedEnergyToggle ||
@@ -713,7 +733,7 @@ export default function RenameWidget() {
                                                                     sx={widgetVisibilitySwitchSx}
                                                                 />
                                                             }
-                                                            label={capitalizeFirstLetter(row.dropdown_name || row.title)}
+                                                            label={visibilityRowLabel(row)}
                                                         />
                                                         {row.key === "shades" && (
                                                             <IconButton
@@ -846,6 +866,18 @@ export default function RenameWidget() {
                                 ))
                             )}
                         </Box>
+                        ) : null}
+
+                        {ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS ? (
+                            <CustomGraphSettingsPanel
+                                variant="basic"
+                                fetchCustomGraphs={fetchCustomGraphs}
+                                createCustomGraph={createCustomGraph}
+                                deleteCustomGraph={deleteCustomGraph}
+                                selectCustomGraphs={selectCustomGraphs}
+                                selectCustomGraphsLoading={selectCustomGraphsLoading}
+                                selectCustomGraphsError={selectCustomGraphsError}
+                            />
                         ) : null}
                     </Box>
                 </Box>
@@ -1162,7 +1194,7 @@ export default function RenameWidget() {
                             fullWidth
                             size="small"
                             variant="outlined"
-                            placeholder="https://q2.lutron.com:8443/#floorplan/%2Fgraphicalregion?..."
+                            // placeholder="https://q2.lutron.com:8443/#floorplan/%2Fgraphicalregion?..."
                             value={shadesHyperlink}
                             onChange={(e) => setShadesHyperlink(e.target.value)}
                             sx={{

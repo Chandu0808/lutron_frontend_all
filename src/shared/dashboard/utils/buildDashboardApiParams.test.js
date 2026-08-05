@@ -38,7 +38,7 @@ describe('buildDashboardApiParams', () => {
     ).toBeNull();
   });
 
-  it('prioritizes floorIds over areaIds', () => {
+  it('prioritizes explicit areaIds over floorIds', () => {
     const params = buildDashboardApiParams({
       selectedDuration: 'this-day',
       selectedAreas: [1, 2],
@@ -48,8 +48,8 @@ describe('buildDashboardApiParams', () => {
       isNavigating: false,
     });
     expect(params).toEqual({
-      areaIds: null,
-      floorIds: [10],
+      areaIds: [1, 2],
+      floorIds: null,
       timeRange: 'this-day',
       startDate: '2024-06-01',
       endDate: '2024-06-01',

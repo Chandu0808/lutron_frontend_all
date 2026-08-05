@@ -139,6 +139,24 @@ describe('UtilizationByAreaList theme presets', () => {
     expect(theme.shellBg).toBe('#ffffff');
   });
 
+  it('advanced light surface uses dark text', () => {
+    const theme = resolveUtilizationByAreaTheme({
+      preset: UTILIZATION_BY_AREA_THEME_PRESETS.advanced,
+      chartSurface: 'light',
+    });
+    expect(theme.textColor).toBe('#111827');
+    expect(theme.shellBg).toBe('#ffffff');
+  });
+
+  it('customized light surface uses dark text', () => {
+    const theme = resolveUtilizationByAreaTheme({
+      preset: UTILIZATION_BY_AREA_THEME_PRESETS.customized,
+      chartSurface: 'light',
+    });
+    expect(theme.textColor).toBe('#111827');
+    expect(theme.shellBg).toBe('#ffffff');
+  });
+
   it('customized default_white theme', () => {
     const theme = resolveUtilizationByAreaTheme({
       preset: UTILIZATION_BY_AREA_THEME_PRESETS.customized,

@@ -16,6 +16,8 @@ export const ADVANCED_DASHBOARD_TAB_ORDER_WITHOUT_OVERVIEW = [
 export const ADVANCED_DASHBOARD_LAYOUT_ADAPTER = {
   variant: 'advanced',
   TAB_ORDER: ADVANCED_DASHBOARD_TAB_ORDER,
+  // Keep visited Energy/Space/Alerts panels mounted so tab switches don't remount widgets.
+  keepInactiveSectionsMounted: true,
   resolveSectionKey(activeTab) {
     if (activeTab === DASHBOARD_SECTION_IDS.CHARTS) {
       return DASHBOARD_SECTION_IDS.CHARTS;

@@ -245,12 +245,15 @@ describe('space adapter layout context routing', () => {
 });
 
 describe('space adapter loading and visibility parity', () => {
-  it('all adapters use shared loading state passthrough', () => {
-    const loading = { anyLoading: true };
+  it('basic/customized pass through loading; advanced disables shared anyLoading', () => {
+    const loading = { anyLoading: true, instantOccupancyCountLoading: true };
     const widgetOptions = { loading };
     expect(basicSpaceContainerAdapter.buildLoadingState(widgetOptions)).toBe(loading);
-    expect(advancedSpaceContainerAdapter.buildLoadingState(widgetOptions)).toBe(loading);
     expect(customizedSpaceContainerAdapter.buildLoadingState(widgetOptions)).toBe(loading);
+    expect(advancedSpaceContainerAdapter.buildLoadingState(widgetOptions)).toEqual({
+      ...loading,
+      anyLoading: false,
+    });
   });
 
   it('basic visibility exposes slot orders', () => {

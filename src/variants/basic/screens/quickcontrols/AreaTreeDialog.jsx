@@ -9,6 +9,10 @@ import { fetchFloors, selectFloors, getLeafByFloorID } from "../../redux/slice/f
 import { UseAuth } from '../../customhooks/UseAuth';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome, onContentColors } from '../../utils/themeOnSurface';
+import {
+  dispatchFetchFloorsOnce,
+  dispatchFetchLeafByFloorOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards';
 
 const AreaTreeDialog = ({ open, onClose, onAdd }) => {
   const dispatch = useDispatch();
@@ -271,30 +275,33 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
     onClose();
   };
 
-  // Auto-select first available floor when floors are loaded
+  // Auto-select first available floor only when dialog is open
   useEffect(() => {
+    if (!open) return;
     const availableFloors = getAvailableFloors();
     if (availableFloors && availableFloors.length > 0 && !selectedFloor) {
       setSelectedFloor(availableFloors[0].id.toString());
     }
-  }, [floors, currentUserRole, userProfile]);
+  }, [open, floors, currentUserRole, userProfile, selectedFloor]);
 
   // In the useEffect for dialog open, reset selectedAreaCodes and fetch floors
   useEffect(() => {
     if (open) {
       setSelectedAreaCodes([]);
       setExpanded({});
-      // Fetch floors when dialog opens
-      dispatch(fetchFloors());
+      dispatchFetchFloorsOnce(
+        dispatch,
+        fetchFloors,
+        Array.isArray(floors) && floors.length > 0
+      );
     }
-  }, [open, dispatch]);
+  }, [open, dispatch, floors]);
 
-  // Fetch area tree when floor changes
+  // Fetch area tree when floor changes (only while dialog open)
   useEffect(() => {
-    if (selectedFloor) {
-      dispatch(getLeafByFloorID(selectedFloor));
-    }
-  }, [selectedFloor, dispatch]);
+    if (!open || !selectedFloor) return;
+    dispatchFetchLeafByFloorOnce(dispatch, getLeafByFloorID, selectedFloor);
+  }, [open, selectedFloor, dispatch]);
 
   return (
     <Dialog 

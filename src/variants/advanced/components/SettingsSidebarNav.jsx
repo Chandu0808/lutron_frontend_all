@@ -15,6 +15,7 @@ import {
   isSettingsSidebarNavActive,
   usesThemedSettingsSidebarChrome,
 } from "../utils/settingsSidebarTabStyles";
+import { ADVANCED_SETTINGS_HOME_PATH } from "../utils/advancedSettingsPaths";
 import { SettingsSidebarNavLabel } from "../utils/SettingsSidebarNavLabel";
 import {
   readSettingsSidebarPillState,
@@ -123,7 +124,11 @@ export default function SettingsSidebarNav({ items = [] }) {
       return;
     }
 
-    if (event.key === "ArrowRight" && rovingActiveKey === "Home" && normalizedPath === "/main") {
+    if (
+      event.key === "ArrowRight" &&
+      rovingActiveKey === "Home" &&
+      normalizedPath === ADVANCED_SETTINGS_HOME_PATH
+    ) {
       event.preventDefault();
       event.stopPropagation();
       focusSettingsHomeTab("Lutron");

@@ -29,12 +29,18 @@ export const createUser = createAsyncThunk(
 
       return response.data;
     } catch (err) {
-      // 3) Bubble up the backend’s 422 or other error message
-      return rejectWithValue(
-        err.response?.data?.message ||
-        err.response?.statusText ||
-        err.message
-      );
+      // Prefer FastAPI `detail` (e.g. "user already exists") over generic statusText
+      const data = err.response?.data;
+      const detail = data?.detail;
+      let message;
+      if (Array.isArray(detail)) {
+        message = detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
+      } else if (typeof detail === "string") {
+        message = detail;
+      } else {
+        message = data?.message || err.response?.statusText || err.message;
+      }
+      return rejectWithValue(message);
     }
   }
 );

@@ -1,5 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
+import { getProcessorId } from '../../../../../utils/processorId';
+import { validateAreaCoordinatesCsvFile } from '../../../../../utils/areaCoordinatesCsv';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import {
   Grid, Typography, TextField, Button, List, Box, Snackbar, Alert, CircularProgress
@@ -44,7 +46,7 @@ const DocumentPreviewContainer = styled('div')({
   position: 'relative',
 });
 
-const API_URL = process.env.REACT_APP_API_URL || "";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 const floorPanelBg = 'var(--settings-panel-inner-bg, #d6dde8)';
 const floorPanelBorder = 'var(--settings-panel-border, #b8c5d6)';
@@ -84,7 +86,6 @@ export default function EditFloor() {
   const [processorToDelete, setProcessorToDelete] = useState(null);
 
   const role = localStorage.getItem('role');
-  if (role !== 'Superadmin') return <Navigate to="/main" replace />;
 
   // Load floor data
   useEffect(() => {
@@ -123,7 +124,7 @@ export default function EditFloor() {
     };
   }, [previewURL]);
 
-  const handleCancel = () => navigate('/floor');
+  const handleCancel = () => navigate('/setting/floor');
   
   const handleCloseErrorSnackbar = () => {
     setShowErrorSnackbar(false);
@@ -175,9 +176,9 @@ export default function EditFloor() {
         // BACKEND EXPECTS 'processors' JSON, not repeated 'processor_ids'
         if (processorList.length > 0) {
           const processorsPayload = processorList.map(proc => ({
-            processor_id: proc.processor_id || proc.id,
+            processor_id: getProcessorId(proc),
             area_ids: (proc.areas || []).map(a => a.area_id || a.id).filter(Boolean)
-          }));
+          })).filter((p) => p.processor_id != null);
           formData.append('processors', JSON.stringify(processorsPayload));
         }
     
@@ -201,7 +202,7 @@ export default function EditFloor() {
       dispatch(fetchSingleFloor(floorId)); // optional refresh
       
       // Navigate back after success
-      setTimeout(() => navigate('/floor'), 3000);
+      setTimeout(() => navigate('/setting/floor'), 3000);
       
     } catch (err) {
       displayErrorSnackbar(`Update failed: ${err.message || 'Unknown error'}`);
@@ -224,13 +225,22 @@ export default function EditFloor() {
   };
 
   const handleAddProcessors = () => {
-    const selected = allProcessors.filter((p) => selectedProcessorIds.includes(p.id));
-    const existingIds = processorList.map(p => p.processor_id || p.id);
-    const newProcessors = selected.filter(p => !existingIds.includes(p.id));
-    setProcessorList(prev => [...prev, ...newProcessors]);
+    const selected = allProcessors.filter((p) =>
+      selectedProcessorIds.some((id) => getProcessorId(id) === getProcessorId(p))
+    );
+    const existingIds = processorList
+      .map((p) => getProcessorId(p))
+      .filter((id) => id != null);
+    const newProcessors = selected.filter((p) => {
+      const pid = getProcessorId(p);
+      return pid != null && !existingIds.includes(pid);
+    });
+    setProcessorList((prev) => [...prev, ...newProcessors]);
     setOpenProcessorDialog(false);
     setSelectedProcessorIds([]);
   };
+
+  if (role !== 'Superadmin') return <Navigate to="/setting/main" replace />;
 
   return (
     <>
@@ -423,34 +433,38 @@ export default function EditFloor() {
                             hidden
                             onChange={async (e) => {
                               const file = e.target.files[0];
-                              const processorId = proc.processor_id || proc.id;
+                              const processorId = getProcessorId(proc);
                               
-                              if (file) {
-                                // Set uploading status
-                                setUploadStatuses(prev => ({ ...prev, [processorId]: 'uploading' }));
+                              if (!file || processorId == null) {
+                                e.target.value = '';
+                                return;
+                              }
+
+                              const validation = await validateAreaCoordinatesCsvFile(file, processorId);
+                              if (!validation.valid) {
+                                setUploadStatuses(prev => ({ ...prev, [processorId]: 'failure' }));
+                                displayErrorSnackbar(validation.error);
+                                e.target.value = '';
+                                return;
+                              }
+
+                              setUploadStatuses(prev => ({ ...prev, [processorId]: 'uploading' }));
                                 
                                 try {
-                                  // Pass the correct object structure expected by Redux action
                                   await dispatch(uploadAreaCoordinates({ 
-                                    processorId: processorId, 
-                                    file: file 
+                                    processorId, 
+                                    file 
                                   })).unwrap();
                                   
-                                  // Set success status
                                   setUploadStatuses(prev => ({ ...prev, [processorId]: 'success' }));
                                   
-                                  // Refresh floor data to show updated coordinates
                                   dispatch(fetchSingleFloor(floorId));
                                 } catch (err) {
-                                  // Set failure status
                                   setUploadStatuses(prev => ({ ...prev, [processorId]: 'failure' }));
                                   
-                                  // Show error message
                                   displayErrorSnackbar(err || 'Failed to upload area coordinates.');
                                 }
-                                // Clear the file input so the same file can be uploaded again
                                 e.target.value = '';
-                              }
                             }}
                           />
                         </Button>

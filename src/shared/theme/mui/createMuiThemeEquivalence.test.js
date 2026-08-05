@@ -342,7 +342,7 @@ function legacyCustomizedCreateAppTheme(uiColors = {}, bgImage = "") {
         styleOverrides: {
           root: {
             color: "#FFFFFF",
-            "&.Mui-error": { color: "#FFFFFF" },
+            "&.Mui-error": { color: "#d32f2f" },
           },
         },
       },

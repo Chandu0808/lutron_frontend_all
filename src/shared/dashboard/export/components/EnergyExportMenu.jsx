@@ -5,6 +5,7 @@ import { EXPORT_MENU_COPY } from './exportMenuTheme';
 
 export default function EnergyExportMenu({
   menuKey,
+  loadingPrefix,
   isOpen,
   exportLoading,
   onEmail,
@@ -17,11 +18,13 @@ export default function EnergyExportMenu({
 }) {
   if (!isOpen) return null;
 
+  const loadingKeyPrefix = loadingPrefix ?? menuKey;
+
   const actions = buildEmailDownloadExportActions({
     onEmail,
     onDownload,
-    emailLoading: exportLoading[`${menuKey}_email`],
-    downloadLoading: exportLoading[`${menuKey}_download`],
+    emailLoading: exportLoading[`${loadingKeyPrefix}_email`],
+    downloadLoading: exportLoading[`${loadingKeyPrefix}_download`],
     emailLabel: emailLabel ?? EXPORT_MENU_COPY.email,
     downloadLabel: downloadLabel ?? EXPORT_MENU_COPY.download,
   });
@@ -29,7 +32,7 @@ export default function EnergyExportMenu({
   return (
     <ExportMenuPanel
       innerRef={innerRef}
-      className={className}
+      className={className ?? preset?.className}
       panelStyle={preset.panel}
       panelDataAttribute={preset.panelDataAttribute}
       actions={actions}

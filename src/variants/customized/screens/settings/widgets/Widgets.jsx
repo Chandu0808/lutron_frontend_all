@@ -14,6 +14,8 @@ import {
 } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import LinkIcon from "@mui/icons-material/Link";
+import CloseIcon from "@mui/icons-material/Close";
 import { Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import SettingsSidebar from "../../../components/SettingsSidebar";
@@ -38,10 +40,17 @@ import {
     selectRenameWidgetLoading,
     selectRenameWidgetError,
     clearRenameWidgetError,
+    fetchWidgetConfiguration,
+    saveWidgetVisibility,
+    selectWidgetConfiguration,
 } from "../../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
+import {
+    dispatchFetchCustomGraphsOnce,
+    dispatchFetchWidgetConfigurationOnce,
+    dispatchFetchWidgetTitlesOnce,
+} from "../../../../../shared/utils/bootstrapFetchGuards";
 import { UseAuth, getVisibleSidebarItemsWithPaths } from "../../../customhooks/UseAuth";
 import { selectProfile } from "../../../redux/slice/auth/userlogin";
-import { selectCustomWidgetFilters } from "../../../redux/slice/dashboard/dashboardSlice";
 import { Checkbox, FormControlLabel, Switch } from "@mui/material";
 import {
     readBuiltinWidgetOverrides,
@@ -56,11 +65,43 @@ import {
 } from "../../../utils/builtinWidgetDashboardPage";
 import CustomGraphScopeSection from "./CustomGraphScopeSection";
 import CustomGraphScopedGroupPicker from "./CustomGraphScopedGroupPicker";
+import AddCustomGraphDialog from "../../../../../shared/settings/customGraph/AddCustomGraphDialog";
+import { customizedModalBackdropProps } from "../../../utils/customizedDialogChrome";
 import {
     pickCustomGraphScopeForStorage,
     readCustomGraphScopeDraft,
 } from "../../../utils/mergeCustomGraphScopeIntoApiParams";
 import { isCustomGraphGroupScope } from "../../../utils/filterGroupIdsByAreaGroupScope";
+import {
+    CUSTOMIZED_OVERVIEW_WIDGET_ROWS,
+    resolveCustomizedOverviewSelectedKeys,
+    resolveCustomizedEnergySelectedKeys,
+    resolveCustomizedSpaceSelectedKeys,
+    isCustomizedVisibilitySectionEmpty,
+    parseCustomizedWidgetVisibilityRoot,
+    writeCustomizedWidgetVisibilityRoot,
+    hydrateCustomizedVisibilityFromApiItems,
+    customizedVisibilityRootToApiPayloads,
+} from "../../../utils/customizedOverviewWidgetVisibility";
+import {
+    DEFAULT_SHADES_CO2_CONSTANT,
+    getShadesCo2Constant,
+    getShadesWidgetDescription,
+    getShadesWidgetImage,
+    notifyShadesSettingsChanged,
+    SHADES_CO2_CONSTANT_KEY,
+    SHADES_DESCRIPTION_KEY,
+    SHADES_HYPERLINK_KEY,
+    SHADES_IMAGE_KEY,
+    SHADES_NAME_KEY,
+} from "../../../../basic/utils/shadesWidgetSettings";
+import { normalizeDashboardWidgetKey, normalizeSettingsWidgetListItems, resolveSettingsWidgetDisplayName } from "../../../../../shared/dashboard/utils/dashboardWidgetVisibilityCore";
+import { readImageFileAsDataUrl } from "../../../../basic/utils/customOverviewWidgets";
+import {
+    CUSTOMIZED_GUARANTEED_ENERGY_BUILTIN_ROWS,
+    CUSTOMIZED_GUARANTEED_SPACE_BUILTIN_ROWS,
+    mergeGuaranteedCustomizedBuiltinRows,
+} from "../../../utils/customizedDashboardBuiltinWidgetRows";
 
 export default function RenameWidget() {
     const dispatch = useDispatch();
@@ -71,7 +112,7 @@ export default function RenameWidget() {
     const customGraphs = useSelector(selectCustomGraphs);
     const customGraphsLoading = useSelector(selectCustomGraphsLoading);
     const customGraphsError = useSelector(selectCustomGraphsError);
-    const customWidgetFilters = useSelector(selectCustomWidgetFilters);
+
     const theme = useTheme();
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [errorSnackbarOpen, setErrorSnackbarOpen] = useState(false);
@@ -81,22 +122,7 @@ export default function RenameWidget() {
     const [customGraphErrorMessage, setCustomGraphErrorMessage] = useState("");
 
     const [customGraphOpen, setCustomGraphOpen] = useState(false);
-    const [customGraphPage, setCustomGraphPage] = useState("energy");
-    const [customGraphType, setCustomGraphType] = useState("bar");
-    const [customGraphName, setCustomGraphName] = useState("");
-    const [customGraphApiPath, setCustomGraphApiPath] = useState("");
-    const [customGraphScopeMode, setCustomGraphScopeMode] = useState("inherit");
-    const [customGraphScopeDraft, setCustomGraphScopeDraft] = useState({
-        floor_ids: [],
-        area_ids: [],
-    });
-    const [customGraphScopeTarget, setCustomGraphScopeTarget] = useState("location"); // 'location' or 'group'
-    /** Optional subset of area group ids when target is 'group' (stored as `custom_area_group_ids`). */
-    const [customGraphAreaGroupIds, setCustomGraphAreaGroupIds] = useState([]);
-    /** Optional: restrict by-group APIs to special vs user groups (see filterGroupIdsByAreaGroupScope). */
-    const [customGraphGroupScope, setCustomGraphGroupScope] = useState("");
-    /** Optional subset of group ids when scope is set (stored as `scoped_group_ids`). */
-    const [customGraphScopedGroupIds, setCustomGraphScopedGroupIds] = useState([]);
+    const [customGraphDialogError, setCustomGraphDialogError] = useState("");
 
     /** Unified edit dialog (built-in + custom) */
     const [graphEditOpen, setGraphEditOpen] = useState(false);
@@ -134,9 +160,11 @@ export default function RenameWidget() {
         light_power_density: "Light Power Density",
         consumption: "Consumption",
         savings: "Savings",
-        peak_and_minimum_consumption: "Peak And Minimum Consumption",
+        peak_and_minimum_consumption: "Peak & Minimum Consumption",
+        consumption_saving: "Energy (Combined)",
         utilization: "Utilization",
         instant_occupancy_count: "Instant Occupancy Count",
+        instant_utilization_combined: "Space Utilization (Combined)",
         utilization_by_area_group: "Utilization By Area Group",
         utilization_by_area: "Utilization By Area",
         peak_and_minimum_utilization: "Peak And Minimum Utilization",
@@ -163,21 +191,25 @@ export default function RenameWidget() {
         return s.replace(/\b\w/g, (c) => c.toUpperCase());
     }, []);
 
+    const normalizeWidgetKey = (key) => normalizeDashboardWidgetKey(String(key ?? "").trim());
+
     const items = useMemo(() => {
         const arr = Array.isArray(widgetList?.titles)
             ? widgetList.titles
             : Array.isArray(widgetList)
                 ? widgetList
                 : [];
-        const normalizedItems = arr.map((t) => ({
-            key: t.key != null ? String(t.key) : "",
-            title: t.title,
-            dropdown_name: t.title ?? t.dropdown_name,
-        }));
-        return normalizedItems.filter((x) => x.key);
+        const syntheticKeys = [
+            "instant_utilization_combined",
+            "consumption_saving",
+            "light_power_density",
+            "peak_and_minimum_consumption",
+        ];
+        return normalizeSettingsWidgetListItems(arr, {
+            fallbackMap: widgetTitlesFallback,
+            syntheticKeys,
+        });
     }, [widgetList]);
-
-    const normalizeWidgetKey = (key) => String(key);
 
     const energyKeys = useMemo(
         () =>
@@ -187,6 +219,7 @@ export default function RenameWidget() {
                 "consumption_by_area_groups",
                 "consumption",
                 "savings",
+                "consumption_saving",
                 "light_power_density",
                 "peak_and_minimum_consumption",
             ]),
@@ -198,6 +231,7 @@ export default function RenameWidget() {
             new Set([
                 "utilization",
                 "instant_occupancy_count",
+                "instant_utilization_combined",
                 "utilization_by_area_group",
                 "peak_and_minimum_utilization",
                 "utilization_by_area",
@@ -205,15 +239,7 @@ export default function RenameWidget() {
         []
     );
 
-    const parseWidgetVisibilityFromLocalStorage = () => {
-        try {
-            const raw = localStorage.getItem("widgetVisibility");
-            const obj = raw ? JSON.parse(raw) : null;
-            return obj && typeof obj === "object" ? obj : {};
-        } catch {
-            return {};
-        }
-    };
+    const parseWidgetVisibilityFromLocalStorage = () => parseCustomizedWidgetVisibilityRoot();
 
     const [widgetVisibility, setWidgetVisibility] = useState(() =>
         parseWidgetVisibilityFromLocalStorage()
@@ -222,10 +248,25 @@ export default function RenameWidget() {
     /** Re-run built-in row filters when dashboard page assignment (Energy vs Space) changes */
     const [builtinDashboardPageTick, setBuiltinDashboardPageTick] = useState(0);
 
+    const [overviewSelected, setOverviewSelected] = useState([]);
+    const overviewSelectedRef = useRef([]);
+
+    const [shadesDialogOpen, setShadesDialogOpen] = useState(false);
+    const [shadesHyperlink, setShadesHyperlink] = useState("");
+    const [shadesName, setShadesName] = useState("");
+    const [shadesCo2Constant, setShadesCo2Constant] = useState(String(DEFAULT_SHADES_CO2_CONSTANT));
+    const [shadesImageUrl, setShadesImageUrl] = useState("");
+    const [shadesDescription, setShadesDescription] = useState("");
+    const [shadesImageError, setShadesImageError] = useState("");
+
     const [energySelected, setEnergySelected] = useState([]);
     const [spaceSelected, setSpaceSelected] = useState([]);
     const energySelectedRef = useRef([]);
     const spaceSelectedRef = useRef([]);
+
+    useEffect(() => {
+        overviewSelectedRef.current = overviewSelected;
+    }, [overviewSelected]);
 
     useEffect(() => {
         energySelectedRef.current = energySelected;
@@ -545,26 +586,85 @@ export default function RenameWidget() {
         const normKey = normalizeWidgetKey(row.key);
         if (row.section === "energy") {
             setEnergySelected((prev) => {
-                const next = checked
+                let next = checked
                     ? prev.includes(normKey)
                         ? prev
                         : [...prev, normKey]
                     : prev.filter((item) => item !== normKey);
+                if (checked) {
+                    if (normKey === "consumption_saving") {
+                        next = next.filter(
+                            (k) => k !== "consumption" && k !== "savings_by_strategy"
+                        );
+                    } else if (normKey === "consumption" || normKey === "savings_by_strategy") {
+                        next = next.filter((k) => k !== "consumption_saving");
+                    }
+                }
+                energySelectedRef.current = next;
                 persistWidgetVisibility(next, spaceSelectedRef.current);
                 return next;
             });
         } else {
             setSpaceSelected((prev) => {
-                const next = checked
+                let next = checked
                     ? prev.includes(normKey)
                         ? prev
                         : [...prev, normKey]
                     : prev.filter((item) => item !== normKey);
+                if (checked) {
+                    if (normKey === "instant_utilization_combined") {
+                        next = next.filter(
+                            (k) => k !== "instant_occupancy_count" && k !== "utilization_by_area"
+                        );
+                    } else if (
+                        normKey === "instant_occupancy_count" ||
+                        normKey === "utilization_by_area"
+                    ) {
+                        next = next.filter((k) => k !== "instant_utilization_combined");
+                    }
+                }
+                spaceSelectedRef.current = next;
                 persistWidgetVisibility(energySelectedRef.current, next);
                 return next;
             });
         }
     };
+
+    const anyEnergyIndividualOn = useMemo(
+        () =>
+            energySelected.includes("consumption") ||
+            energySelected.includes("savings_by_strategy"),
+        [energySelected]
+    );
+
+    const anyOneSpaceCombinedConflictOn = useMemo(
+        () =>
+            spaceSelected.includes("instant_occupancy_count") ||
+            spaceSelected.includes("utilization_by_area"),
+        [spaceSelected]
+    );
+
+    useEffect(() => {
+        if (!anyEnergyIndividualOn || !energySelected.includes("consumption_saving")) return;
+        setEnergySelected((prev) => {
+            const next = prev.filter((k) => k !== "consumption_saving");
+            energySelectedRef.current = next;
+            persistWidgetVisibility(next, spaceSelectedRef.current);
+            return next;
+        });
+    }, [anyEnergyIndividualOn, energySelected]);
+
+    useEffect(() => {
+        if (!anyOneSpaceCombinedConflictOn || !spaceSelected.includes("instant_utilization_combined")) {
+            return;
+        }
+        setSpaceSelected((prev) => {
+            const next = prev.filter((k) => k !== "instant_utilization_combined");
+            spaceSelectedRef.current = next;
+            persistWidgetVisibility(energySelectedRef.current, next);
+            return next;
+        });
+    }, [anyOneSpaceCombinedConflictOn, spaceSelected]);
 
     const energyItems = useMemo(
         () =>
@@ -606,12 +706,20 @@ export default function RenameWidget() {
 
     // Checkbox rows: built-in + custom; each row carries isCustom + graph for inline actions.
     const energyCheckboxRows = useMemo(() => {
-        const base = energyItems.map((x) => ({
-            key: normalizeWidgetKey(x.key),
-            dropdown_name: x.dropdown_name,
-            isCustom: false,
-            graph: null,
-        }));
+        const base = energyItems.map((x) => {
+            const key = normalizeWidgetKey(x.key);
+            return {
+                key,
+                dropdown_name: resolveSettingsWidgetDisplayName(
+                    key,
+                    x.title,
+                    x.dropdown_name || x.title,
+                    widgetTitlesFallback
+                ),
+                isCustom: false,
+                graph: null,
+            };
+        });
         const list = Array.isArray(customGraphs) ? customGraphs : [];
         const extras = list
             .filter(
@@ -632,12 +740,34 @@ export default function RenameWidget() {
     }, [energyItems, customGraphs]);
 
     const spaceCheckboxRows = useMemo(() => {
-        const base = spaceItems.map((x) => ({
-            key: normalizeWidgetKey(x.key),
-            dropdown_name: x.dropdown_name,
-            isCustom: false,
-            graph: null,
-        }));
+        const base = spaceItems.map((x) => {
+            const key = normalizeWidgetKey(x.key);
+            return {
+                key,
+                dropdown_name: resolveSettingsWidgetDisplayName(
+                    key,
+                    x.title,
+                    x.dropdown_name || x.title,
+                    widgetTitlesFallback
+                ),
+                isCustom: false,
+                graph: null,
+            };
+        });
+        const existingKeys = new Set(base.map((r) => r.key));
+        const requiredSpaceBuiltins = [
+            {
+                key: "instant_utilization_combined",
+                dropdown_name: widgetTitlesFallback.instant_utilization_combined,
+            },
+        ];
+        const missingBuiltins = requiredSpaceBuiltins
+            .filter((r) => !existingKeys.has(r.key))
+            .map((r) => ({
+                ...r,
+                isCustom: false,
+                graph: null,
+            }));
         const list = Array.isArray(customGraphs) ? customGraphs : [];
         const extras = list
             .filter((g) => {
@@ -654,16 +784,24 @@ export default function RenameWidget() {
                 graph: g,
             }))
             .filter((r) => r.key !== "custom_graph:");
-        return [...base, ...extras];
+        return [...base, ...missingBuiltins, ...extras];
     }, [spaceItems, customGraphs]);
 
-    const unifiedGraphRows = useMemo(
-        () => [
-            ...energyCheckboxRows.map((r) => ({ ...r, section: "energy" })),
-            ...spaceCheckboxRows.map((r) => ({ ...r, section: "space" })),
-        ],
-        [energyCheckboxRows, spaceCheckboxRows]
-    );
+    const unifiedGraphRows = useMemo(() => {
+        const energy = energyCheckboxRows.map((r) => ({ ...r, section: "energy" }));
+        const space = spaceCheckboxRows.map((r) => ({ ...r, section: "space" }));
+        const withGuaranteedEnergy = mergeGuaranteedCustomizedBuiltinRows(
+            energy,
+            CUSTOMIZED_GUARANTEED_ENERGY_BUILTIN_ROWS,
+            "energy"
+        );
+        const withGuaranteedSpace = mergeGuaranteedCustomizedBuiltinRows(
+            space,
+            CUSTOMIZED_GUARANTEED_SPACE_BUILTIN_ROWS,
+            "space"
+        );
+        return [...withGuaranteedEnergy, ...withGuaranteedSpace];
+    }, [energyCheckboxRows, spaceCheckboxRows]);
 
     const persistWidgetVisibility = (nextEnergySelected, nextSpaceSelected) => {
         const current = parseWidgetVisibilityFromLocalStorage();
@@ -685,12 +823,13 @@ export default function RenameWidget() {
             if (String(k).startsWith("custom_graph:") && energyMap[k] === undefined) energyMap[k] = v;
         }
         // Keep alias keys in sync for backend + UI consistency.
-        if (typeof energyMap.consumption_by_area_groups === "boolean") {
-            energyMap.total_consumption_by_group = energyMap.consumption_by_area_groups;
-        }
-        if (typeof energyMap.total_consumption_by_group === "boolean") {
-            energyMap.consumption_by_area_groups = energyMap.total_consumption_by_group;
-        }
+        // Prefer canonical selection — do not let the alias key (often absent from
+        // energySelected after normalize) overwrite total_consumption_by_group to false.
+        const areaGroupsOn =
+            nextEnergySelected.includes("total_consumption_by_group") ||
+            nextEnergySelected.includes("consumption_by_area_groups");
+        energyMap.total_consumption_by_group = areaGroupsOn;
+        energyMap.consumption_by_area_groups = areaGroupsOn;
 
         const spaceMap = {};
         for (const k of spaceKeys) {
@@ -723,23 +862,65 @@ export default function RenameWidget() {
             }
         }
 
-        // Keep alias keys in sync even when alias keys are migrated into the other map.
-        if (typeof spaceMap.consumption_by_area_groups === "boolean") {
-            spaceMap.total_consumption_by_group = spaceMap.consumption_by_area_groups;
+        // Keep alias keys in sync (same rule as energy map).
+        const spaceAreaGroupsOn =
+            nextSpaceSelected.includes("total_consumption_by_group") ||
+            nextSpaceSelected.includes("consumption_by_area_groups") ||
+            spaceMap.total_consumption_by_group === true ||
+            spaceMap.consumption_by_area_groups === true;
+        if (
+            Object.prototype.hasOwnProperty.call(spaceMap, "total_consumption_by_group") ||
+            Object.prototype.hasOwnProperty.call(spaceMap, "consumption_by_area_groups")
+        ) {
+            spaceMap.total_consumption_by_group = spaceAreaGroupsOn;
+            spaceMap.consumption_by_area_groups = spaceAreaGroupsOn;
         }
-        if (typeof spaceMap.total_consumption_by_group === "boolean") {
-            spaceMap.consumption_by_area_groups = spaceMap.total_consumption_by_group;
+
+        const overviewMap = {};
+        const overviewKeys = CUSTOMIZED_OVERVIEW_WIDGET_ROWS.map((row) => row.key);
+        const overviewSelectedKeys =
+            overviewSelectedRef.current.length > 0
+                ? overviewSelectedRef.current
+                : resolveCustomizedOverviewSelectedKeys(current);
+        for (const k of overviewKeys) {
+            overviewMap[k] = overviewSelectedKeys.includes(k);
         }
 
         const merged = {
             ...current,
+            overview: overviewMap,
             energy: energyMap,
             space: spaceMap,
         };
 
-        localStorage.setItem("widgetVisibility", JSON.stringify(merged));
+        // Keep Combined off while individuals are enabled (persist until user disables).
+        if (energyMap.consumption === true || energyMap.savings_by_strategy === true) {
+            energyMap.consumption_saving = false;
+        }
+        if (energyMap.consumption_saving === true) {
+            energyMap.consumption = false;
+            energyMap.savings_by_strategy = false;
+        }
+        if (
+            spaceMap.instant_occupancy_count === true ||
+            spaceMap.utilization_by_area === true
+        ) {
+            spaceMap.instant_utilization_combined = false;
+        }
+        if (spaceMap.instant_utilization_combined === true) {
+            spaceMap.instant_occupancy_count = false;
+            spaceMap.utilization_by_area = false;
+        }
+
+        writeCustomizedWidgetVisibilityRoot(merged);
         setWidgetVisibility(merged);
         window.dispatchEvent(new CustomEvent("widgetVisibilityUpdated"));
+        if (currentUserRole === "Superadmin") {
+            const payloads = customizedVisibilityRootToApiPayloads(merged);
+            for (const payload of payloads) {
+                dispatch(saveWidgetVisibility(payload));
+            }
+        }
     };
 
     const setCustomGraphVisibilityEnabled = (page, id) => {
@@ -749,11 +930,24 @@ export default function RenameWidget() {
         const current = parseWidgetVisibilityFromLocalStorage();
         const lowerPage = String(page || "").toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
         const isSpace = lowerPage === "space" || lowerPage === "space-utilization" || lowerPage.startsWith("space-");
+
+        // If prefs were empty, seed Combined defaults first so adding a custom graph
+        // does not create a partial map that shows every built-in (opt-out legacy).
+        const energyEmpty = isCustomizedVisibilitySectionEmpty(current?.energy);
+        const spaceEmpty = isCustomizedVisibilitySectionEmpty(current?.space);
+        if (energyEmpty && spaceEmpty) {
+            persistWidgetVisibility(
+                resolveCustomizedEnergySelectedKeys({}),
+                resolveCustomizedSpaceSelectedKeys({})
+            );
+        }
+        const seeded = parseWidgetVisibilityFromLocalStorage();
+
         const nextEnergy = {
-            ...(current?.energy && typeof current.energy === "object" ? current.energy : {}),
+            ...(seeded?.energy && typeof seeded.energy === "object" ? seeded.energy : {}),
         };
         const nextSpace = {
-            ...(current?.space && typeof current.space === "object" ? current.space : {}),
+            ...(seeded?.space && typeof seeded.space === "object" ? seeded.space : {}),
         };
         // One graph belongs to one page: remove from the other map when switching energy ↔ space.
         if (isSpace) {
@@ -763,8 +957,8 @@ export default function RenameWidget() {
             delete nextSpace[widgetKey];
             nextEnergy[widgetKey] = true;
         }
-        const next = { ...current, energy: nextEnergy, space: nextSpace };
-        localStorage.setItem("widgetVisibility", JSON.stringify(next));
+        const next = { ...seeded, energy: nextEnergy, space: nextSpace };
+        writeCustomizedWidgetVisibilityRoot(next);
         setWidgetVisibility(next);
         // Keep checkbox UI in sync immediately (otherwise the graph appears on the dashboard
         // but the new custom graph checkbox can look unchecked until a full re-hydration).
@@ -787,7 +981,7 @@ export default function RenameWidget() {
         delete nextSpace[widgetKey];
 
         const next = { ...current, energy: nextEnergy, space: nextSpace };
-        localStorage.setItem("widgetVisibility", JSON.stringify(next));
+        writeCustomizedWidgetVisibilityRoot(next);
         setWidgetVisibility(next);
 
         // Keep checkbox UI in sync immediately.
@@ -797,12 +991,79 @@ export default function RenameWidget() {
         window.dispatchEvent(new CustomEvent("widgetVisibilityUpdated"));
     };
 
+    const handleOverviewVisibilitySwitch = (key, checked) => {
+        const normKey = normalizeWidgetKey(key);
+        setOverviewSelected((prev) => {
+            const next = checked
+                ? Array.from(new Set([...prev, normKey]))
+                : prev.filter((item) => item !== normKey);
+            overviewSelectedRef.current = next;
+            persistWidgetVisibility(energySelectedRef.current, spaceSelectedRef.current);
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        if (!shadesDialogOpen) return;
+        setShadesHyperlink("");
+        setShadesName("");
+        setShadesCo2Constant(String(getShadesCo2Constant()));
+        setShadesImageUrl(getShadesWidgetImage());
+        setShadesDescription(getShadesWidgetDescription());
+        setShadesImageError("");
+    }, [shadesDialogOpen]);
+
+    const handleShadesImageChange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const dataUrl = await readImageFileAsDataUrl(file);
+            setShadesImageUrl(dataUrl);
+            setShadesImageError("");
+        } catch (err) {
+            setShadesImageError(err?.message || "Could not load image.");
+        }
+        e.target.value = "";
+    };
+
+    const handleSaveShadesHyperlink = () => {
+        try {
+            if (shadesHyperlink.trim()) {
+                localStorage.setItem(SHADES_HYPERLINK_KEY, shadesHyperlink.trim());
+            }
+            if (shadesName.trim()) {
+                localStorage.setItem(SHADES_NAME_KEY, shadesName.trim());
+            }
+            const parsedCo2 = Number(shadesCo2Constant);
+            if (Number.isFinite(parsedCo2) && parsedCo2 >= 0) {
+                localStorage.setItem(SHADES_CO2_CONSTANT_KEY, String(parsedCo2));
+            }
+            if (shadesImageUrl) {
+                localStorage.setItem(SHADES_IMAGE_KEY, shadesImageUrl);
+            } else {
+                localStorage.removeItem(SHADES_IMAGE_KEY);
+            }
+            const description = shadesDescription.trim();
+            if (description) {
+                localStorage.setItem(SHADES_DESCRIPTION_KEY, description);
+            } else {
+                localStorage.removeItem(SHADES_DESCRIPTION_KEY);
+            }
+            notifyShadesSettingsChanged();
+            setShadesDialogOpen(false);
+        } catch (e) {
+            console.error(e);
+            setErrorSnackbarOpen(true);
+        }
+    };
+
     const handleEnergyCheckboxChange = (key) => {
         const normKey = normalizeWidgetKey(key);
         setEnergySelected((prev) => {
             const next = prev.includes(normKey)
                 ? prev.filter((item) => item !== normKey)
                 : [...prev, normKey];
+            energySelectedRef.current = next;
             persistWidgetVisibility(next, spaceSelectedRef.current);
             return next;
         });
@@ -814,6 +1075,7 @@ export default function RenameWidget() {
             const next = prev.includes(normKey)
                 ? prev.filter((item) => item !== normKey)
                 : [...prev, normKey];
+            spaceSelectedRef.current = next;
             persistWidgetVisibility(energySelectedRef.current, next);
             return next;
         });
@@ -827,36 +1089,76 @@ export default function RenameWidget() {
         return Array.from(new Set(keys));
     }, [energyCheckboxRows, spaceCheckboxRows]);
 
+    // Combined is mutually exclusive with individuals — after Select All, Combined is
+    // stripped but must still count as "covered" or the checkbox unchecks on release.
+    const isSelectAllKeySatisfied = useCallback(
+        (k) => {
+            if (energySelected.includes(k) || spaceSelected.includes(k)) return true;
+            if (k === "consumption_saving") {
+                return (
+                    energySelected.includes("consumption") ||
+                    energySelected.includes("savings_by_strategy")
+                );
+            }
+            if (k === "instant_utilization_combined") {
+                return (
+                    spaceSelected.includes("instant_occupancy_count") ||
+                    spaceSelected.includes("utilization_by_area")
+                );
+            }
+            return false;
+        },
+        [energySelected, spaceSelected]
+    );
+
     const allSelected =
-        allWidgetKeys.length > 0 &&
-        allWidgetKeys.every(
-            (k) => energySelected.includes(k) || spaceSelected.includes(k)
-        );
+        allWidgetKeys.length > 0 && allWidgetKeys.every((k) => isSelectAllKeySatisfied(k));
 
     // Single "Select All" should behave as a strict toggle:
-    // checked => select all, unchecked => unselect all.
+    // checked => select all (respect Combined vs individual exclusion), unchecked => unselect all.
     const handleToggleAll = (e) => {
         const checked = !!e?.target?.checked;
         if (!checked) {
+            energySelectedRef.current = [];
+            spaceSelectedRef.current = [];
             setEnergySelected([]);
             setSpaceSelected([]);
             persistWidgetVisibility([], []);
             return;
         }
 
-        const nextEnergy = Array.from(
+        let nextEnergy = Array.from(
             new Set(energyCheckboxRows.map(({ key }) => normalizeWidgetKey(key)))
         );
-        const nextSpace = Array.from(
+        let nextSpace = Array.from(
             new Set(spaceCheckboxRows.map(({ key }) => normalizeWidgetKey(key)))
         );
+        // Prefer individuals over Combined so Select All stays checked after persist.
+        if (
+            nextEnergy.includes("consumption") ||
+            nextEnergy.includes("savings_by_strategy")
+        ) {
+            nextEnergy = nextEnergy.filter((k) => k !== "consumption_saving");
+        }
+        if (
+            nextSpace.includes("instant_occupancy_count") ||
+            nextSpace.includes("utilization_by_area")
+        ) {
+            nextSpace = nextSpace.filter((k) => k !== "instant_utilization_combined");
+        }
+        energySelectedRef.current = nextEnergy;
+        spaceSelectedRef.current = nextSpace;
         setEnergySelected(nextEnergy);
         setSpaceSelected(nextSpace);
         persistWidgetVisibility(nextEnergy, nextSpace);
     };
 
     const handleAreaSave = () => {
-        persistWidgetVisibility(energySelectedRef.current, spaceSelectedRef.current);
+        // Use live state (not only refs) so Save cannot revert a just-toggled chart.
+        energySelectedRef.current = energySelected;
+        spaceSelectedRef.current = spaceSelected;
+        overviewSelectedRef.current = overviewSelected;
+        persistWidgetVisibility(energySelected, spaceSelected);
         // Old key caused cross-tab conflicts; clear it.
         localStorage.removeItem("selectedWidgets");
         setAreaSnackbarOpen(true);
@@ -864,70 +1166,51 @@ export default function RenameWidget() {
 
     const handleOpenCustomGraph = () => {
         dispatch(fetchAreaGroups());
-        setCustomGraphPage("energy");
-        setCustomGraphType("bar");
-        setCustomGraphName("");
-        setCustomGraphApiPath("");
-        setCustomGraphScopeMode("inherit");
-        setCustomGraphScopeDraft({ floor_ids: [], area_ids: [] });
-        setCustomGraphGroupScope("");
-        setCustomGraphScopedGroupIds([]);
-        setCustomGraphScopeTarget("location");
-        setCustomGraphAreaGroupIds([]);
+        setCustomGraphDialogError("");
         setCustomGraphOpen(true);
     };
 
-    const handleSaveCustomGraph = async () => {
-
-        if (!customGraphName.trim()) return;
-        if (isNewCustomGraphNameDuplicate(customGraphName.trim())) {
-            setCustomGraphErrorMessage("Name already exists. Change the widget name.");
-            setCustomGraphErrorOpen(true);
-            return;
+    const handleSaveCustomGraph = async (payload) => {
+        const trimmedName = String(payload?.name ?? "").trim();
+        if (!trimmedName) return;
+        if (isNewCustomGraphNameDuplicate(trimmedName)) {
+            setCustomGraphDialogError("Name already exists. Change the widget name.");
+            throw new Error("duplicate-custom-graph-name");
         }
 
         try {
             const multiFloorEnergy =
-                customGraphPage === "energy" &&
-                customGraphScopeMode === "custom" &&
-                Array.isArray(customGraphScopeDraft.floor_ids) &&
-                customGraphScopeDraft.floor_ids.length >= 2;
+                payload.page === "energy" &&
+                Array.isArray(payload.floor_ids) &&
+                payload.floor_ids.length >= 2;
             const created = await dispatch(
                 createCustomGraph({
-                    page: customGraphPage,
-                    graph_type: multiFloorEnergy ? "bar" : customGraphType,
-                    name: customGraphName.trim(),
-                    ...(customGraphApiPath.trim() ? { api_path: customGraphApiPath.trim() } : {}),
-                    ...(customGraphScopeMode === "custom" && customGraphScopeTarget === "location"
-                        ? pickCustomGraphScopeForStorage(customGraphScopeDraft)
-                        : {}),
-                    ...(customGraphScopeTarget === "group"
-                        ? { is_area_group_widget: true, custom_area_group_ids: customGraphAreaGroupIds }
-                        : {}),
-                    ...(isCustomGraphGroupScope(customGraphGroupScope)
-                        ? { group_scope: customGraphGroupScope }
-                        : {}),
-                    ...(isCustomGraphGroupScope(customGraphGroupScope) && customGraphScopedGroupIds.length > 0
-                        ? { scoped_group_ids: customGraphScopedGroupIds.slice() }
-                        : {}),
+                    ...payload,
+                    name: trimmedName,
+                    graph_type: multiFloorEnergy ? "bar" : payload.graph_type,
                 })
             ).unwrap();
 
             await dispatch(fetchCustomGraphs()).unwrap();
-            // Ensure newly created custom graph is visible by default in its page.
-            setCustomGraphVisibilityEnabled(customGraphPage, created?.id);
+            setCustomGraphVisibilityEnabled(payload.page, created?.id);
             window.dispatchEvent(new CustomEvent("customGraphsUpdated"));
             setCustomGraphOpen(false);
+            setCustomGraphDialogError("");
             setCustomGraphSnackbarOpen(true);
         } catch (e) {
+            if (e?.message === "duplicate-custom-graph-name") {
+                throw e;
+            }
             const msg =
                 typeof e === "string"
                     ? e
                     : e && typeof e === "object"
                         ? JSON.stringify(e)
                         : "Failed to add new graph";
+            setCustomGraphDialogError(msg);
             setCustomGraphErrorMessage(msg);
             setCustomGraphErrorOpen(true);
+            throw e;
         }
     };
 
@@ -974,13 +1257,46 @@ export default function RenameWidget() {
             !Array.isArray(widgetList.titles);
 
         if (!widgetList || isEmptyArray || isMissingTitlesObj) {
-            dispatch(fetchRenameWidgets());
+            dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets);
         }
     }, [dispatch, widgetList]);
 
     useEffect(() => {
-        dispatch(fetchCustomGraphs());
+        dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs);
     }, [dispatch]);
+
+    // Hydrate visibility from DB (source of truth) into local cache + UI.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const action = await dispatchFetchWidgetConfigurationOnce(
+                    dispatch,
+                    fetchWidgetConfiguration
+                );
+                if (cancelled) return;
+                let items = null;
+                if (action && fetchWidgetConfiguration.fulfilled.match(action)) {
+                    items = action.payload;
+                } else {
+                    items = selectWidgetConfiguration(store.getState());
+                }
+                if (!Array.isArray(items) || items.length === 0) return;
+                const root = hydrateCustomizedVisibilityFromApiItems(items);
+                if (!root || cancelled) return;
+                setWidgetVisibility(root);
+                setOverviewSelected(resolveCustomizedOverviewSelectedKeys(root));
+                setEnergySelected(resolveCustomizedEnergySelectedKeys(root));
+                setSpaceSelected(resolveCustomizedSpaceSelectedKeys(root));
+                window.dispatchEvent(new CustomEvent("widgetVisibilityUpdated"));
+            } catch {
+                /* keep local cache */
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch, store]);
 
     // Monitor for rename errors
     useEffect(() => {
@@ -993,27 +1309,31 @@ export default function RenameWidget() {
         const vis = parseWidgetVisibilityFromLocalStorage();
         setWidgetVisibility(vis);
 
-        const energyMap = vis?.energy;
-        const spaceMap = vis?.space;
+        const energyEmpty = isCustomizedVisibilitySectionEmpty(vis?.energy);
+        const spaceEmpty = isCustomizedVisibilitySectionEmpty(vis?.space);
 
-        // Missing or empty map => no checkboxes selected (do not default to "all selected" for both
-        // sections — that caused Energy-only picks to persist Space as all true and Space showed every chart).
-        const nextEnergySelected =
-            energyMap && typeof energyMap === "object" && Object.keys(energyMap).length > 0
-                ? Object.entries(energyMap)
-                    .filter(([, v]) => v !== false)
-                    .map(([k]) => normalizeWidgetKey(k))
-                : [];
+        // Prefer stored selection. Empty prefs → Combined defaults (first visit only).
+        const nextEnergySelected = resolveCustomizedEnergySelectedKeys(vis).map((k) =>
+            normalizeWidgetKey(k)
+        );
+        const nextSpaceSelected = resolveCustomizedSpaceSelectedKeys(vis).map((k) =>
+            normalizeWidgetKey(k)
+        );
 
-        const nextSpaceSelected =
-            spaceMap && typeof spaceMap === "object" && Object.keys(spaceMap).length > 0
-                ? Object.entries(spaceMap)
-                    .filter(([, v]) => v !== false)
-                    .map(([k]) => normalizeWidgetKey(k))
-                : [];
+        energySelectedRef.current = Array.from(new Set(nextEnergySelected));
+        spaceSelectedRef.current = Array.from(new Set(nextSpaceSelected));
+        setEnergySelected(energySelectedRef.current);
+        setSpaceSelected(spaceSelectedRef.current);
+        setOverviewSelected(resolveCustomizedOverviewSelectedKeys(vis));
 
-        setEnergySelected(Array.from(new Set(nextEnergySelected)));
-        setSpaceSelected(Array.from(new Set(nextSpaceSelected)));
+        // Seed Combined defaults only when both sections are truly empty — never
+        // overwrite an existing Advanced/Customized selection when widget lists load later.
+        if (energyEmpty && spaceEmpty) {
+            persistWidgetVisibility(
+                energySelectedRef.current,
+                spaceSelectedRef.current
+            );
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [energyItems.length, spaceItems.length]);
 
@@ -1115,8 +1435,37 @@ export default function RenameWidget() {
         },
     };
 
+    const customizedWidgetsPanelScrollSx = {
+        minHeight: 0,
+        maxHeight: { xs: "none", md: "calc(100vh - 120px)" },
+        overflowY: { xs: "visible", md: "auto" },
+        overflowX: "hidden",
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "thin",
+        scrollbarColor: "rgba(255,255,255,0.4) rgba(0,0,0,0.15)",
+        "&::-webkit-scrollbar": { width: "10px" },
+        "&::-webkit-scrollbar-track": {
+            background: "rgba(0,0,0,0.12)",
+            borderRadius: "8px",
+        },
+        "&::-webkit-scrollbar-thumb": {
+            backgroundColor: "rgba(255,255,255,0.38)",
+            borderRadius: "8px",
+            border: "2px solid transparent",
+            backgroundClip: "padding-box",
+        },
+    };
+
     return (
-        <Grid container sx={{ alignItems: "flex-start", ml: '18px', p: '18px' }}>
+        <Grid
+            container
+            sx={{
+                alignItems: "flex-start",
+                ml: "18px",
+                p: "18px",
+                boxSizing: "border-box",
+            }}
+        >
             {/* Sidebar */}
             <Grid item xs={12} md={3}>
                 <Typography variant="h6" sx={{
@@ -1134,8 +1483,27 @@ export default function RenameWidget() {
             </Grid>
 
             {/* Right panel */}
-            <Grid item xs={12} md={9} sx={{ p: 3, borderTopRightRadius: 2, borderBottomRightRadius: 2 }}>
-                <Box sx={{ maxWidth: 1100 }}>
+            <Grid
+                item
+                xs={12}
+                md={9}
+                sx={{
+                    p: 3,
+                    borderTopRightRadius: 2,
+                    borderBottomRightRadius: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    boxSizing: "border-box",
+                    ...customizedWidgetsPanelScrollSx,
+                }}
+            >
+                <Box
+                    sx={{
+                        maxWidth: 1100,
+                        width: "100%",
+                        pb: 1,
+                    }}
+                >
                     <Box sx={{ mb: 2 }}>
                         <Typography sx={{ color: "#fff", fontWeight: 600, mb: 1, fontSize: 16 }}>
                             Add Widgets
@@ -1164,50 +1532,87 @@ export default function RenameWidget() {
                         </Box>
                     </Box>
 
-                    <Typography sx={{ color: "#fff", fontWeight: 600, mb: 0.5 }}>
-                        Select the Widgets
-                    </Typography>
-                    <Typography sx={{ color: "rgba(255,255,255,0.75)", fontSize: 13, mb: 2 }}>
-                        Choose which charts appear on each dashboard. Built-in widgets: use the switch to show or hide,
-                        and edit to rename. Custom widgets: use the checkbox and delete as before.
-                    </Typography>
-                    <Typography sx={{ color: "rgba(255,255,255,0.72)", fontSize: 12, mb: 2, lineHeight: 1.45 }}>
-                        Floor and area scope for custom charts (separate from built-in widgets) is chosen on the
-                        dashboard: open the Space Utilization location control, select floors or areas, then Set.
-                        {customWidgetFilters &&
-                        (customWidgetFilters.floor_ids?.length > 0 || customWidgetFilters.area_ids?.length > 0) ? (
-                            <span>
-                                {" "}
-                                Current custom scope:{" "}
-                                {customWidgetFilters.floor_ids?.length
-                                    ? `${customWidgetFilters.floor_ids.length} floor(s)`
-                                    : ""}
-                                {customWidgetFilters.floor_ids?.length && customWidgetFilters.area_ids?.length
-                                    ? ", "
-                                    : ""}
-                                {customWidgetFilters.area_ids?.length
-                                    ? `${customWidgetFilters.area_ids.length} area(s)`
-                                    : ""}
-                                .
-                            </span>
-                        ) : (
-                            <span> No custom floor/area scope is active.</span>
-                        )}
-                    </Typography>
+                    <Box sx={{ mb: 3 }}>
+                        <Typography sx={{ color: "#fff", fontWeight: 600, fontSize: 14, mb: 1 }}>
+                            Dashboard Overview
+                        </Typography>
+                        <Grid container spacing={1} columnSpacing={2}>
+                            {CUSTOMIZED_OVERVIEW_WIDGET_ROWS.map((row) => (
+                                <Grid item xs={12} sm={6} key={row.key}>
+                                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                        <FormControlLabel
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                ml: 0,
+                                                mr: 0,
+                                                color: "#fff",
+                                                "& .MuiFormControlLabel-label": {
+                                                    color: "#fff",
+                                                    fontSize: 14,
+                                                },
+                                            }}
+                                            control={
+                                                <Switch
+                                                    size="small"
+                                                    checked={overviewSelected.includes(normalizeWidgetKey(row.key))}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        handleOverviewVisibilitySwitch(row.key, e.target.checked);
+                                                    }}
+                                                    sx={builtinVisibilitySwitchSx}
+                                                />
+                                            }
+                                            label={row.label}
+                                        />
+                                        {row.key === "shades" ? (
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setShadesDialogOpen(true)}
+                                                sx={{
+                                                    color: "#fff",
+                                                    border: "1px solid rgba(255,255,255,0.2)",
+                                                    borderRadius: "6px",
+                                                    p: "4px",
+                                                }}
+                                            >
+                                                <LinkIcon sx={{ fontSize: 16 }} />
+                                            </IconButton>
+                                        ) : null}
+                                    </Box>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </Box>
 
                     <FormControlLabel
-                        sx={{ mb: 1 }}
+                        sx={{
+                            mb: 1,
+                            color: "#fff",
+                            "& .MuiFormControlLabel-label": { color: "#fff" },
+                        }}
                         control={
                             <Checkbox
                                 checked={allSelected}
                                 onChange={handleToggleAll}
-                                sx={{ color: "#fff" }}
+                                sx={{
+                                    color: "rgba(255, 255, 255, 0.85)",
+                                    "&.Mui-checked": {
+                                        color: "#4caf50",
+                                    },
+                                    "&.MuiCheckbox-indeterminate": {
+                                        color: "#4caf50",
+                                    },
+                                    "&.Mui-checked .MuiSvgIcon-root": {
+                                        color: "#4caf50",
+                                    },
+                                }}
                             />
                         }
                         label={"Select All Widgets"}
                     />
 
-                    <Grid container spacing={1.5}>
+                    <Grid container spacing={1.5} sx={{ mt: 0 }}>
                         {unifiedGraphRows.map((row) => (
                             <Grid item xs={12} sm={6} md={6} lg={4} key={`${row.section}:${row.key}`}>
                                 <Box sx={widgetRowCardSx}>
@@ -1227,23 +1632,40 @@ export default function RenameWidget() {
                                                 sx={{ color: "#fff", p: 0.5 }}
                                             />
                                         ) : (
-                                            <Tooltip title="On: visible on dashboard. Off: hidden.">
-                                                <Switch
-                                                    size="small"
-                                                    checked={
-                                                        row.section === "energy"
-                                                            ? energySelected.includes(normalizeWidgetKey(row.key))
-                                                            : spaceSelected.includes(normalizeWidgetKey(row.key))
-                                                    }
-                                                    onChange={(e) => {
-                                                        e.stopPropagation();
-                                                        handleBuiltinVisibilitySwitch(row, e.target.checked);
-                                                    }}
-                                                    inputProps={{
-                                                        "aria-label": `${row.dropdown_name || row.key} dashboard visibility`,
-                                                    }}
-                                                    sx={builtinVisibilitySwitchSx}
-                                                />
+                                            <Tooltip
+                                                title={
+                                                    row.key === "consumption_saving" && anyEnergyIndividualOn
+                                                        ? "Turn off Consumption and Savings by Strategy to enable Energy (Combined)."
+                                                        : row.key === "instant_utilization_combined" &&
+                                                            anyOneSpaceCombinedConflictOn
+                                                          ? "Turn off Instant Occupancy Count and Utilization By Area to enable Space Utilization (Combined)."
+                                                          : "On: visible on dashboard. Off: hidden."
+                                                }
+                                            >
+                                                <span>
+                                                    <Switch
+                                                        size="small"
+                                                        checked={
+                                                            row.section === "energy"
+                                                                ? energySelected.includes(normalizeWidgetKey(row.key))
+                                                                : spaceSelected.includes(normalizeWidgetKey(row.key))
+                                                        }
+                                                        disabled={
+                                                            (row.key === "consumption_saving" &&
+                                                                anyEnergyIndividualOn) ||
+                                                            (row.key === "instant_utilization_combined" &&
+                                                                anyOneSpaceCombinedConflictOn)
+                                                        }
+                                                        onChange={(e) => {
+                                                            e.stopPropagation();
+                                                            handleBuiltinVisibilitySwitch(row, e.target.checked);
+                                                        }}
+                                                        inputProps={{
+                                                            "aria-label": `${row.dropdown_name || row.key} dashboard visibility`,
+                                                        }}
+                                                        sx={builtinVisibilitySwitchSx}
+                                                    />
+                                                </span>
                                             </Tooltip>
                                         )}
                                     </Box>
@@ -1427,114 +1849,22 @@ export default function RenameWidget() {
                     </Alert>
                 </Snackbar>
 
-                <Dialog open={customGraphOpen} onClose={() => setCustomGraphOpen(false)} maxWidth="md" fullWidth>
-                    <DialogTitle>Add New Graph</DialogTitle>
-                    <DialogContent dividers>
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <FormControl fullWidth size="small">
-                                <Typography sx={{ fontSize: 13, mb: 0.5 }}>Page</Typography>
-                                <Select
-                                    value={customGraphPage}
-                                    onChange={(e) => setCustomGraphPage(e.target.value)}
-                                >
-                                    <MenuItem value="energy">Energy</MenuItem>
-                                    <MenuItem value="space">Space Utilization</MenuItem>
-                                </Select>
-                            </FormControl>
-
-                            <FormControl fullWidth size="small">
-                                <Typography sx={{ fontSize: 13, mb: 0.5 }}>Graph Type</Typography>
-                                <Select
-                                    value={customGraphType}
-                                    onChange={(e) => setCustomGraphType(e.target.value)}
-                                >
-                                    <MenuItem value="bar">Bar</MenuItem>
-                                    <MenuItem value="pie">Pie</MenuItem>
-                                    <MenuItem value="line">Line</MenuItem>
-                                    <MenuItem value="table">Table</MenuItem>
-                                </Select>
-                            </FormControl>
-
-                            <TextField
-                                label="Graph Name"
-                                value={customGraphName}
-                                onChange={(e) => setCustomGraphName(e.target.value)}
-                                size="small"
-                                fullWidth
-                                helperText="Display name for the chart. Data uses the default API for the selected page unless you set a custom API path when editing."
-                            />
-
-                            <FormControl fullWidth size="small">
-                                <Typography sx={{ fontSize: 13, mb: 0.5 }}>API Path (optional)</Typography>
-                                <Select
-                                    value={customGraphApiPath}
-                                    onChange={(e) => setCustomGraphApiPath(e.target.value)}
-                                    displayEmpty
-                                >
-                                    <MenuItem value="">
-                                        Auto (choose from name keywords)
-                                    </MenuItem>
-                                    {apiPathDropdownOptions.map((p) => (
-                                        <MenuItem key={p} value={p}>
-                                            {formatApiPathLabel(p)}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                                <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.5 }}>
-                                    Selecting an API lets you use any graph name. If left on Auto, the API is inferred from the name.
-                                </Typography>
-                            </FormControl>
-
-                            <FormControl fullWidth size="small">
-                                <Typography sx={{ fontSize: 13, mb: 0.5 }}>Scope Target</Typography>
-                                <Select
-                                    value={customGraphScopeTarget}
-                                    onChange={(e) => setCustomGraphScopeTarget(e.target.value)}
-                                >
-                                    <MenuItem value="location">Floors / Areas</MenuItem>
-                                    <MenuItem value="group">Area Groups</MenuItem>
-                                </Select>
-                            </FormControl>
-
-                            {customGraphScopeTarget === "location" ? (
-                                <CustomGraphScopeSection
-                                    mode={customGraphScopeMode}
-                                    onModeChange={setCustomGraphScopeMode}
-                                    draft={customGraphScopeDraft}
-                                    onDraftChange={setCustomGraphScopeDraft}
-                                />
-                            ) : (
-                                <Box sx={{ mt: 1, p: 1.5, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 1, bgcolor: "rgba(0,0,0,0.02)" }}>
-                                    <Typography sx={{ fontSize: 13, mb: 1, fontWeight: 600 }}>Select Area Groups</Typography>
-                                    <CustomGraphScopedGroupPicker
-                                        groupScope="user_only"
-                                        value={customGraphAreaGroupIds}
-                                        onChange={setCustomGraphAreaGroupIds}
-                                        disabled={customGraphsLoading}
-                                    />
-                                    <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 1 }}>
-                                        Graph will aggregate data from the selected User Area Groups.
-                                    </Typography>
-                                </Box>
-                            )}
-
-
-                        </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setCustomGraphOpen(false)} sx={{ textTransform: "none" }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={handleSaveCustomGraph}
-                            disabled={!customGraphName.trim() || customGraphsLoading}
-                            sx={{ textTransform: "none", bgcolor: "#232323", "&:hover": { bgcolor: "#1E1E1E" } }}
-                        >
-                            Save
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                <AddCustomGraphDialog
+                    open={customGraphOpen}
+                    onClose={() => {
+                        setCustomGraphDialogError("");
+                        setCustomGraphOpen(false);
+                    }}
+                    onSave={handleSaveCustomGraph}
+                    saving={customGraphsLoading}
+                    errorMessage={customGraphDialogError}
+                    dialogProps={customizedModalBackdropProps}
+                    primaryActionSx={{
+                        textTransform: "none",
+                        bgcolor: "#232323",
+                        "&:hover": { bgcolor: "#1E1E1E" },
+                    }}
+                />
 
                 <Dialog open={deleteGraphOpen} onClose={() => setDeleteGraphOpen(false)} maxWidth="xs" fullWidth>
                     <DialogTitle>Delete Widget</DialogTitle>
@@ -1698,6 +2028,128 @@ export default function RenameWidget() {
                                 : renameLoading
                                     ? "Saving..."
                                     : "Save"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                <Dialog
+                    open={shadesDialogOpen}
+                    onClose={() => setShadesDialogOpen(false)}
+                    PaperProps={{
+                        sx: {
+                            borderRadius: "12px",
+                            padding: "8px",
+                            width: "440px",
+                            maxWidth: "90%",
+                        },
+                    }}
+                >
+                    <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pb: 1, pt: 1.5, px: 2 }}>
+                        <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#1E1E1E" }}>
+                            External Link
+                        </Typography>
+                        <IconButton size="small" onClick={() => setShadesDialogOpen(false)} sx={{ color: "rgba(0,0,0,0.54)" }}>
+                            <CloseIcon sx={{ fontSize: 20 }} />
+                        </IconButton>
+                    </DialogTitle>
+                    <Box sx={{ height: "1px", backgroundColor: "rgba(0, 0, 0, 0.08)", mx: 2 }} />
+                    <DialogContent sx={{ pt: 2.5, pb: 1.5, px: 2 }}>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#2E2E2E", mb: 1 }}>
+                            Rename Widget
+                        </Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            placeholder="Enter new widget name (e.g. External Link)"
+                            value={shadesName}
+                            onChange={(e) => setShadesName(e.target.value)}
+                            sx={{ ...controlSx, mb: 2 }}
+                        />
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#2E2E2E", mb: 1 }}>
+                            Image (optional, max 400 KB)
+                        </Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
+                            <Button variant="outlined" component="label" size="small" sx={{ textTransform: "none" }}>
+                                Choose image
+                                <input type="file" accept="image/*" hidden onChange={handleShadesImageChange} />
+                            </Button>
+                            {shadesImageUrl ? (
+                                <Box
+                                    component="img"
+                                    src={shadesImageUrl}
+                                    alt=""
+                                    sx={{ width: 48, height: 48, objectFit: "contain", borderRadius: 1, border: "1px solid #e5e7eb" }}
+                                />
+                            ) : null}
+                            {shadesImageUrl ? (
+                                <Button size="small" onClick={() => setShadesImageUrl("")} sx={{ textTransform: "none" }}>
+                                    Remove
+                                </Button>
+                            ) : null}
+                        </Box>
+                        {shadesImageError ? (
+                            <Typography sx={{ fontSize: 12, color: "error.main", mb: 2 }}>
+                                {shadesImageError}
+                            </Typography>
+                        ) : null}
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#2E2E2E", mb: 1 }}>
+                            Description (optional)
+                        </Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            multiline
+                            minRows={2}
+                            placeholder="Short text shown on the External Link tile"
+                            value={shadesDescription}
+                            onChange={(e) => setShadesDescription(e.target.value)}
+                            sx={{ ...controlSx, mb: 2 }}
+                        />
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#2E2E2E", mb: 1 }}>
+                            Hyperlink URL
+                        </Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            placeholder="https://"
+                            value={shadesHyperlink}
+                            onChange={(e) => setShadesHyperlink(e.target.value)}
+                            sx={controlSx}
+                        />
+                        <Typography sx={{ fontSize: 11, color: "rgba(0, 0, 0, 0.54)", mt: 1 }}>
+                            Enter the Quantum Vue floorplan hyperlink for Shades.
+                        </Typography>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: "#2E2E2E", mb: 1, mt: 2.5 }}>
+                            CO₂ constant (kg per kWh)
+                        </Typography>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            variant="outlined"
+                            type="number"
+                            inputProps={{ min: 0, step: 0.01 }}
+                            placeholder={String(DEFAULT_SHADES_CO2_CONSTANT)}
+                            value={shadesCo2Constant}
+                            onChange={(e) => setShadesCo2Constant(e.target.value)}
+                            sx={controlSx}
+                        />
+                        <Typography sx={{ fontSize: 11, color: "rgba(0, 0, 0, 0.54)", mt: 1 }}>
+                            Multiplied by instantaneous energy savings (kW) to show CO₂ on the Shades widget.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 2, pb: 1.5, pt: 0.5, gap: 1 }}>
+                        <Button variant="outlined" onClick={() => setShadesDialogOpen(false)} sx={{ textTransform: "none" }}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="contained"
+                            onClick={handleSaveShadesHyperlink}
+                            sx={{ textTransform: "none", bgcolor: "#232323", "&:hover": { bgcolor: "#1E1E1E" } }}
+                        >
+                            Save
                         </Button>
                     </DialogActions>
                 </Dialog>

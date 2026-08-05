@@ -21,6 +21,17 @@ export const basicSettingsLayoutAdapter = {
     borderTopRightRadius: "10px",
     borderBottomRightRadius: "10px",
   }),
+  getContentInnerSx: () => ({
+    backgroundColor: "#fff",
+    borderRadius: { xs: "4px", sm: "6px", md: "8px", lg: "10px" },
+    p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
+    width: "100%",
+    flex: "0 1 auto",
+    minHeight: "auto",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "visible",
+  }),
 };
 
 export default basicSettingsLayoutAdapter;

@@ -53,7 +53,11 @@ export function buildBasicDashboardExportOptions(ctx) {
       savings: DEFAULT_SAVINGS_EXPORT_KEYS,
       totalConsumptionByGroup: createBasicGroupExportKeys(BASIC_TOTAL_CONSUMPTION_BY_GROUP_EXPORT_KEY),
     },
-    outsideClickProfile: EXPORT_MENU_OUTSIDE_CLICK_PROFILES.basic,
+    // Match basic Space Utilization export outside-click selectors.
+    outsideClickProfile: {
+      buttonSelector: 'button[data-export-menu]',
+      panelSelector: '[data-export-dropdown-panel]',
+    },
   });
 }
 
@@ -75,7 +79,7 @@ export function buildCustomizedDashboardExportOptions(ctx) {
       savings: DEFAULT_SAVINGS_EXPORT_KEYS,
       totalConsumptionByGroup: createAdvancedGroupExportKeys(),
     },
-    outsideClickProfile: EXPORT_MENU_OUTSIDE_CLICK_PROFILES.customizedLegacy,
+    outsideClickProfile: EXPORT_MENU_OUTSIDE_CLICK_PROFILES.basic,
     enableCustomGraphExport: true,
   });
 }
@@ -99,6 +103,14 @@ export function buildAdvancedDashboardVisibilityOptions(runtime) {
   return {
     variant: 'advanced',
     showOverviewTab: runtime.showOverviewTab,
+    widgetConfiguration: runtime.widgetConfiguration,
+    widgetConfigurationStatus: runtime.widgetConfigurationStatus,
+    widgetList: runtime.widgetList,
+    role: runtime.role,
+    dispatch: runtime.dispatch,
+    saveWidgetVisibility: runtime.saveWidgetVisibility,
+    saveDashboardChartOrder: runtime.saveDashboardChartOrder,
+    layoutLocked: runtime.energyLayoutLocked === true,
   };
 }
 
@@ -110,6 +122,11 @@ export function buildCustomizedDashboardVisibilityOptions(runtime) {
     dispatch: runtime.dispatch,
     fetchRenameWidgets: runtime.fetchRenameWidgets,
     fetchCustomGraphs: runtime.fetchCustomGraphs,
+    fetchWidgetConfiguration: runtime.fetchWidgetConfiguration,
+    widgetConfiguration: runtime.widgetConfiguration,
+    widgetConfigurationStatus: runtime.widgetConfigurationStatus,
+    saveDashboardChartOrder: runtime.saveDashboardChartOrder,
+    layoutLocked: runtime.energyLayoutLocked === true,
   };
 }
 
@@ -166,6 +183,11 @@ export function buildStandardDashboardChartsSection({
   instantOccupancyCount,
   instantOccupancyCountLoading,
   globalLoading,
+  pinChartsDurationFilterInHeader = false,
+  onChartsDurationFilterPinnedChange,
+  getCurrentPeriodText,
+  handlePrevious,
+  handleNext,
 }) {
   return (
     <div style={{ padding: '0px' }}>
@@ -175,9 +197,37 @@ export function buildStandardDashboardChartsSection({
         isLoading={instantOccupancyCountLoading || globalLoading}
         globalLoadingProp={globalLoading}
         showChartsTab={true}
+        pinChartsDurationFilterInHeader={pinChartsDurationFilterInHeader}
+        onChartsDurationFilterPinnedChange={onChartsDurationFilterPinnedChange}
+        getCurrentPeriodText={getCurrentPeriodText}
+        handlePrevious={handlePrevious}
+        handleNext={handleNext}
       />
     </div>
   );
+}
+
+/** Basic Space Utilization (charts tab) — optional pinned duration filter in Dashboard header. */
+export function buildBasicDashboardChartsSection(runtime) {
+  const {
+    SpaceUtilization,
+    widgets,
+    instantOccupancyCount,
+    instantOccupancyCountLoading,
+    globalLoading,
+    pinChartsDurationFilterInHeader,
+    onChartsDurationFilterPinnedChange,
+  } = runtime;
+
+  return buildStandardDashboardChartsSection({
+    SpaceUtilization,
+    widgets,
+    instantOccupancyCount,
+    instantOccupancyCountLoading,
+    globalLoading,
+    pinChartsDurationFilterInHeader,
+    onChartsDurationFilterPinnedChange,
+  });
 }
 
 export function buildCustomizedDashboardChartsSection({
@@ -242,23 +292,30 @@ export function buildBasicDashboardEnergySection({ orchestration, runtime }) {
   const { theme, energyLayoutAdapter, energyLayoutRuntime } = runtime;
   const energyWidgetRenderContext = buildBasicEnergyWidgetRenderContext(orchestration, runtime);
 
+  const layout = (
+    <EnergyLayoutRenderer
+      variant="basic"
+      layoutMode={BASIC_LAYOUT_MODE}
+      rows={visibility.energyDashboardRows}
+      context={energyWidgetRenderContext}
+      adapter={
+        energyLayoutAdapter || {
+          SLOT_REGISTRY: BASIC_ENERGY_SLOT_REGISTRY,
+          resolveRowSx: resolveBasicRowSx,
+          resolveSlotColumnSx: resolveBasicSlotColumnSx,
+          getSlotMeta: getBasicEnergySlotMeta,
+        }
+      }
+      adapterRuntime={energyLayoutRuntime}
+      theme={theme}
+    />
+  );
+
+  const wrappedLayout =
+    typeof runtime.wrapEnergyLayout === 'function' ? runtime.wrapEnergyLayout(layout) : layout;
+
   return (
     <>
-      {visibility.showEnergyStandaloneDurationFilter && runtime.energyDurationFilterElement && (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            width: '100%',
-            mb: 2,
-            mt: 0,
-          }}
-        >
-          <Box sx={{ width: 'min(330px, 100%)', maxWidth: '100%' }}>
-            {runtime.energyDurationFilterElement}
-          </Box>
-        </Box>
-      )}
       {visibility.energyVisibleSlotOrder.length === 0 && (
         <Box
           sx={{
@@ -282,27 +339,16 @@ export function buildBasicDashboardEnergySection({ orchestration, runtime }) {
           </Box>
         </Box>
       )}
-      <EnergyLayoutRenderer
-        variant="basic"
-        layoutMode={BASIC_LAYOUT_MODE}
-        rows={visibility.energyDashboardRows}
-        context={energyWidgetRenderContext}
-        adapter={
-          energyLayoutAdapter || {
-            SLOT_REGISTRY: BASIC_ENERGY_SLOT_REGISTRY,
-            resolveRowSx: resolveBasicRowSx,
-            resolveSlotColumnSx: resolveBasicSlotColumnSx,
-            getSlotMeta: getBasicEnergySlotMeta,
-          }
-        }
-        adapterRuntime={energyLayoutRuntime}
-        theme={theme}
-      />
+      {wrappedLayout}
     </>
   );
 }
 
 export function buildAdvancedDashboardEnergySection({ orchestration, runtime }) {
+  if (typeof runtime.renderEnergySection === 'function') {
+    return runtime.renderEnergySection(orchestration);
+  }
+
   const { energyLayoutAdapter, energyLayoutRuntime } = runtime;
   const energyWidgetRenderContext = buildAdvancedEnergyWidgetRenderContext(orchestration, runtime);
 
@@ -338,18 +384,55 @@ export function buildBasicDashboardSections({ orchestration, runtime }) {
   return {
     overview: buildTabbedDashboardOverviewSection(runtime),
     energy: buildBasicDashboardEnergySection({ orchestration, runtime }),
-    charts: buildStandardDashboardChartsSection({ ...runtime, widgets }),
+    charts: buildBasicDashboardChartsSection({ ...runtime, widgets }),
     alerts: buildStandardDashboardAlertsSection(runtime),
   };
 }
 
+export function buildAdvancedDashboardChartsSection({
+  SpaceUtilization,
+  widgets,
+  instantOccupancyCount,
+  instantOccupancyCountLoading,
+  pinChartsDurationFilterInHeader = false,
+  onChartsDurationFilterPinnedChange,
+  getCurrentPeriodText,
+  handlePrevious,
+  handleNext,
+}) {
+  return (
+    <div style={{ padding: '0px' }}>
+      <SpaceUtilization
+        title={widgets.getWidgetTitle('instant_occupancy_count', 'Instant Occupancy Count')}
+        data={instantOccupancyCount}
+        // Do not OR globalLoading into isLoading — that forces every widget to
+        // show a loader when any one Space chart API is fetching.
+        isLoading={Boolean(instantOccupancyCountLoading)}
+        globalLoadingProp={false}
+        showChartsTab={true}
+        pinChartsDurationFilterInHeader={pinChartsDurationFilterInHeader}
+        onChartsDurationFilterPinnedChange={onChartsDurationFilterPinnedChange}
+        getCurrentPeriodText={getCurrentPeriodText}
+        handlePrevious={handlePrevious}
+        handleNext={handleNext}
+      />
+    </div>
+  );
+}
+
 export function buildAdvancedDashboardSections({ orchestration, runtime }) {
-  const { widgets } = orchestration;
+  const { widgets, dates } = orchestration;
 
   return {
     overview: buildTabbedDashboardOverviewSection(runtime),
     energy: buildAdvancedDashboardEnergySection({ orchestration, runtime }),
-    charts: buildStandardDashboardChartsSection({ ...runtime, widgets }),
+    charts: buildAdvancedDashboardChartsSection({
+      ...runtime,
+      widgets,
+      getCurrentPeriodText: dates?.getCurrentPeriodText,
+      handlePrevious: dates?.handlePrevious,
+      handleNext: dates?.handleNext,
+    }),
     alerts: buildStandardDashboardAlertsSection(runtime),
   };
 }

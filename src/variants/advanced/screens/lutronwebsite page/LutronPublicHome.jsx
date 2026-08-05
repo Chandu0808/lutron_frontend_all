@@ -19,7 +19,7 @@ import {
   homeDataProject,
 } from "../../redux/slice/home/homeSlice";
 
-const API_URL = process.env.REACT_APP_API_URL || "";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 const MODES = ["Lutron", "Client", "Project"];
 
 const resolveMediaUrl = (path) => {
@@ -73,14 +73,22 @@ const contentShellSx = {
   overflow: "hidden",
   display: "flex",
   alignItems: { xs: "stretch", md: "flex-start" },
+  boxSizing: "border-box",
+  px: { xs: 1, sm: 1.5, md: 2, lg: 2, xl: 2.5 },
+  py: { xs: 1, sm: 1.5, md: 2 },
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+  backgroundRepeat: "no-repeat",
 };
 
 const contentPanelSx = {
   backgroundColor: "#fff",
   borderRadius: { xs: "8px", md: "12px" },
   border: "2px solid rgba(0,0,0,0.85)",
-  width: { xs: "100%", md: "48%" },
-  maxWidth: { md: 560 },
+  boxSizing: "border-box",
+  flexShrink: 0,
+  width: { xs: "100%", sm: "70%", md: "55%", lg: "48%" },
+  maxWidth: { xs: "none", sm: 560, md: 620, lg: 760, xl: 780 },
   maxHeight: { xs: "52vh", sm: "56vh", md: "58vh" },
   overflow: "hidden",
   display: "flex",
@@ -111,6 +119,7 @@ const descriptionCardInnerSx = {
 const DescriptionCard = ({
   html,
   logoUrl = null,
+  backgroundUrl = null,
   emptyLabel = "No description available.",
   fullWidth = false,
 }) => {
@@ -162,7 +171,15 @@ const DescriptionCard = ({
   }
 
   return (
-    <Box className="lutron-content-shell" sx={contentShellSx}>
+    <Box
+      className="lutron-content-shell"
+      sx={{
+        ...contentShellSx,
+        ...(backgroundUrl
+          ? { backgroundImage: `url(${backgroundUrl})` }
+          : { backgroundImage: "none" }),
+      }}
+    >
       <Box className="lutron-content-scrollable" sx={contentPanelSx}>
         {cardBody}
       </Box>
@@ -179,6 +196,15 @@ const infoTileSx = {
   display: "flex",
   flexDirection: "column",
   gap: 0.5,
+};
+
+const projectInfoTileSx = {
+  ...infoTileSx,
+  flex: 1,
+  minWidth: 0,
+  width: { xs: "100%", sm: "auto" },
+  minHeight: { xs: 120, sm: 150 },
+  p: { xs: 2, md: 3 },
 };
 
 const LutronPublicHome = () => {
@@ -319,11 +345,13 @@ const LutronPublicHome = () => {
     const logoUrl = showClientExtras
       ? resolveMediaUrl(data?.logo_image)
       : null;
+    const backgroundUrl = resolveMediaUrl(data?.background_image);
 
     return (
       <DescriptionCard
         html={data?.description}
         logoUrl={logoUrl}
+        backgroundUrl={backgroundUrl}
       />
     );
   };
@@ -339,43 +367,58 @@ const LutronPublicHome = () => {
     return (
       <Box
         sx={{
-          display: "flex",
-          flexDirection: "column",
-          gap: { xs: 1.5, md: 2 },
           width: "100%",
+          flex: { xs: "1 0 auto", md: 1 },
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          px: { xs: 2, sm: 2, md: 2, lg: 6, xl: 6 },
+          py: 4,
+          gap: 4,
+          boxSizing: "border-box",
         }}
       >
         <Box
           sx={{
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            gap: { xs: 1.5, md: 2 },
-            alignItems: "stretch",
+            width: { xs: "100%", md: "45%" },
+            maxWidth: { xs: "100%", md: "50%" },
+            minWidth: 0,
+            flex: "1 1 0",
           }}
         >
-          <Box sx={{ flex: { xs: "1 1 auto", md: "1 1 58%" }, minWidth: 0 }}>
-            <DescriptionCard html={homeProjectData?.description} fullWidth />
-          </Box>
+          <DescriptionCard html={homeProjectData?.description} fullWidth />
+        </Box>
 
+        <Box
+          sx={{
+            width: { xs: "100%", md: "45%" },
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            alignItems: "flex-start",
+            flex: "0 0 auto",
+            minWidth: 0,
+          }}
+        >
           <Box
             sx={{
-              flex: { xs: "1 1 auto", md: "1 1 38%" },
               display: "flex",
-              flexDirection: "column",
-              gap: { xs: 1.5, md: 2 },
-              minWidth: 0,
+              flexDirection: { xs: "column", sm: "row" },
+              gap: 2,
+              width: "100%",
             }}
           >
-            <Box sx={infoTileSx}>
+            <Box sx={projectInfoTileSx}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <PlaceOutlinedIcon sx={{ fontSize: 20, color: "#111" }} />
+                <PlaceOutlinedIcon sx={{ fontSize: 24, color: "#111" }} />
                 <Typography fontWeight={700} fontSize={{ xs: 13, md: 15 }}>
                   Location
                 </Typography>
               </Box>
               <Typography
                 fontSize={{ xs: 12, md: 14 }}
-                sx={{ color: "#333", wordBreak: "break-word" }}
+                sx={{ color: "#333", wordBreak: "break-word", mt: 0.5 }}
               >
                 {locationValue ? (
                   locationValue.startsWith("http") ? (
@@ -394,16 +437,40 @@ const LutronPublicHome = () => {
                   "—"
                 )}
               </Typography>
+              {locationValue && (
+                <Link
+                  href={
+                    locationValue.startsWith("http")
+                      ? locationValue
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationValue)}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  underline="hover"
+                  sx={{
+                    mt: 2,
+                    display: "inline-block",
+                    fontWeight: 600,
+                    fontSize: { xs: 12, md: 13 },
+                    color: "#111",
+                  }}
+                >
+                  Open Maps →
+                </Link>
+              )}
             </Box>
 
-            <Box sx={infoTileSx}>
+            <Box sx={projectInfoTileSx}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <FormatListBulletedIcon sx={{ fontSize: 20, color: "#111" }} />
+                <FormatListBulletedIcon sx={{ fontSize: 24, color: "#111" }} />
                 <Typography fontWeight={700} fontSize={{ xs: 13, md: 15 }}>
                   Area
                 </Typography>
               </Box>
-              <Typography fontSize={{ xs: 12, md: 14 }} sx={{ color: "#333" }}>
+              <Typography
+                fontSize={{ xs: 12, md: 14 }}
+                sx={{ color: "#333", mt: 0.5 }}
+              >
                 {areaValue || "—"}
               </Typography>
               <Link
@@ -411,7 +478,7 @@ const LutronPublicHome = () => {
                 type="button"
                 onClick={() => navigate("/heatmap")}
                 sx={{
-                  mt: 0.5,
+                  mt: 2,
                   alignSelf: "flex-start",
                   fontWeight: 600,
                   fontSize: { xs: 12, md: 13 },
@@ -426,38 +493,59 @@ const LutronPublicHome = () => {
               </Link>
             </Box>
           </Box>
-        </Box>
 
-        <Box sx={{ width: "100%" }}>
           <Typography
             fontWeight={700}
-            fontSize={{ xs: 14, md: 16 }}
-            sx={{ color: "var(--heatmap-legends-nav-text, #111)", mb: 1 }}
+            fontSize={{ xs: 13, md: 15 }}
+            sx={{ color: "var(--heatmap-legends-nav-text, #111)" }}
           >
             Installed Solutions
           </Typography>
+
           {projectSolutions.length > 0 ? (
             <Box
-              component="ul"
               sx={{
-                m: 0,
-                pl: 2.5,
-                color: "var(--heatmap-legends-nav-text, #333)",
-                fontSize: { xs: 12, md: 14 },
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 2,
+                width: "100%",
               }}
             >
               {projectSolutions.map((item) => (
-                <li key={item.id}>
-                  <Typography component="span" fontSize="inherit">
+                <Box
+                  key={item.id}
+                  sx={{
+                    flex: "1 1 calc(50% - 8px)",
+                    minWidth: { xs: "100%", sm: "calc(50% - 8px)" },
+                    borderRadius: "8px",
+                    backgroundColor: "#fff",
+                    border: "2px solid rgba(0,0,0,0.85)",
+                    px: 2,
+                    py: 1.5,
+                    minHeight: 60,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography
+                    fontSize={{ xs: 12, md: 14 }}
+                    sx={{ color: "#111" }}
+                  >
                     {item.name}
                   </Typography>
-                </li>
+                </Box>
               ))}
             </Box>
           ) : (
             <Typography
               fontSize={{ xs: 12, md: 14 }}
-              sx={{ color: "var(--heatmap-legends-nav-text, #666)" }}
+              sx={{
+                color: "var(--heatmap-legends-nav-text, #666)",
+                fontStyle: "italic",
+                width: "100%",
+                textAlign: "center",
+                py: 2,
+              }}
             >
               No installed solutions available. Add solutions in the settings
               page.

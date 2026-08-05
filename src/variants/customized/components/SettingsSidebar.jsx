@@ -16,7 +16,8 @@ import {
   registerSettingsSidebarFocusHandler,
   requestTopbarNavFocus,
 } from '../../../utils/keyboard/pageSubNavBridge';
-import { syncSettingsSidebarKeyboardApi, activateSettingsSidebarItem } from '../../../utils/keyboard/settingsSidebarKeyboard';
+import { syncSettingsSidebarKeyboardApi, activateSettingsSidebarItem, getSettingsSidebarKeyboardNavKey } from '../utils/settingsSidebarKeyboard';
+import { CUSTOMIZED_SETTINGS_HOME_PATH } from '../utils/customizedSettingsPaths';
 import { getSettingsSidebarDisplayLabel } from '../../../utils/settingsSidebarDisplayLabel';
 
 function useSettingsSidebarKeyboard({ navItems, navItemKeys, isTablet, location, navigate }) {
@@ -81,7 +82,7 @@ function useSettingsSidebarKeyboard({ navItems, navItemKeys, isTablet, location,
       return;
     }
 
-    if (event.key === 'ArrowRight' && rovingActiveKey === 'Home' && normalizedPath === '/main') {
+    if (event.key === 'ArrowRight' && rovingActiveKey === 'Home' && normalizedPath === CUSTOMIZED_SETTINGS_HOME_PATH) {
       event.preventDefault();
       event.stopPropagation();
       focusSettingsHomeTab('Lutron');
@@ -131,7 +132,11 @@ function useSettingsSidebarKeyboard({ navItems, navItemKeys, isTablet, location,
 
   useEffect(() => {
     if (!activeLabel) return undefined;
-    if (!sidebarKeyboardModeRef.current) return undefined;
+    const shouldFocusSidebar =
+      sidebarKeyboardModeRef.current ||
+      getSettingsSidebarKeyboardNavKey() === activeLabel;
+    if (!shouldFocusSidebar) return undefined;
+    sidebarKeyboardModeRef.current = true;
     focusSidebarItem(activeLabel);
     return undefined;
   }, [activeLabel, location.pathname, focusSidebarItem]);
@@ -200,10 +205,10 @@ function SettingsSidebarNavTrack({
               border: 'none',
               font: 'inherit',
               backgroundColor: active ? containerBg : 'transparent',
-              color: active ? theme.palette.text.primary : theme.palette.text.secondary,
+              color: active ? '#000' : '#fff',
               px: isTablet ? 1.5 : 2,
               py: isTablet ? 0.8 : 1,
-              borderRadius: '4px',
+              borderRadius: isTablet ? '4px' : '0 8px 8px 0',
               mb: isTablet ? 0 : 0.8,
               mr: isTablet ? 1 : 0,
               fontSize: isTablet ? '11px' : '14px',
@@ -217,6 +222,7 @@ function SettingsSidebarNavTrack({
               '&:focus-visible': { outline: 'none', boxShadow: 'none' },
               '&:hover': {
                 backgroundColor: containerBg,
+                color: active ? '#000' : '#fff',
               },
               ...(isTablet && {
                 flex: '0 0 auto',
@@ -283,7 +289,6 @@ const SettingsSidebar = ({ items = [], embedded = false }) => {
         variant="h6"
         sx={{
           ...settingsTitleTypographySx,
-          color: theme.palette.text.secondary,
         }}
       >
         Settings

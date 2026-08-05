@@ -30,8 +30,8 @@ const PLOT_EVENT_HANDLERS = {
 
 const BASIC_ENERGY_SLOT = {
   width: '100%',
-  minHeight: 540,
-  height: 540,
+  minHeight: 360,
+  height: 360,
   boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column',
@@ -85,6 +85,7 @@ export function EnergyChartCardShell({
   blankChartPreview = null,
   LoaderComponent,
   cardClassName,
+  cardHeaderStyle = {},
 }) {
   if (shellVariant === 'basic-energy') {
     const outerStyle = {
@@ -231,14 +232,25 @@ export function EnergyChartCardShell({
 
   // customized-builtin
   const cardStyle = outerStyleOverride;
-  const headerStyle = titleStyleOverride;
+  const headerRowStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px',
+    ...cardHeaderStyle,
+  };
+  const titleTextStyle = {
+    margin: 0,
+    color: theme.header,
+    ...titleStyleOverride,
+  };
 
   if (status === 'loading') {
     const titleText = dynamicUnit ? `${title} (${dynamicUnit})` : title;
     return (
       <div style={cardStyle}>
-        <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>{titleText}</h3>
+        <div style={headerRowStyle}>
+          <h3 style={titleTextStyle}>{titleText}</h3>
         </div>
         {LoaderComponent ? (
           <LoaderComponent height={loaderHeight} message={loaderMessage} />
@@ -250,8 +262,8 @@ export function EnergyChartCardShell({
   if (status === 'empty') {
     return (
       <div style={cardStyle}>
-        <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
+        <div style={headerRowStyle}>
+          <h3 style={titleTextStyle}>{title}</h3>
         </div>
         <div style={plotStyleOverride}>{emptyMessage}</div>
       </div>
@@ -260,8 +272,8 @@ export function EnergyChartCardShell({
 
   return (
     <div style={cardStyle}>
-      <div style={{ ...headerStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
+      <div style={headerRowStyle}>
+        <h3 style={titleTextStyle}>{title}</h3>
         <div style={{ position: 'relative' }}>{exportControl}</div>
       </div>
       <div style={plotStyleOverride} {...PLOT_EVENT_HANDLERS}>

@@ -44,7 +44,10 @@ export default function ExportMenuAction({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick(event);
+      }}
       disabled={isDisabled}
       style={buildExportMenuItemStyle({
         padding,

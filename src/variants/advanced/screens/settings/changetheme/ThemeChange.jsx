@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Box, Button, Grid, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { ADVANCED_MANAGE_AREA_GROUPS_PATH } from '../../../utils/advancedSettingsPaths';
 import HexColorPicker, { HEX_PICKER_DEFAULT_WHITE_SWATCH } from '../../../utils/HexColorPicker';
 import '../../../styles/HexColorPicker.css';
 import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
@@ -21,6 +22,12 @@ import { ThemeContext } from '../theme/ThemeContext';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
 import {
+    dispatchFetchApplicationThemeOnce,
+    dispatchFetchBackgroundImageOnce,
+    dispatchFetchClientOnce,
+    dispatchFetchHeatMapThemeOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
     DEFAULT_APP_BACKGROUND,
     DEFAULT_APP_CONTENT,
     isLightSurface,
@@ -30,6 +37,16 @@ import {
 } from '../../../utils/settingsSidebarTabStyles';
 import SettingsSidebarNav from '../../../components/SettingsSidebarNav';
 import { themePickerCardCellSx, themePickerCardsGridSx } from './themePickerLayout';
+
+const THEME_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+function resolveThemeMediaUrl(path) {
+    if (path == null) return null;
+    const p = String(path).trim();
+    if (!p) return null;
+    if (/^(https?:|blob:|data:)/i.test(p)) return p;
+    return `${THEME_API_URL}${p.startsWith('/') ? p : `/${p}`}`;
+}
 
 const ThemeChange = () => {
     const normalizeColor = (color) => {
@@ -101,7 +118,10 @@ const ThemeChange = () => {
     const [themePickerKey, setThemePickerKey] = useState(0);
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
-        dispatch(getLutronDataClient());
+        dispatchFetchClientOnce(dispatch, getLutronDataClient);
+    }, [dispatch]);
+
+    useEffect(() => {
         setDynamicButtonColor(themeColorMap?.Button || '#232323');
     }, [themeColorMap?.Button, themeColorMap?.Background]);
 
@@ -116,13 +136,13 @@ const ThemeChange = () => {
     useEffect(() => {
         // Only fetch if not already loaded
         if (!appTheme || !appTheme.application_theme) {
-            dispatch(fetchApplicationTheme());
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
         }
         if (!heatMapTheme || !heatMapTheme.application_theme) {
-            dispatch(fetchHeatMapTheme());
+            dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
         }
         if (!apibgImage || !apibgImage.background_image) {
-            dispatch(fetchBackgroundImage());
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
     useEffect(() => {
@@ -316,7 +336,7 @@ const ThemeChange = () => {
 
     useEffect(() => {
         if (!canAccessTheme) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(ADVANCED_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessTheme, navigate]);
 
@@ -357,6 +377,7 @@ const ThemeChange = () => {
                     borderTopLeftRadius: "10px",
                     borderBottomLeftRadius: "10px",
                     ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp && !isTablet),
+                    borderRight: { xs: "none", md: "none" },
                 }}
             >
                 <SettingsSidebarNav items={visibleSidebarItemsWithPaths} />
@@ -477,7 +498,7 @@ const ThemeChange = () => {
                     >
                         {backgroundImage ? (
                             <img
-                                src={backgroundImage}
+                                src={resolveThemeMediaUrl(backgroundImage)}
                                 alt="Background Preview"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />

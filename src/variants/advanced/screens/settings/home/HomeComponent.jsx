@@ -1,13 +1,4 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-
-// Suppress findDOMNode warning for ReactQuill (third-party library issue)
-const originalError = console.error;
-console.error = (...args) => {
-  if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
-    return;
-  }
-  originalError.call(console, ...args);
-};
 import {
     Box,
     Button,
@@ -24,11 +15,13 @@ import { selectApplicationTheme } from '../../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { HOME_FONT_SIZE_WHITELIST } from '../../../../../shared/settings/home/homeQuillFontSize';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
 import { MdFileUpload } from "react-icons/md";
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ADVANCED_MANAGE_AREA_GROUPS_PATH } from '../../../utils/advancedSettingsPaths';
 import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import { UseAuth } from '../../../customhooks/UseAuth';
 import { getThemeButtonColor } from '../../../utils/themePageBackground';
@@ -54,6 +47,19 @@ import {
     homeDataClient,
     homeDataProject
 } from '../../../redux/slice/home/homeSlice';
+import {
+    dispatchFetchClientOnce,
+    dispatchFetchProjectOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+
+// Suppress findDOMNode warning for ReactQuill (third-party library issue)
+const originalError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
+    return;
+  }
+  originalError.call(console, ...args);
+};
 
 const HOME_TAB_KEYS = ['Lutron', 'Client', 'Project'];
 
@@ -235,12 +241,10 @@ const HomeComponent = () => {
     // Redirect if user doesn't have permission
     useEffect(() => {
         if (!canAccessHome) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(ADVANCED_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessHome, navigate]);
-    
-    if (!canAccessHome) return null;
-    
+
     // Redux selectors
     const appTheme = useSelector(selectApplicationTheme);
     const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
@@ -366,11 +370,11 @@ const HomeComponent = () => {
         }
         if (!dataLoadedRef.current.client && (!homeClientData || !homeClientData.name)) {
             dataLoadedRef.current.client = true;
-            dispatch(getLutronDataClient());
+            dispatchFetchClientOnce(dispatch, getLutronDataClient);
         }
         if (!dataLoadedRef.current.project && (!homeProjectData || !homeProjectData.name)) {
             dataLoadedRef.current.project = true;
-            dispatch(getLutronDataProject());
+            dispatchFetchProjectOnce(dispatch, getLutronDataProject);
         }
     }, [dispatch]); // Only depend on dispatch to prevent infinite loops
 
@@ -389,7 +393,7 @@ const HomeComponent = () => {
         if (displayMode === 'Lutron' && homeData) {
             setDescription(homeData.description || '');
             if (homeData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const imageUrl = homeData.background_image.startsWith("http")
                     ? homeData.background_image
                     : `${API_URL}${homeData.background_image}`;
@@ -406,14 +410,14 @@ const HomeComponent = () => {
             setDescription(homeClientData.description || '');
             setClientName(homeClientData.name || '');
             if (homeClientData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const imageUrl = homeClientData.background_image.startsWith("http")
                     ? homeClientData.background_image
                     : `${API_URL}${homeClientData.background_image}`;
                 setImagePreview(imageUrl);
             }
             if (homeClientData.logo_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const logoUrl = homeClientData.logo_image.startsWith("http")
                     ? homeClientData.logo_image
                     : `${API_URL}${homeClientData.logo_image}`;
@@ -548,7 +552,7 @@ const HomeComponent = () => {
             if (saveClientData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
                 // FIXED: Only refresh once after successful save
-                await dispatch(getLutronDataClient());
+                await dispatchFetchClientOnce(dispatch, getLutronDataClient, { force: true });
             }
         } else if (displayMode === 'Project') {
             if (description) formData.append('description', cleanDescription(description));
@@ -563,7 +567,7 @@ const HomeComponent = () => {
             const result = await dispatch(saveProjectData(formData));
             if (saveProjectData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
-                dispatch(getLutronDataProject());
+                await dispatchFetchProjectOnce(dispatch, getLutronDataProject, { force: true });
             }
         }
     };
@@ -618,7 +622,7 @@ const HomeComponent = () => {
             ['blockquote', 'code-block'],
             [{ align: [] }],
             ['link', 'image'],
-            ['clean'],
+            ['clean', { size: HOME_FONT_SIZE_WHITELIST }],
         ],
         clipboard: {
             // Toggle to add line breaks when pasting
@@ -628,7 +632,7 @@ const HomeComponent = () => {
 
     const formats = [
         'list', 'bullet',
-        'color', 'background',
+        'size', 'color', 'background',
         'bold', 'italic', 'underline', 'strike',
         'blockquote', 'code-block',
         'align',
@@ -733,6 +737,8 @@ const HomeComponent = () => {
         </Box>
         );
     };
+
+    if (!canAccessHome) return null;
 
     return (
         <>
@@ -992,15 +998,16 @@ const HomeComponent = () => {
                                             </Grid>
 
                                             {/* Right Column - Description */}
-                                            <Grid item xs={12} md={7}>
+                                            <Grid item xs={12} md={7} sx={{ overflow: 'visible' }}>
                                                 <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                                     Description
                                                 </Typography>
                                                 <Box
+                                                    className="settings-home-quill"
                                                     sx={{
                                                         backgroundColor: '#eee',
                                                         borderRadius: '8px',
-                                                        overflow: 'hidden',
+                                                        overflow: 'visible',
                                                         pt: 1,
                                                         mb: 2,
                                                         '.ql-toolbar': {
@@ -1008,14 +1015,12 @@ const HomeComponent = () => {
                                                             border: 'none',
                                                             padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
                                                             height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                            display: 'flex',
-                                                            flexWrap: 'wrap',
-                                                            alignItems: 'center',
                                                             borderTopLeftRadius: '8px',
                                                             borderTopRightRadius: '8px',
-                                                            width: '100%',
                                                             margin: '0 auto',
                                                             borderRadius: '6px',
+                                                            boxSizing: 'border-box',
+                                                            lineHeight: 1.4,
                                                         },
                                                         '.ql-container': {
                                                             backgroundColor: '#eee',
@@ -1025,14 +1030,14 @@ const HomeComponent = () => {
                                                             minHeight: 'auto', // Remove fixed height
                                                             height: 'auto', // Allow natural height
                                                             width: '100%',
-                                                            overflow: 'visible', // Remove scroll from editor container
+                                                            overflow: 'hidden', // Remove scroll from editor container
                                                         },
                                                         '.ql-editor': {
                                                             minHeight: 'auto', // Remove fixed height
                                                             height: 'auto', // Allow natural height
                                                             fontSize: { xs: '8px', sm: '9px', md: '10px', lg: '12px' },
                                                             paddingTop: 0,
-                                                            overflow: 'visible', // Remove scroll from editor content
+                                                            overflow: 'hidden', // Remove scroll from editor content
                                                         },
                                                     }}
                                                 >
@@ -1136,10 +1141,11 @@ const HomeComponent = () => {
                                             />
 
                                             <Box
+                                                className="settings-home-quill"
                                                 sx={{
                                                     backgroundColor: '#eee',
                                                     borderRadius: '16px',
-                                                    overflow: 'hidden',
+                                                    overflow: 'visible',
                                                     pt: 2,
                                                     mb: 2,
                                                     '.ql-toolbar': {
@@ -1147,14 +1153,12 @@ const HomeComponent = () => {
                                                         border: 'none',
                                                         padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
                                                         height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                        display: 'flex',
-                                                        flexWrap: 'wrap',
-                                                        alignItems: 'center',
                                                         borderTopLeftRadius: '8px',
                                                         borderTopRightRadius: '8px',
-                                                        width: '100%',
                                                         margin: '0 auto',
                                                         borderRadius: '6px',
+                                                        boxSizing: 'border-box',
+                                                        lineHeight: 1.4,
                                                     },
                                                     '.ql-container': {
                                                         border: 'none',
@@ -1162,14 +1166,14 @@ const HomeComponent = () => {
                                                         borderRadius: '6px',
                                                         minHeight: 'auto', // Remove fixed height
                                                         height: 'auto', // Allow natural height
-                                                        overflow: 'visible', // Remove scroll from editor container
+                                                        overflow: 'hidden', // Remove scroll from editor container
                                                     },
                                                     '.ql-editor': {
                                                         minHeight: 'auto', // Remove fixed height
                                                         height: 'auto', // Allow natural height
                                                         fontSize: { xs: '8px', sm: '9px', md: '10px', lg: '12px' },
                                                         paddingTop: 0,
-                                                        overflow: 'visible', // Remove scroll from editor content
+                                                        overflow: 'hidden', // Remove scroll from editor content
                                                     },
                                                 }}
                                             >
@@ -1280,10 +1284,11 @@ const HomeComponent = () => {
                                             Description
                                         </Typography>
                                         <Box
+                                            className="settings-home-quill"
                                             sx={{
                                                 backgroundColor: '#eee',
                                                 borderRadius: '16px',
-                                                overflow: 'hidden',
+                                                overflow: 'visible',
                                                 pt: 1,
                                                 mb: 1,
                                                 '.ql-toolbar': {
@@ -1291,14 +1296,12 @@ const HomeComponent = () => {
                                                     border: 'none',
                                                     padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
                                                     height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                    display: 'flex',
-                                                    flexWrap: 'wrap',
-                                                    alignItems: 'center',
                                                     borderTopLeftRadius: '8px',
                                                     borderTopRightRadius: '8px',
-                                                    width: '100%',
                                                     margin: '0 auto',
                                                     borderRadius: '6px',
+                                                    boxSizing: 'border-box',
+                                                    lineHeight: 1.4,
                                                 },
                                                 '.ql-container': {
                                                     border: '1px solid #e0e0e0',
@@ -1308,7 +1311,7 @@ const HomeComponent = () => {
                                                     minHeight: 'auto',
                                                     borderRadius: '6px',
                                                     width: '100%',
-                                                    overflow: 'visible',
+                                                    overflow: 'hidden',
                                                     '&::-webkit-scrollbar': {
                                                         display: 'none',
                                                     },
@@ -1317,7 +1320,7 @@ const HomeComponent = () => {
                                                 '.ql-editor': {
                                                     height: 'auto',
                                                     minHeight: 'auto',
-                                                    overflow: 'visible',
+                                                    overflow: 'hidden',
                                                     '&::-webkit-scrollbar': {
                                                         display: 'none',
                                                     },
@@ -1582,7 +1585,7 @@ const HomeComponent = () => {
                                                     gap: 1,
                                                     mb: 2,
                                                     maxHeight: 'none', // Remove height limit
-                                                    overflow: 'visible', // Remove all scroll
+                                                    overflow: 'hidden', // Remove all scroll
                                                     // Hide scrollbars for all browsers
                                                     scrollbarWidth: 'none', // Firefox
                                                     msOverflowStyle: 'none', // IE and Edge

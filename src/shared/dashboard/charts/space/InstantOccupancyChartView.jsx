@@ -44,7 +44,21 @@ function resolvePlotHeightStyle(plotHeightStyle) {
   if (plotHeightStyle === 'instantChartsTabClamp') {
     return { height: 'clamp(200px, 36vh, 300px)' };
   }
+  if (plotHeightStyle === 'basicInstantChartsTabClamp') {
+    /* Basic Space Utilization Trends — taller so the area chart is not squashed */
+    return { height: 'clamp(260px, 42vh, 360px)' };
+  }
+  if (plotHeightStyle === 'basicFixed280') {
+    return { height: '320px' };
+  }
   return { height: '350px' };
+}
+
+function resolvePlotShellBorder(theme) {
+  if (theme.shellStyle?.border) return theme.shellStyle.border;
+  const token = theme.plotBorder || theme.shellBorder;
+  if (!token) return undefined;
+  return String(token).includes('solid') ? token : `1px solid ${token}`;
 }
 
 function shellFrameStyle(theme, plotHeightStyle) {
@@ -53,7 +67,7 @@ function shellFrameStyle(theme, plotHeightStyle) {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: `1px solid ${theme.shellBorder}`,
+    border: resolvePlotShellBorder(theme),
     borderRadius: '4px',
     backgroundColor: theme.shellBg,
     background: theme.shellStyle?.background || theme.shellBg,
@@ -178,7 +192,7 @@ export function InstantOccupancyChartView({
   const frameHeight = resolvePlotHeightStyle(plotHeightStyle);
   const plotContainerStyle = {
     ...frameHeight,
-    border: `1px solid ${theme.plotBorder}`,
+    border: resolvePlotShellBorder(theme),
     borderRadius: '4px',
     backgroundColor: theme.plotBg || undefined,
     background: theme.shellStyle?.background || theme.plotBg || undefined,
@@ -188,7 +202,6 @@ export function InstantOccupancyChartView({
     WebkitUserSelect: 'none',
     MozUserSelect: 'none',
     msUserSelect: 'none',
-    ...(theme.shellStyle?.border ? { border: theme.shellStyle.border } : {}),
   };
 
   const xDataKey = selectedDuration === 'this-day' ? 'timeMinutes' : 'date';

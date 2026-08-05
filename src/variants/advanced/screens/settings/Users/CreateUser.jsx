@@ -33,6 +33,7 @@ import {
   selectCreateSuccess,
 } from '../../../redux/slice/settingsslice/createUserSlice';
 import { fetchFloors, selectFloors } from "../../../redux/slice/floor/floorSlice";
+import { dispatchFetchFloorsOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
 import { selectApplicationTheme } from '../../../redux/slice/theme/themeSlice';
 import { permissionMap, permissionOptions } from "../../../../../shared/settings/users/userUpdatePayload";
 import {
@@ -90,13 +91,14 @@ export default function CreateUser({ open, onClose }) {
   const [selectedFloorIds, setSelectedFloorIds] = useState([]);
   const [sharedAccessLevel, setSharedAccessLevel] = useState(permissionOptions[0]);
   const [emailError, setEmailError] = useState("");
+  const [nameError, setNameError] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floorList?.length));
+  }, [dispatch, floorList?.length]);
 
   useEffect(() => {
     if (open && availableRoles.length === 0) {
@@ -119,6 +121,7 @@ export default function CreateUser({ open, onClose }) {
       setSelectedFloorIds([]);
       setSharedAccessLevel(permissionOptions[0]);
       setEmailError("");
+      setNameError("");
       setSnackbarOpen(false);
       dispatch(resetCreateState());
     }
@@ -168,6 +171,14 @@ export default function CreateUser({ open, onClose }) {
   );
 
   const handleSave = () => {
+    if (!name.trim()) {
+      setNameError("Name is required");
+      setSnackbarMessage("Name is required");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+    setNameError("");
     const payload = {
       name: name.trim(),
       email: email.trim(),
@@ -251,8 +262,16 @@ export default function CreateUser({ open, onClose }) {
                 size="small"
                 variant="outlined"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) setNameError("");
+                }}
+                onBlur={() => {
+                  if (!name.trim()) setNameError("Name is required");
+                }}
                 sx={fieldSx}
+                error={Boolean(nameError)}
+                helperText={nameError}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -394,12 +413,7 @@ export default function CreateUser({ open, onClose }) {
                                 <Checkbox
                                   checked={selectedFloorIds.includes(f.id)}
                                   size="small"
-                                  sx={{
-                                    mr: 1,
-                                    py: 0,
-                                    color: 'var(--settings-panel-muted-text, #4A586C)',
-                                    '&.Mui-checked': { color: buttonColor },
-                                  }}
+                                  sx={{ mr: 1, py: 0 }}
                                 />
                                 <ListItemText primary={f.floor_name} />
                               </MenuItem>
@@ -472,22 +486,34 @@ export default function CreateUser({ open, onClose }) {
           </Button>
           <Button
             variant="contained"
+            className="users-create-submit-btn"
             onClick={handleSave}
             disabled={!canSave || createLoading}
             sx={{
-              backgroundColor: 'var(--app-button, #232323)',
-              color: '#fff',
-              textTransform: 'none',
-              borderRadius: '8px',
-              boxShadow: 'none',
-              '&:hover': { backgroundColor: 'var(--app-button, #232323)', opacity: 0.92 },
-              '&.Mui-disabled': { backgroundColor: '#9aa3b0', color: '#fff' },
+              backgroundColor: buttonColor,
+              color: "#fff",
+              textTransform: "none",
+              borderRadius: "8px",
+              boxShadow: "none",
+              "&:hover": {
+                backgroundColor: buttonColor,
+                opacity: 0.92,
+                boxShadow: "none",
+              },
+              "&.Mui-disabled": {
+                background: "#A6A49A !important",
+                backgroundColor: "#A6A49A !important",
+                backgroundImage: "none !important",
+                color: "#fff !important",
+                opacity: "1 !important",
+                boxShadow: "none !important",
+              },
             }}
           >
             {createLoading ? (
               <CircularProgress size={20} color="inherit" />
             ) : (
-              'Create user'
+              "Create user"
             )}
           </Button>
         </DialogActions>

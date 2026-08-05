@@ -66,6 +66,15 @@ describe("resolveLightModeFill", () => {
   it("unknown status is transparent", () => {
     expect(resolveLightModeFill({}, THEME_LIGHT)).toBe("transparent");
   });
+
+  it("unreachable processor is transparent (PDF original colors)", () => {
+    expect(
+      resolveLightModeFill(
+        { processor_reachable: false, light_level: 80, light_status: "on" },
+        THEME_LIGHT
+      )
+    ).toBe("transparent");
+  });
 });
 
 describe("LIGHT_OFF_GREY_HEX", () => {

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getProcessorId, processorIdsEqual } from '../../../../../utils/processorId';
+import { toSafeReactText } from '../../../../../utils/safeReactText';
 import {
   Dialog,
   DialogTitle,
@@ -28,14 +30,14 @@ export default function ProcessorSelectionDialog({
 }) {
   const theme = useTheme();
   const dispatch = useDispatch();
-  const [selectedProcessors, setSelectedProcessors] = useState(selectedInitialProcessors.map(p => p.id));
+  const [selectedProcessors, setSelectedProcessors] = useState(selectedInitialProcessors.map((p) => getProcessorId(p)).filter((id) => id != null));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const hasInitialized = useRef(false); // Track if we've already initialized
 
   useEffect(() => {
-    setSelectedProcessors(selectedInitialProcessors.map(p => p.id));
+    setSelectedProcessors(selectedInitialProcessors.map((p) => getProcessorId(p)).filter((id) => id != null));
   }, [selectedInitialProcessors, open]);
 
   // Fetch processors only when dialog opens and only once
@@ -52,10 +54,11 @@ export default function ProcessorSelectionDialog({
   }, [open]);
 
   const handleToggle = (processorId) => {
+    const pid = getProcessorId(processorId);
     setSelectedProcessors((prevSelected) =>
-      prevSelected.includes(processorId)
-        ? prevSelected.filter((id) => id !== processorId)
-        : [...prevSelected, processorId]
+      prevSelected.some((id) => processorIdsEqual(id, pid))
+        ? prevSelected.filter((id) => !processorIdsEqual(id, pid))
+        : [...prevSelected, pid]
     );
   };
 
@@ -80,7 +83,7 @@ export default function ProcessorSelectionDialog({
     setLoading(true);
     setError('');
     try {
-      const processorsToAdd = availableProcessors.filter(processor => selectedProcessors.includes(processor.id));
+      const processorsToAdd = availableProcessors.filter((processor) => selectedProcessors.some((id) => processorIdsEqual(id, processor)));
       await onAddProcessors(processorsToAdd);
       
       // Don't refresh processors immediately after adding
@@ -169,7 +172,7 @@ export default function ProcessorSelectionDialog({
             </Box>
         ) : error ? (
           <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography color="error">{error}</Typography>
+            <Typography color="error">{toSafeReactText(error)}</Typography>
             <Button
               variant="outlined"
               size="small"
@@ -188,8 +191,8 @@ export default function ProcessorSelectionDialog({
                 <FormControlLabel
                   control={
                     <Checkbox
-                      checked={selectedProcessors.includes(processor.id)}
-                      onChange={() => handleToggle(processor.id)}
+                      checked={selectedProcessors.some((id) => processorIdsEqual(id, processor))}
+                      onChange={() => handleToggle(getProcessorId(processor))}
                       disabled={refreshing}
                       sx={{
                         color: theme.palette.text.secondary,
@@ -205,7 +208,7 @@ export default function ProcessorSelectionDialog({
                 <input
                   type="file"
                   accept=".csv"
-                  onChange={e => handleCsvUpload(e, processor.id)}
+                  onChange={e => handleCsvUpload(e, getProcessorId(processor))}
                 />
               </Box>
             ))}

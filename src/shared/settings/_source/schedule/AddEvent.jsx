@@ -214,7 +214,8 @@ const AddEvent = () => {
   const groupLoading = useSelector(state => state.schedule.groupsLoading);
   const groupError = useSelector(state => state.schedule.groupsError);
 
-  // Refresh groups when component mounts
+  // Fetch groups once on mount. Do NOT key off groupList.length — an empty
+  // groups[] from the API is valid and would otherwise infinite-loop.
   useEffect(() => {
     dispatch(fetchScheduleGroups());
   }, [dispatch]);
@@ -241,13 +242,6 @@ const AddEvent = () => {
     
     return false;
   };
-
-  // Make sure you're fetching groups in AddEvent as well
-  useEffect(() => {
-    if (!groupList || groupList.length === 0) {
-      dispatch(fetchScheduleGroups());
-    }
-  }, [dispatch, groupList]);
 
   // Handle day selection
   const handleDayToggle = (day) => {
@@ -1474,7 +1468,7 @@ const AddEvent = () => {
         {/* Table-like list of locations and actions */}
         <div>
           {locations.map((loc, idx) => {
-            const locationText = `${loc.floorName} > ${loc.areaName}`;
+            const locationText = `${loc.floorName} / ${loc.areaName}`;
             const isLongName = locationText.length > 40; // Updated threshold to 40 characters
             
             return (

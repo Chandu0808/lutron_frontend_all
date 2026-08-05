@@ -2,14 +2,24 @@
  * FOFP admin UI helpers aligned with Settings / application theme.
  */
 
+import { isLightSurface } from "../../../utils/themeOnSurface";
+
 /** SweetAlert2 options consistent with other Settings screens. */
-export const getFofpSwalOptions = (theme) => ({
-  background:
+export const getFofpSwalOptions = (theme) => {
+  const background =
     theme?.palette?.custom?.containerBg ||
+    theme?.palette?.background?.paper ||
     theme?.palette?.background?.default ||
-    "#CDC0A0",
-  customClass: { popup: "custom-swal-radius" },
-});
+    "#ffffff";
+  // Light dialogs (e.g. white theme) must use dark title/body text — page chrome
+  // often inherits white text and makes "Layout generated" invisible.
+  const color = isLightSurface(background) ? "#111827" : "#ffffff";
+  return {
+    background,
+    color,
+    customClass: { popup: "custom-swal-radius" },
+  };
+};
 
 /** Sticky toolbar shell inside Settings content panel. */
 export const getFofpToolbarSx = (theme) => ({
@@ -57,6 +67,7 @@ export const getFofpViewerChromeSx = (isLightChrome = false) => ({
 /** Floor select dropdown menu (Settings → FOFP). */
 export const fofpFloorMenuProps = {
   PaperProps: {
+    className: 'fofp-floor-select-menu',
     sx: {
       backgroundColor: "var(--users-select-menu-bg, #ffffff)",
       color: "var(--settings-panel-text, #1c2330)",

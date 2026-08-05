@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { UseAuth } from '../customhooks/UseAuth'
 import {
@@ -7,6 +7,7 @@ import {
   selectWidgetConfiguration,
   selectWidgetConfigurationStatus,
 } from '../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { dispatchFetchWidgetConfigurationOnce } from '../../../shared/utils/bootstrapFetchGuards'
 import {
   applyVisibilityToggleToMap,
   DASHBOARD_WIDGET_VISIBILITY_EVENT,
@@ -18,10 +19,13 @@ import {
   WIDGET_VISIBILITY_SECTION,
   dedupeWidgetItemsByCanonicalKey,
   getDefaultDashboardWidgetVisibilityMap,
+  getWidgetVisibilityPersistenceKey,
   hasBackendWidgetConfiguration,
   inferWidgetVisibilitySection,
   isWidgetVisibleInMap,
   normalizeDashboardWidgetKey,
+  normalizeSettingsWidgetListItems,
+  resolveSettingsWidgetDisplayName,
   readDashboardWidgetVisibility,
   readDashboardWidgetVisibilityRaw,
   resolveVisibilityMap,
@@ -29,7 +33,10 @@ import {
   restoreDashboardWidgetVisibilityAfterStorageClear,
   widgetConfigurationItemsToVisibilityMap,
   writeDashboardWidgetVisibility,
+  filterWidgetConfigurationByUiVariant,
 } from './dashboardWidgetVisibilityCore'
+
+const UI_VARIANT = 'basic'
 
 export {
   DASHBOARD_WIDGET_VISIBILITY_STORAGE_KEY,
@@ -42,6 +49,7 @@ export {
   normalizeDashboardWidgetKey,
   dedupeWidgetItemsByCanonicalKey,
   getDefaultDashboardWidgetVisibilityMap,
+  getWidgetVisibilityPersistenceKey,
   readDashboardWidgetVisibility,
   writeDashboardWidgetVisibility,
   readDashboardWidgetVisibilityRaw,
@@ -52,6 +60,8 @@ export {
   resolveWidgetConfigurationDisplayName,
   applyVisibilityToggleToMap,
   inferWidgetVisibilitySection,
+  normalizeSettingsWidgetListItems,
+  resolveSettingsWidgetDisplayName,
 }
 
 export function useDashboardWidgetVisibility() {
@@ -61,29 +71,45 @@ export function useDashboardWidgetVisibility() {
   const widgetConfigurationStatus = useSelector(selectWidgetConfigurationStatus)
   const widgetList = useSelector((state) => state.groupOccupancy.widgets)
 
+  const variantWidgetConfiguration = useMemo(
+    () => filterWidgetConfigurationByUiVariant(widgetConfiguration, UI_VARIANT),
+    [widgetConfiguration]
+  )
+
   const backendActive = useMemo(
     () =>
       widgetConfigurationStatus === 'succeeded' &&
-      hasBackendWidgetConfiguration(widgetConfiguration),
-    [widgetConfiguration, widgetConfigurationStatus]
+      hasBackendWidgetConfiguration(variantWidgetConfiguration),
+    [variantWidgetConfiguration, widgetConfigurationStatus]
   )
 
-  const [map, setMap] = useState(() => readDashboardWidgetVisibility())
+  const [map, setMap] = useState(() => readDashboardWidgetVisibility(UI_VARIANT))
+  const mapRef = useRef(map)
+  mapRef.current = map
 
+  // Hydrate only when a fetch completes (status → succeeded). Do NOT re-run on
+  // saveWidgetVisibility merges — that snapped toggles back after click.
   useEffect(() => {
-    if (widgetConfigurationStatus === 'succeeded') {
-      const resolved = resolveVisibilityMap(widgetConfiguration, widgetConfigurationStatus)
-      setMap(resolved)
-      if (backendActive) {
-        writeDashboardWidgetVisibility(resolved)
-      }
+    if (widgetConfigurationStatus !== 'succeeded') return
+    const resolved = resolveVisibilityMap(
+      widgetConfiguration,
+      widgetConfigurationStatus,
+      UI_VARIANT
+    )
+    setMap(resolved)
+    mapRef.current = resolved
+    const filtered = filterWidgetConfigurationByUiVariant(widgetConfiguration, UI_VARIANT)
+    if (hasBackendWidgetConfiguration(filtered)) {
+      writeDashboardWidgetVisibility(resolved, UI_VARIANT)
     }
-  }, [widgetConfiguration, widgetConfigurationStatus, backendActive])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: hydrate on fetch status only
+  }, [widgetConfigurationStatus])
 
   useEffect(() => {
     const sync = () => {
-      if (backendActive) return
-      setMap(readDashboardWidgetVisibility())
+      const next = readDashboardWidgetVisibility(UI_VARIANT)
+      mapRef.current = next
+      setMap(next)
     }
     window.addEventListener('storage', sync)
     window.addEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, sync)
@@ -91,7 +117,7 @@ export function useDashboardWidgetVisibility() {
       window.removeEventListener('storage', sync)
       window.removeEventListener(DASHBOARD_WIDGET_VISIBILITY_EVENT, sync)
     }
-  }, [backendActive])
+  }, [])
 
   const isWidgetVisible = useCallback(
     (key) => isWidgetVisibleInMap(map, normalizeDashboardWidgetKey(key)),
@@ -99,35 +125,43 @@ export function useDashboardWidgetVisibility() {
   )
 
   const setWidgetVisible = useCallback(
-    (key, visible) => {
+    (key, visible, options = {}) => {
       const k = normalizeDashboardWidgetKey(key)
       if (!k) return
-      const base = backendActive
-        ? widgetConfigurationItemsToVisibilityMap(widgetConfiguration)
-        : readDashboardWidgetVisibility()
+      const skipRemote = options.skipRemote === true
+
+      const prev = mapRef.current
+      const base =
+        prev && typeof prev === 'object' && Object.keys(prev).length > 0
+          ? prev
+          : readDashboardWidgetVisibility(UI_VARIANT)
       const next = applyVisibilityToggleToMap(base, k, visible)
-      writeDashboardWidgetVisibility(next)
+      writeDashboardWidgetVisibility(next, UI_VARIANT)
+      mapRef.current = next
       setMap(next)
       window.dispatchEvent(new CustomEvent(DASHBOARD_WIDGET_VISIBILITY_EVENT))
 
-      if (role === 'Superadmin') {
+      if (!skipRemote && role === 'Superadmin') {
         const display_name = resolveWidgetConfigurationDisplayName(k, widgetList)
         const dropdownRow = Array.isArray(widgetList?.titles)
           ? widgetList.titles.find(
               (t) => t && normalizeDashboardWidgetKey(t.key) === k
             )
           : null
+        const dropdown_name = dropdownRow?.dropdown_name ?? display_name
+        const persistenceKey = getWidgetVisibilityPersistenceKey(k)
         dispatch(
           saveWidgetVisibility({
-            widget_key: k,
+            widget_key: persistenceKey,
             is_visible: visible,
             display_name,
-            dropdown_name: dropdownRow?.dropdown_name ?? display_name,
+            dropdown_name,
+            ui_variant: UI_VARIANT,
           })
         )
       }
     },
-    [backendActive, dispatch, role, widgetConfiguration, widgetList]
+    [dispatch, role, widgetList]
   )
 
   return {
@@ -136,6 +170,7 @@ export function useDashboardWidgetVisibility() {
     visibilityMap: map,
     widgetConfigurationStatus,
     backendActive,
-    refreshWidgetConfiguration: () => dispatch(fetchWidgetConfiguration()),
+    refreshWidgetConfiguration: () =>
+      dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration, { force: true }),
   }
 }

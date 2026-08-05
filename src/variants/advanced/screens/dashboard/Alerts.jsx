@@ -4,7 +4,7 @@ import ChartExportButton from "../../components/ChartExportButton";
 import ChartExportDropdown from "../../components/ChartExportDropdown";
 import { useDispatch, useSelector } from "react-redux";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
-import { usesGoldPageTheme } from "../../utils/themePageBackground";
+import { usesGoldPageTheme, usesLightPageExportChrome } from "../../utils/themePageBackground";
 import {
   fetchActiveAlerts,
   downloadAlerts,
@@ -25,6 +25,10 @@ import {
 import { fetchEmailConfigs } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { invokeValidatedEmailExportAction } from '../../../../shared/dashboard/export/emailExportGate';
 import { fetchProfile } from '../../redux/slice/auth/userlogin';
+import {
+  dispatchFetchActiveAlertsOnce,
+  dispatchFetchProfileOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards';
 import {
   Snackbar,
   Alert,
@@ -93,6 +97,7 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
   const appTheme = useSelector(selectApplicationTheme);
   const themeBackground = appTheme?.application_theme?.background;
   const isGoldTheme = usesGoldPageTheme(themeBackground);
+  const useLightExportChrome = usesLightPageExportChrome(themeBackground);
   
   const alerts = useSelector(selectAlerts);
   const loading = useSelector(selectAlertsLoading);
@@ -211,13 +216,13 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
     // Only fetch alerts once on component mount to prevent multiple API calls
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      dispatch(fetchActiveAlerts());
+      dispatchFetchActiveAlertsOnce(dispatch, fetchActiveAlerts);
     }
   }, [dispatch]);
 
-  // Fetch user profile on component mount
+  // Profile is owned by Topbar; join in-flight / skip if already loaded
   useEffect(() => {
-    dispatch(fetchProfile());
+    dispatchFetchProfileOnce(dispatch, fetchProfile);
   }, [dispatch]);
 
   // Handle download success/error notifications
@@ -383,8 +388,6 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
       display: 'flex',
       flexDirection: 'column',
       borderRadius: '8px',
-      minHeight: 'calc(100vh - 200px)',
-      overflowY: 'auto',
       overflowX: 'hidden',
       padding: '20px',
       border: isGoldTheme ? '1px solid var(--alerts-table-border, rgba(74, 67, 52, 0.28))' : undefined,
@@ -405,7 +408,7 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
         </div>
         <div style={{ position: 'relative' }} data-export-dropdown>
           <ChartExportButton
-            surface={isGoldTheme ? 'light' : 'dark'}
+            surface={useLightExportChrome ? 'light' : 'dark'}
             disabled={exportDisabled}
             onClick={() => {
               if (!exportDisabled) {

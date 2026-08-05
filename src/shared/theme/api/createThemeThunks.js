@@ -1,9 +1,19 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
+import { getUiVariant } from "../../../utils/uiVariant";
 
 /**
  * Factory for theme API thunks. Each variant injects its own BaseUrl and getToken.
+ * All theme requests include `variant` so reads/writes hit that variant's DB row.
  */
 export function createThemeThunks({ BaseUrl, getToken }) {
+  const getThemeRequestConfig = (extra = {}) => ({
+    ...extra,
+    params: {
+      ...(extra.params || {}),
+      variant: getUiVariant(),
+    },
+  });
+
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${getToken()}` },
   });
@@ -12,7 +22,10 @@ export function createThemeThunks({ BaseUrl, getToken }) {
     "theme/fetchSettings",
     async (_, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.get("/theme/");
+        const response = await BaseUrl.get(
+          "/theme/",
+          getThemeRequestConfig()
+        );
         return response.data;
       } catch (error) {
         return rejectWithValue(
@@ -30,7 +43,7 @@ export function createThemeThunks({ BaseUrl, getToken }) {
       try {
         const response = await BaseUrl.get(
           "/theme/application",
-          getAuthHeaders()
+          getThemeRequestConfig(getAuthHeaders())
         );
         return response.data;
       } catch (error) {
@@ -50,7 +63,7 @@ export function createThemeThunks({ BaseUrl, getToken }) {
         const response = await BaseUrl.post(
           "/theme/application",
           data,
-          getAuthHeaders()
+          getThemeRequestConfig(getAuthHeaders())
         );
         return response.data;
       } catch (error) {
@@ -67,7 +80,10 @@ export function createThemeThunks({ BaseUrl, getToken }) {
     "theme/fetchHeatMapTheme",
     async (_, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.get("/theme/heatmap", getAuthHeaders());
+        const response = await BaseUrl.get(
+          "/theme/heatmap",
+          getThemeRequestConfig(getAuthHeaders())
+        );
         return response.data;
       } catch (error) {
         return rejectWithValue(
@@ -86,7 +102,7 @@ export function createThemeThunks({ BaseUrl, getToken }) {
         const response = await BaseUrl.post(
           "/theme/heatmap",
           data,
-          getAuthHeaders()
+          getThemeRequestConfig(getAuthHeaders())
         );
         return response.data;
       } catch (error) {
@@ -103,7 +119,10 @@ export function createThemeThunks({ BaseUrl, getToken }) {
     "theme/fetchBackgroundImage",
     async (_, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.get("/theme/background", getAuthHeaders());
+        const response = await BaseUrl.get(
+          "/theme/background",
+          getThemeRequestConfig(getAuthHeaders())
+        );
         return response.data;
       } catch (error) {
         return rejectWithValue(
@@ -122,7 +141,7 @@ export function createThemeThunks({ BaseUrl, getToken }) {
         const response = await BaseUrl.post(
           "/theme/background",
           data,
-          getAuthHeaders()
+          getThemeRequestConfig(getAuthHeaders())
         );
         return response.data;
       } catch (error) {
@@ -142,7 +161,7 @@ export function createThemeThunks({ BaseUrl, getToken }) {
         const response = await BaseUrl.post(
           "/theme/background_image_clear",
           null,
-          getAuthHeaders()
+          getThemeRequestConfig(getAuthHeaders())
         );
         return response.data;
       } catch (error) {

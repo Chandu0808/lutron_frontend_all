@@ -93,7 +93,7 @@ export const CUSTOMIZED_SPACE_SLOT_REGISTRY = {
 };
 
 export const CUSTOMIZED_SPACE_CHARTS_BUILTIN_SLOTS = [
-  'utilization',
+  'instant_utilization_combined',
   'instant_occupancy_count',
   'utilization_by_area_group',
   'peak_and_minimum_utilization',

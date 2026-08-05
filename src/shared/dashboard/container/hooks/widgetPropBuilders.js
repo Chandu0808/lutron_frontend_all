@@ -194,6 +194,7 @@ export function buildUnifiedEnergyWidgetProps({
   selectedAreas,
   customDatesIncomplete,
   shellVariant,
+  chartHeaderStyle,
   overrides = {},
 }) {
   return {
@@ -211,6 +212,7 @@ export function buildUnifiedEnergyWidgetProps({
     selectedAreas,
     ...(customDatesIncomplete !== undefined ? { customDatesIncomplete } : {}),
     ...(shellVariant ? { shellVariant } : {}),
+    ...(chartHeaderStyle ? { chartHeaderStyle } : {}),
     ...overrides,
   };
 }

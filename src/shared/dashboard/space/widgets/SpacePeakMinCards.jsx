@@ -134,7 +134,8 @@ function SpacePeakMinCardsInner({
     }
     return {
       display: 'flex',
-      gap: { xs: 1.5, sm: 2, md: 2.5, lg: 3, xl: 3.5 },
+      gap: theme.rowGap || { xs: 1.5, sm: 2, md: 2.5, lg: 3, xl: 3.5 },
+      width: '100%',
     };
   }, [theme]);
 

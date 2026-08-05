@@ -1,8 +1,16 @@
 import {
   isWidgetVisibleInMap,
+  isWidgetVisibleInMapWithCombinedExclusion,
   normalizeDashboardWidgetKey,
+  resolveSettingsWidgetDisplayName,
+  SETTINGS_WIDGET_TITLE_FALLBACKS,
   resolveWidgetConfigurationDisplayName,
 } from '../../utils/dashboardWidgetVisibilityCore';
+import {
+  resolveCustomizedEnergySelectedKeys,
+  resolveCustomizedSpaceSelectedKeys,
+  isCustomizedVisibilitySectionEmpty,
+} from '../../../../variants/customized/utils/customizedOverviewWidgetVisibility';
 
 export const ENERGY_WIDGET_TITLE_DEFAULTS = {
   consumption: 'Consumption',
@@ -10,7 +18,7 @@ export const ENERGY_WIDGET_TITLE_DEFAULTS = {
   savingsByStrategy: 'Savings By Strategy',
   totalConsumptionByGroup: 'Consumption By Area Groups',
   consumptionSaving: 'Energy',
-  lightPowerDensity: 'Lighting Power Density',
+  lightPowerDensity: 'Light Power Density',
   peakAndMinimumConsumption: 'Peak & Minimum Consumption',
 };
 
@@ -35,19 +43,27 @@ export function resolveDashboardWidgetTitle(
 
   const widget = titles.find((entry) => {
     if (!entry) return false;
-    if (variant === 'customized') {
-      return String(entry.key) === String(widgetKey);
-    }
-    return entry.key === widgetKey;
+    const entryKey = normalizeDashboardWidgetKey(
+      String(entry.key ?? entry.widget_key ?? '').trim()
+    );
+    const targetKey = normalizeDashboardWidgetKey(String(widgetKey).trim());
+    return entryKey === targetKey;
   });
 
   if (!widget) return fallbackTitle;
 
-  if (variant === 'customized') {
-    return widget.title ?? widget.dropdown_name ?? fallbackTitle;
-  }
-
-  return widget.title || fallbackTitle;
+  const canonical = normalizeDashboardWidgetKey(widgetKey);
+  const renamedTitle = widget.title ?? widget.name ?? widget.new_name;
+  return resolveSettingsWidgetDisplayName(
+    canonical,
+    renamedTitle,
+    // Prefer API title (display_name from rename) over stale dropdown_name.
+    renamedTitle || widget.dropdown_name || widget.dropdownName,
+    {
+      ...SETTINGS_WIDGET_TITLE_FALLBACKS,
+      [canonical]: fallbackTitle || SETTINGS_WIDGET_TITLE_FALLBACKS[canonical],
+    }
+  );
 }
 
 export function resolveDashboardWidgetTitleWithAliases(
@@ -113,13 +129,26 @@ export function resolveEnergyWidgetVisibilityKeys(widgetKey) {
 
 export function resolveBuiltinEnergyWidgetVisible(widgetKey, visibilityMap, options = {}) {
   const { variant = 'basic' } = options;
-  if (variant === 'advanced') return true;
   const canonical = normalizeDashboardWidgetKey(widgetKey);
+  if (variant === 'advanced') {
+    return isWidgetVisibleInMapWithCombinedExclusion(visibilityMap || {}, canonical);
+  }
   return isWidgetVisibleInMap(visibilityMap || {}, canonical);
 }
 
 /**
- * Customized grouped localStorage visibility (legacy shouldShowEnergyWidget).
+ * Customized Space Utilization (Combined) — matches Settings / Advanced defaults
+ * (Combined off when empty or when individual occupancy charts are on).
+ */
+export function resolveCustomizedSpaceCombinedVisible(widgetVisibility) {
+  return resolveCustomizedSpaceSelectedKeys(widgetVisibility).includes(
+    'instant_utilization_combined'
+  );
+}
+
+/**
+ * Customized Energy dashboard visibility.
+ * Empty prefs → Advanced-like defaults (Combined off). Built-ins via selected keys.
  */
 export function resolveCustomizedEnergyWidgetVisible(
   widgetKey,
@@ -134,23 +163,46 @@ export function resolveCustomizedEnergyWidgetVisible(
   }
 
   const energyMap = widgetVisibility?.energy;
-  const spaceMap = widgetVisibility?.space;
-  const hasEnergyMap =
-    energyMap && typeof energyMap === 'object' && Object.keys(energyMap).length > 0;
-  const hasSpaceMap =
-    spaceMap && typeof spaceMap === 'object' && Object.keys(spaceMap).length > 0;
+  if (String(widgetKey).startsWith('custom_graph:')) {
+    if (!energyMap || typeof energyMap !== 'object' || Object.keys(energyMap).length === 0) {
+      return true;
+    }
+    return energyMap?.[widgetKey] !== false;
+  }
 
-  if (!hasEnergyMap) {
-    if (!hasSpaceMap) return true;
+  const selected = resolveCustomizedEnergySelectedKeys(widgetVisibility);
+  const keysToCheck = resolveEnergyWidgetVisibilityKeys(widgetKey);
+  return keysToCheck.some((key) => selected.includes(key));
+}
+
+/**
+ * Customized Space dashboard visibility (shared with SpaceUtilization).
+ */
+export function resolveCustomizedSpaceWidgetVisible(
+  widgetKey,
+  widgetVisibility,
+  getEffectiveBuiltinDashboardPage,
+  options = {}
+) {
+  const { showUtilizationLineChart = true } = options;
+  if (widgetKey === 'utilization' && !showUtilizationLineChart) {
     return false;
   }
 
   if (String(widgetKey).startsWith('custom_graph:')) {
-    return energyMap?.[widgetKey] !== false;
+    const spaceMap = widgetVisibility?.space;
+    if (isCustomizedVisibilitySectionEmpty(spaceMap)) return true;
+    return spaceMap?.[widgetKey] !== false;
   }
 
-  const keysToCheck = resolveEnergyWidgetVisibilityKeys(widgetKey);
-  return keysToCheck.some((key) => energyMap?.[key] !== false);
+  if (
+    typeof getEffectiveBuiltinDashboardPage === 'function' &&
+    getEffectiveBuiltinDashboardPage(widgetKey) === 'energy'
+  ) {
+    return false;
+  }
+
+  return resolveCustomizedSpaceSelectedKeys(widgetVisibility).includes(widgetKey);
 }
 
 export function resolveEnergyWidgetVisible(widgetKey, context = {}) {

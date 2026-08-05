@@ -60,10 +60,28 @@ describe('resolveSpaceExportThunks', () => {
     expect(resolved.emailThunk).toBe('per-logs-email');
   });
 
-  it('returns null for unknown chart', () => {
+  it('routes table dropdown key on charts tab even when title is renamed', () => {
+    const resolved = resolveSpaceExportThunks(
+      { showChartsTab: true, dropdownKey: 'table', chartTitle: 'My Area Table' },
+      thunks
+    );
+    expect(resolved.emailThunk).toBe('per-logs-email');
+    expect(resolved.downloadThunk).toBe('per-logs-dl');
+  });
+
+  it('routes table dropdown key on space tab even when title is renamed', () => {
+    const resolved = resolveSpaceExportThunks(
+      { showChartsTab: false, dropdownKey: 'table', chartTitle: 'My Area Table' },
+      thunks
+    );
+    expect(resolved.emailThunk).toBe('per-email');
+    expect(resolved.downloadThunk).toBe('per-dl');
+  });
+
+  it('returns null for unknown chart without a known dropdown key', () => {
     expect(
       resolveSpaceExportThunks(
-        { showChartsTab: true, dropdownKey: 'table', chartTitle: 'Unknown Widget' },
+        { showChartsTab: true, dropdownKey: null, chartTitle: 'Unknown Widget' },
         thunks
       )
     ).toBeNull();

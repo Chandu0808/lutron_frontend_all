@@ -25,6 +25,7 @@ function VariantRoot() {
     loadVariantModules()
       .then((loaded) => {
         if (cancelled) return;
+        sessionStorage.removeItem('lutron_variant_chunk_reload');
         installGlobalAuthHandlers(loaded.redirectToLogin, loaded.redirectFlagKey);
         setModules(loaded);
       })

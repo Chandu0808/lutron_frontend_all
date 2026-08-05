@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
+import { createPortal } from 'react-dom'
+import { useSelector, useDispatch, useStore } from 'react-redux'
 import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
 import { Box, useTheme, useMediaQuery, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Button } from '@mui/material'
 import FileUploadOutlined from '@mui/icons-material/FileUploadOutlined'
@@ -55,7 +56,30 @@ import {
   selectDashboardChartOrder,
   selectDashboardChartOrderStatus,
   selectWidgetConfigurationStatus,
+  fetchCustomGraphs,
+  selectCustomGraphs,
+  selectAreaGroups,
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS } from '../../config/featureFlags'
+import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
+import { useCustomGraphDashboardData } from '../../../../shared/dashboard/customGraphs/useCustomGraphDashboardData'
+import { isCustomGraphVisible } from '../../../../shared/dashboard/customGraphs/customGraphVisibility'
+import { CUSTOM_GRAPH_VARIANTS, CUSTOM_GRAPHS_UPDATED_EVENT } from '../../../../shared/dashboard/customGraphs/customGraphConstants'
+import { buildCustomGraphWidgetKey } from '../../../../shared/dashboard/customGraphs/customGraphStorage'
+import {
+  dispatchFetchCustomGraphsOnce,
+  dispatchFetchFloorsOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchWidgetConfigurationOnce,
+  dispatchFetchWidgetTitlesOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards'
+import EnergyCustomGraphCard from '../../../customized/components/dashboard/EnergyCustomGraphCard'
+import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
+import {
+  createStandardTransformDataForCharts,
+  buildStandardTransformChartOptions,
+} from '../../../../shared/dashboard/container/helpers'
+import { BaseUrl } from '../../BaseUrl'
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice'
 import { fetchProfile } from '../../redux/slice/auth/userlogin'
 import { isLightSurface } from '../../utils/themeOnSurface'
@@ -70,8 +94,29 @@ import {
   SPACE_MAIN_TAB_ORDER_STORAGE_KEY,
   migrateSpaceChartOrdersFromSessionToLocalOnce,
 } from '../../utils/dashboardChartLayoutStorage'
-import LongPressDraggable from '../../utils/LongPressDraggable'
+import {
+  isPlainSpanMap,
+  normalizeSpanMap,
+  persistBasicSpaceChartsSpanAndBuildApiPayload,
+  persistBasicSpaceMainSpanAndBuildApiPayload,
+} from '../../../../shared/dashboard/container/dashboardLayoutApiSync'
+import BasicDashboardCardChrome from '../../components/dashboard/BasicDashboardCardChrome'
+import SortableDashboardItem from '../../components/dashboard/SortableDashboardItem'
+import BasicDashboardSortableProvider from '../../components/dashboard/BasicDashboardSortableProvider'
+import { useBasicDashboardSortableSensors } from '../../hooks/useBasicDashboardSortableSensors'
 import { liftedFullOrderFromVisibleReorder } from '../../utils/draggableReflowOrder'
+import {
+  buildSpaceChartsDashboardRowsWithSpan,
+  isBasicSpaceChartsForceFullWidth,
+  isBasicSpaceMainForceFullWidth,
+  resolveBasicSpaceChartsRowSlotSx,
+  resolveBasicSpaceMainSlotWrapperSx,
+} from '../../utils/basicDashboardLayout'
+import {
+  readDashboardPageSpan,
+  writeDashboardPageSpan,
+  BASIC_DASHBOARD_ORDER_STORAGE_KEY,
+} from '../../../../shared/dashboard/container/dashboardLayoutResolvers'
 
 import {
   SpaceLayoutRenderer,
@@ -79,7 +124,6 @@ import {
   useSpaceUtilizationContainer,
   basicSpaceContainerAdapter,
   createBasicSpaceLayoutAdapter,
-  buildSpaceChartsDashboardRows,
   SPACE_TAB_IDS,
 } from '../../../../shared/dashboard/space/container'
 import { bindChartLoader } from '../../../../shared/dashboard/space/components'
@@ -92,9 +136,9 @@ import {
   renderBasicSpaceEmptyState,
   createBasicSpaceLayoutAdapterStyles,
 } from './basicSpaceLayoutSlots'
+import { formatDateForState, parseDateFromState } from '../../../../shared/dashboard/utils/dashboardDateState'
 
 const ChartLoader = bindChartLoader('basic')
-import { formatDateForState, parseDateFromState } from '../../../../shared/dashboard/utils/dashboardDateState'
 
 /**
  * SpaceUtilization Component
@@ -133,13 +177,6 @@ const SPACE_CHARTS_TAB_DRAG_TRANSLATE_KEYS = [
   'space-charts-peak-min-util',
   'space-charts-util-by-area',
 ]
-const SPACE_CHARTS_TAB_SLOT_STORAGE = {
-  instant_occupancy_count: 'space-charts-instant-occupancy',
-  instant_utilization_combined: 'space-charts-instant-util-combined',
-  utilization_by_area_group: 'space-charts-occupancy-by-group',
-  peak_and_minimum_utilization: 'space-charts-peak-min-util',
-  utilization_by_area: 'space-charts-util-by-area',
-}
 
 function normalizeSpaceChartsTabOrder(parsed) {
   if (!Array.isArray(parsed)) return [...SPACE_CHARTS_TAB_SLOT_ORDER_DEFAULT]
@@ -176,12 +213,6 @@ const SPACE_MAIN_TAB_DRAG_TRANSLATE_KEYS = [
   'space-tab-peak-min',
   'space-tab-utilization-by-area',
 ]
-const SPACE_MAIN_TAB_SLOT_STORAGE = {
-  utilization: 'space-tab-utilization-line',
-  utilization_by_area_group: 'space-tab-area-groups-pie',
-  peak_and_minimum_utilization: 'space-tab-peak-min',
-  utilization_by_area: 'space-tab-utilization-by-area',
-}
 
 function normalizeSpaceMainTabOrder(parsed) {
   if (!Array.isArray(parsed)) return [...SPACE_MAIN_TAB_SLOT_ORDER_DEFAULT]
@@ -248,9 +279,20 @@ function applySpaceChartsStandaloneOrder(prev, visibilityMap) {
   if (isVisible('instant_utilization_combined')) {
     return prev
   }
-  const visibleStandalone = SPACE_STANDALONE_CHARTS_ORDER.filter((id) => isVisible(id))
+  const visibleStandalone = (Array.isArray(prev) ? prev : []).filter(
+    (id) => isVisible(id) && id !== 'instant_utilization_combined'
+  )
+  for (const id of SPACE_STANDALONE_CHARTS_ORDER) {
+    if (isVisible(id) && !visibleStandalone.includes(id)) {
+      visibleStandalone.push(id)
+    }
+  }
   const hidden = [
-    ...new Set(prev.filter((id) => !isVisible(id) || id === 'instant_utilization_combined')),
+    ...new Set(
+      (Array.isArray(prev) ? prev : []).filter(
+        (id) => !isVisible(id) || id === 'instant_utilization_combined'
+      )
+    ),
   ]
   const next = [
     ...visibleStandalone,
@@ -267,9 +309,16 @@ function applySpaceChartsCombinedOrder(prev, visibilityMap) {
   if (!isVisible('instant_utilization_combined')) {
     return prev
   }
-  const rest = SPACE_STANDALONE_CHARTS_ORDER.filter((id) => isVisible(id))
-  const visibleOrder = ['instant_utilization_combined', ...rest]
-  const hidden = [...new Set(prev.filter((id) => !isVisible(id)))]
+  const visibleRest = (Array.isArray(prev) ? prev : []).filter(
+    (id) => id !== 'instant_utilization_combined' && isVisible(id)
+  )
+  for (const id of SPACE_STANDALONE_CHARTS_ORDER) {
+    if (isVisible(id) && !visibleRest.includes(id)) {
+      visibleRest.push(id)
+    }
+  }
+  const visibleOrder = ['instant_utilization_combined', ...visibleRest]
+  const hidden = [...new Set((Array.isArray(prev) ? prev : []).filter((id) => !isVisible(id)))]
   const next = [
     ...visibleOrder,
     ...hidden.filter((id) => !visibleOrder.includes(id)),
@@ -287,8 +336,18 @@ function applySpaceChartsOrderForVisibility(prev, visibilityMap) {
     : applySpaceChartsStandaloneOrder(prev, visibilityMap)
 }
 
-const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = false, showOnlyInstantChart = false, showChartsTab = false }) => {
+const SpaceUtilization = ({
+  title,
+  data,
+  isLoading = false,
+  globalLoadingProp = false,
+  showOnlyInstantChart = false,
+  showChartsTab = false,
+  pinChartsDurationFilterInHeader = false,
+  onChartsDurationFilterPinnedChange,
+}) => {
   const dispatch = useDispatch()
+  const store = useStore()
   const { role: spaceUtilUserRole } = UseAuth()
   /** Same layout as Energy: Superadmin may reorder; others see shared order (API + localStorage) without dragging */
   const spaceChartReflowLocked = !isSuperadminRole(spaceUtilUserRole)
@@ -392,18 +451,88 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
   const widgetConfigurationStatus = useSelector(selectWidgetConfigurationStatus)
 
   const [spaceChartsTabOrder, setSpaceChartsTabOrder] = useState(loadSpaceChartsTabOrderFromSession)
-  const spaceChartsAllVisible = useMemo(
-    () => SPACE_CHARTS_TAB_SLOT_ORDER_DEFAULT.every((id) => isWidgetVisible(id)),
-    [isWidgetVisible, visibilityMap]
+  const lastAppliedSpaceChartsApiOrderSigRef = useRef('')
+  const lastAppliedSpaceMainApiOrderSigRef = useRef('')
+  const [spaceChartsCardSpan, setSpaceChartsCardSpan] = useState({})
+  const [spaceMainCardSpan, setSpaceMainCardSpan] = useState({})
+  const [spaceFullscreenCardId, setSpaceFullscreenCardId] = useState(null)
+
+  useEffect(() => {
+    setSpaceChartsCardSpan(readDashboardPageSpan('spaceCharts', BASIC_DASHBOARD_ORDER_STORAGE_KEY))
+    setSpaceMainCardSpan(readDashboardPageSpan('spaceMain', BASIC_DASHBOARD_ORDER_STORAGE_KEY))
+  }, [])
+
+  const getSpaceChartsSlotSpan = useCallback(
+    (slotId) => {
+      if (isBasicSpaceChartsForceFullWidth(slotId)) return 12
+      const raw = spaceChartsCardSpan?.[slotId]
+      return raw === 12 || raw === '12' ? 12 : 6
+    },
+    [spaceChartsCardSpan]
   )
-  const prevSpaceChartsAllVisibleRef = useRef(spaceChartsAllVisible)
-  const spaceChartsVisibleOrder = useMemo(() => {
-    if (isWidgetVisible('instant_utilization_combined')) {
-      const rest = SPACE_STANDALONE_CHARTS_ORDER.filter((id) => isWidgetVisible(id))
-      return ['instant_utilization_combined', ...rest]
+
+  const getSpaceMainSlotSpan = useCallback(
+    (slotId) => {
+      if (isBasicSpaceMainForceFullWidth(slotId)) return 12
+      const raw = spaceMainCardSpan?.[slotId]
+      return raw === 12 || raw === '12' ? 12 : 6
+    },
+    [spaceMainCardSpan]
+  )
+
+  const toggleSpaceCardSpan = useCallback(
+    (slotId) => {
+      if (spaceChartReflowLocked) return
+      if (showChartsTab) {
+        setSpaceChartsCardSpan((prev) => {
+          const next = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {}
+          const cur = next?.[slotId]
+          const curSpan = cur === 12 || cur === '12' ? 12 : 6
+          next[slotId] = curSpan === 12 ? 6 : 12
+          const normalized = normalizeSpanMap(next)
+          writeDashboardPageSpan('spaceCharts', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY)
+          dispatch(
+            saveDashboardChartOrder(persistBasicSpaceChartsSpanAndBuildApiPayload(normalized))
+          )
+          return normalized
+        })
+        return
+      }
+      setSpaceMainCardSpan((prev) => {
+        const next = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {}
+        const cur = next?.[slotId]
+        const curSpan = cur === 12 || cur === '12' ? 12 : 6
+        next[slotId] = curSpan === 12 ? 6 : 12
+        const normalized = normalizeSpanMap(next)
+        writeDashboardPageSpan('spaceMain', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY)
+        dispatch(saveDashboardChartOrder(persistBasicSpaceMainSpanAndBuildApiPayload(normalized)))
+        return normalized
+      })
+    },
+    [showChartsTab, spaceChartReflowLocked, dispatch]
+  )
+
+  const toggleSpaceFullscreen = useCallback((slotId) => {
+    setSpaceFullscreenCardId((prev) => (String(prev) === String(slotId) ? null : String(slotId)))
+  }, [])
+
+  useEffect(() => {
+    if (!spaceFullscreenCardId) return undefined
+    const onKeyDown = (e) => {
+      if (e?.key === 'Escape') setSpaceFullscreenCardId(null)
     }
-    return SPACE_STANDALONE_CHARTS_ORDER.filter((id) => isWidgetVisible(id))
-  }, [visibilityMap, isWidgetVisible])
+    window.addEventListener('keydown', onKeyDown)
+    const prevOverflow = document?.body?.style?.overflow
+    if (document?.body?.style) document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      if (document?.body?.style) document.body.style.overflow = prevOverflow || ''
+    }
+  }, [spaceFullscreenCardId])
+  const spaceChartsVisibleOrder = useMemo(
+    () => spaceChartsTabOrder.filter((id) => isWidgetVisible(id)),
+    [spaceChartsTabOrder, isWidgetVisible, visibilityMap]
+  )
 
   const prevSpaceChartsVisibleSigRef = useRef('')
   useEffect(() => {
@@ -434,22 +563,8 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
       return merged
     })
   }, [spaceChartReflowLocked, dispatch])
-  const spaceChartsTabReflowBase = useMemo(
-    () => ({
-      groupKey: 'space-charts-tab',
-      orderedSlotIds: spaceChartsVisibleOrder,
-      onReorder: onReorderSpaceChartsTab,
-      translateStorageKeys: SPACE_CHARTS_TAB_DRAG_TRANSLATE_KEYS,
-    }),
-    [spaceChartsVisibleOrder, onReorderSpaceChartsTab]
-  )
 
   const [spaceMainTabOrder, setSpaceMainTabOrder] = useState(loadSpaceMainTabOrderFromSession)
-  const spaceMainAllVisible = useMemo(
-    () => SPACE_MAIN_TAB_SLOT_ORDER_DEFAULT.every((id) => isWidgetVisible(id)),
-    [isWidgetVisible, visibilityMap]
-  )
-  const prevSpaceMainAllVisibleRef = useRef(spaceMainAllVisible)
   const spaceMainVisibleOrder = useMemo(
     () => spaceMainTabOrder.filter((id) => isWidgetVisible(id)),
     [spaceMainTabOrder, isWidgetVisible, visibilityMap]
@@ -467,20 +582,18 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
       return merged
     })
   }, [spaceChartReflowLocked, dispatch])
-  const spaceMainTabReflowBase = useMemo(
-    () => ({
-      groupKey: 'space-main-tab',
-      orderedSlotIds: spaceMainVisibleOrder,
-      onReorder: onReorderSpaceMainTab,
-      translateStorageKeys: SPACE_MAIN_TAB_DRAG_TRANSLATE_KEYS,
-    }),
-    [spaceMainVisibleOrder, onReorderSpaceMainTab]
-  )
 
   useEffect(() => {
     if (dashboardChartOrderStatus !== 'succeeded') return
     const raw = dashboardChartOrder?.space_charts_tab_order
     if (!Array.isArray(raw) || raw.length === 0) return
+    const apiSig = JSON.stringify(raw)
+    if (
+      lastAppliedSpaceChartsApiOrderSigRef.current &&
+      lastAppliedSpaceChartsApiOrderSigRef.current === apiSig
+    ) {
+      return
+    }
     const merged = normalizeSpaceChartsTabOrder(raw)
     if (
       isCanonicalDefaultSpaceChartsOrder(merged) &&
@@ -502,6 +615,7 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
     } catch {
       /* ignore */
     }
+    lastAppliedSpaceChartsApiOrderSigRef.current = apiSig
   }, [dashboardChartOrder, dashboardChartOrderStatus, visibilityMap])
 
   const prevSpaceCombinedVisibleRef = useRef(null)
@@ -534,6 +648,13 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
     if (dashboardChartOrderStatus !== 'succeeded') return
     const raw = dashboardChartOrder?.space_main_tab_order
     if (!Array.isArray(raw) || raw.length === 0) return
+    const apiSig = JSON.stringify(raw)
+    if (
+      lastAppliedSpaceMainApiOrderSigRef.current &&
+      lastAppliedSpaceMainApiOrderSigRef.current === apiSig
+    ) {
+      return
+    }
     const merged = normalizeSpaceMainTabOrder(raw)
     if (
       isCanonicalDefaultSpaceMainOrder(merged) &&
@@ -554,6 +675,7 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
     } catch {
       /* ignore */
     }
+    lastAppliedSpaceMainApiOrderSigRef.current = apiSig
   }, [dashboardChartOrder, dashboardChartOrderStatus])
 
   /** GET omitted space_charts_tab_order: sync from shared localStorage (same browser as Superadmin). */
@@ -576,105 +698,32 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
     setSpaceMainTabOrder(loadSpaceMainTabOrderFromSession())
   }, [dashboardChartOrder, dashboardChartOrderStatus])
 
-  // If ALL space widgets are visible, reset to original default positions (per section).
+  // Prefer shared API spans so Admin/Operator match Superadmin resize.
   useEffect(() => {
-    if (!spaceChartsAllVisible) return
-    if (isCanonicalDefaultSpaceChartsOrder(spaceChartsTabOrder)) return
-    const merged = normalizeSpaceChartsTabOrder([...SPACE_CHARTS_TAB_SLOT_ORDER_DEFAULT])
-    setSpaceChartsTabOrder(merged)
-    try {
-      localStorage.setItem(SPACE_CHARTS_TAB_ORDER_KEY, JSON.stringify(merged))
-    } catch {
-      /* ignore */
+    if (dashboardChartOrderStatus !== 'succeeded') return
+    const chartsSpan = dashboardChartOrder?.space_charts_tab_span
+    if (isPlainSpanMap(chartsSpan) && Object.keys(chartsSpan).length > 0) {
+      const normalized = normalizeSpanMap(chartsSpan)
+      setSpaceChartsCardSpan(normalized)
+      writeDashboardPageSpan('spaceCharts', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY)
     }
-    clearDragTranslateKeys(SPACE_CHARTS_TAB_DRAG_TRANSLATE_KEYS)
-    if (!spaceChartReflowLocked) {
-      dispatch(saveDashboardChartOrder({ space_charts_tab_order: merged }))
+    const mainSpan = dashboardChartOrder?.space_main_tab_span
+    if (isPlainSpanMap(mainSpan) && Object.keys(mainSpan).length > 0) {
+      const normalized = normalizeSpanMap(mainSpan)
+      setSpaceMainCardSpan(normalized)
+      writeDashboardPageSpan('spaceMain', normalized, BASIC_DASHBOARD_ORDER_STORAGE_KEY)
     }
-  }, [spaceChartsAllVisible, spaceChartsTabOrder, spaceChartReflowLocked, dispatch])
-
-  useEffect(() => {
-    if (!spaceMainAllVisible) return
-    if (isCanonicalDefaultSpaceMainOrder(spaceMainTabOrder)) return
-    const merged = normalizeSpaceMainTabOrder([...SPACE_MAIN_TAB_SLOT_ORDER_DEFAULT])
-    setSpaceMainTabOrder(merged)
-    try {
-      localStorage.setItem(SPACE_MAIN_TAB_ORDER_KEY, JSON.stringify(merged))
-    } catch {
-      /* ignore */
-    }
-    clearDragTranslateKeys(SPACE_MAIN_TAB_DRAG_TRANSLATE_KEYS)
-    if (!spaceChartReflowLocked) {
-      dispatch(saveDashboardChartOrder({ space_main_tab_order: merged }))
-    }
-  }, [spaceMainAllVisible, spaceMainTabOrder, spaceChartReflowLocked, dispatch])
+  }, [dashboardChartOrder, dashboardChartOrderStatus])
 
   /** Charts tab slot width inside an explicit row (avoids flex-wrap overlap when only a subset of widgets is visible). */
   const spaceChartsRowSlotSx = useCallback(
-    (slotId, pair) => {
-      const forceFullWidth =
-        slotId === 'instant_occupancy_count' || slotId === 'instant_utilization_combined'
-      const aloneOnRow = pair.length === 1
-      if (forceFullWidth) {
-        return {
-          flex: '1 1 0',
-          minWidth: 0,
-          width: '100%',
-          maxWidth: '100%',
-          alignSelf: 'stretch',
-          boxSizing: 'border-box',
-        }
-      }
-      if (aloneOnRow) {
-        return {
-          flex: { xs: 'none', md: '0 0 auto' },
-          minWidth: 0,
-          width: {
-            xs: '100%',
-            md: `calc((100% - ${theme.spacing(3)}) / 2)`,
-            lg: `calc((100% - ${theme.spacing(4)}) / 2)`,
-            xl: `calc((100% - ${theme.spacing(4)}) / 2)`,
-          },
-          maxWidth: {
-            xs: '100%',
-            md: `calc((100% - ${theme.spacing(3)}) / 2)`,
-            lg: `calc((100% - ${theme.spacing(4)}) / 2)`,
-            xl: `calc((100% - ${theme.spacing(4)}) / 2)`,
-          },
-          alignSelf: { xs: 'stretch', md: 'flex-start' },
-          boxSizing: 'border-box',
-        }
-      }
-      return {
-        flex: { xs: 'none', md: '1 1 0' },
-        minWidth: 0,
-        width: { xs: '100%', md: 'auto' },
-        boxSizing: 'border-box',
-      }
-    },
-    [theme]
+    (slotId, pair) => resolveBasicSpaceChartsRowSlotSx(slotId, pair, theme, getSpaceChartsSlotSpan),
+    [theme, getSpaceChartsSlotSpan]
   )
 
   const spaceMainSlotWrapperSx = useCallback(
-    (slotId) => {
-      const halfColumn =
-        slotId !== 'utilization'
-          ? {
-              maxWidth: {
-                xs: '100%',
-                lg: `calc((100% - ${theme.spacing(5.5)}) / 2)`,
-                xl: `calc((100% - ${theme.spacing(6)}) / 2)`,
-              },
-            }
-          : {}
-      return {
-        width: '100%',
-        display: 'flex',
-        justifyContent: { xs: 'stretch', lg: 'flex-start' },
-        ...halfColumn,
-      }
-    },
-    [theme]
+    (slotId) => resolveBasicSpaceMainSlotWrapperSx(slotId, theme, getSpaceMainSlotSpan),
+    [theme, getSpaceMainSlotSpan]
   )
 
   const exportDropdownRef = useRef(null)
@@ -872,27 +921,25 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
 
   // Fetch floors on component mount
   useEffect(() => {
-    // if (floors.length === 0 && floorStatus !== 'loading') {
-    dispatch(fetchFloors())
-    // }
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length))
+  }, [dispatch, floors?.length])
 
   // Fetch rename widgets when component mounts (only if not already loaded)
   useEffect(() => {
     if (!widgetList || widgetList.length === 0) {
-      dispatch(fetchRenameWidgets())
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets)
     }
   }, [dispatch, widgetList])
 
   useEffect(() => {
     if (widgetConfigurationStatus === 'idle') {
-      dispatch(fetchWidgetConfiguration())
+      dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration)
     }
   }, [dispatch, widgetConfigurationStatus])
 
-  // Fetch user profile on component mount
+  // Profile is owned by Topbar; join if already in flight
   useEffect(() => {
-    dispatch(fetchProfile())
+    dispatchFetchProfileOnce(dispatch, fetchProfile)
   }, [dispatch])
 
   // REMOVED: useEffect that was calling loadAllAreasFromAllFloors
@@ -1329,6 +1376,139 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
     ]
   )
 
+  const pinChartsDurationFilter =
+    pinChartsDurationFilterInHeader &&
+    showChartsTab &&
+    showSpaceChartsStandaloneDurationFilter
+
+  const dateParams = useMemo(
+    () => ({
+      startDate: customDateRange?.startDate,
+      endDate: customDateRange?.endDate,
+    }),
+    [customDateRange]
+  )
+
+  const { apiParams, apiParamsString } = useDashboardApiParams({
+    selectedDuration,
+    customDateRange,
+    customStartDate: customDateRange?.startDate,
+    customEndDate: customDateRange?.endDate,
+    selectedAreas,
+    selectedFloorIds,
+    allAreasLoaded: true,
+    dateParams,
+    isNavigating,
+  })
+
+  const customGraphs = useSelector(selectCustomGraphs)
+  const areaGroups = useSelector(selectAreaGroups)
+
+  useEffect(() => {
+    if (!ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS) return undefined
+    dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs)
+    const onUpdate = () => dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs, { force: true })
+    window.addEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate)
+    return () => window.removeEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate)
+  }, [dispatch])
+
+  const spaceCustomGraphs = useMemo(
+    () =>
+      ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS
+        ? (Array.isArray(customGraphs) ? customGraphs : []).filter(
+            (g) =>
+              String(g?.page || '').toLowerCase() === 'space' &&
+              isCustomGraphVisible(CUSTOM_GRAPH_VARIANTS.basic, 'space', g?.id, true)
+          )
+        : [],
+    [customGraphs]
+  )
+
+  const { customGraphData, customGraphLoading, customGraphError } = useCustomGraphDashboardData({
+    customGraphs: spaceCustomGraphs,
+    apiParams,
+    apiParamsKey: apiParamsString,
+    dispatch,
+    store,
+    baseUrlClient: BaseUrl,
+    dispatchThunks: false,
+  })
+
+  const transformDataForCharts = useCallback(
+    createStandardTransformDataForCharts(
+      sharedTransformDataForCharts,
+      buildStandardTransformChartOptions({ selectedDuration, selectedAreas, areaTree: null })
+    ),
+    [selectedDuration, selectedAreas]
+  )
+
+  const extraBasicSpaceGraphCards = useMemo(
+    () =>
+      spaceCustomGraphs.map((g, idx) => {
+        const id = String(g?.id ?? '')
+        return (
+          <Box
+            key={buildCustomGraphWidgetKey(id || `idx_${idx}`)}
+            sx={{ width: '100%', mb: 2 }}
+          >
+            <EnergyCustomGraphCard
+              g={g}
+              shellVariant="basic"
+              chartSurface={spaceUtilLight ? 'light' : 'dark'}
+              chartHeaderStyle={chartHeaderStyle}
+              customGraphData={customGraphData}
+              customGraphLoading={customGraphLoading}
+              customGraphError={customGraphError}
+              transformDataForCharts={transformDataForCharts}
+              areaGroups={areaGroups}
+              dashboardApiParams={apiParams}
+            />
+          </Box>
+        )
+      }),
+    [
+      spaceCustomGraphs,
+      spaceUtilLight,
+      chartHeaderStyle,
+      customGraphData,
+      customGraphLoading,
+      customGraphError,
+      transformDataForCharts,
+      areaGroups,
+      apiParams,
+    ]
+  )
+
+  useEffect(() => {
+    if (!pinChartsDurationFilterInHeader || !showChartsTab) {
+      onChartsDurationFilterPinnedChange?.(false)
+      return undefined
+    }
+    onChartsDurationFilterPinnedChange?.(showSpaceChartsStandaloneDurationFilter)
+    return () => onChartsDurationFilterPinnedChange?.(false)
+  }, [
+    pinChartsDurationFilterInHeader,
+    showChartsTab,
+    showSpaceChartsStandaloneDurationFilter,
+    onChartsDurationFilterPinnedChange,
+  ])
+
+  const [chartsPinnedFilterMount, setChartsPinnedFilterMount] = useState(null)
+
+  useEffect(() => {
+    if (!pinChartsDurationFilter) {
+      setChartsPinnedFilterMount(null)
+      return undefined
+    }
+    const syncMount = () =>
+      setChartsPinnedFilterMount(
+        document.getElementById('basic-space-charts-pinned-duration-filter')
+      )
+    syncMount()
+    const rafId = requestAnimationFrame(syncMount)
+    return () => cancelAnimationFrame(rafId)
+  }, [pinChartsDurationFilter])
+
 
   const getWidgetTitle = (widgetKey, fallbackTitle) => {
     if (!widgetList?.titles) return fallbackTitle;
@@ -1356,7 +1536,7 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
         createBasicSpaceLayoutAdapterStyles({
           buildRows: (order, ctx) =>
             ctx.showChartsTab
-              ? buildSpaceChartsDashboardRows(order)
+              ? buildSpaceChartsDashboardRowsWithSpan(order, getSpaceChartsSlotSpan)
               : order.map((id) => [id]),
           resolveRowSx: (rowIndex) => ({
             display: 'flex',
@@ -1382,7 +1562,7 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
                 },
         })
       ),
-    [spaceChartsRowSlotSx, spaceMainSlotWrapperSx]
+    [spaceChartsRowSlotSx, spaceMainSlotWrapperSx, getSpaceChartsSlotSpan]
   );
 
   const spaceLayoutRuntime = useMemo(
@@ -1415,31 +1595,42 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
             })
           : null,
       wrapSlot: (slotId, content) => {
-        const reflow = {
-          ...(showChartsTab ? spaceChartsTabReflowBase : spaceMainTabReflowBase),
-          slotId,
-        };
-        const storageKey =
-          (showChartsTab ? SPACE_CHARTS_TAB_SLOT_STORAGE : SPACE_MAIN_TAB_SLOT_STORAGE)[slotId] ||
-          '';
+        const span = showChartsTab ? getSpaceChartsSlotSpan(slotId) : getSpaceMainSlotSpan(slotId);
+        const forceFull = showChartsTab
+          ? isBasicSpaceChartsForceFullWidth(slotId)
+          : isBasicSpaceMainForceFullWidth(slotId);
         return (
-          <LongPressDraggable
-            disabled={spaceChartReflowLocked}
-            storageKey={storageKey}
-            reflow={reflow}
-          >
-            {content}
-          </LongPressDraggable>
+          <SortableDashboardItem id={String(slotId)} disabled={spaceChartReflowLocked}>
+            <BasicDashboardCardChrome
+              span={span}
+              showSpanToggle={!spaceChartReflowLocked && !forceFull}
+              onToggleSpan={() => {
+                if (spaceChartReflowLocked) return
+                toggleSpaceCardSpan(slotId)
+              }}
+              showHeightToggle={!spaceChartReflowLocked}
+              isFullscreen={String(spaceFullscreenCardId || '') === String(slotId)}
+              onToggleFullscreen={() => {
+                if (spaceChartReflowLocked) return
+                toggleSpaceFullscreen(slotId)
+              }}
+            >
+              {content}
+            </BasicDashboardCardChrome>
+          </SortableDashboardItem>
         );
       },
       renderEmptyState: (key) => renderBasicSpaceEmptyState(key),
-      renderTabChrome: () => (
+      renderTabChrome: () => {
+        if (pinChartsDurationFilter) return null
+        return (
         <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 2 }}>
           <Box sx={{ width: 'min(330px, 100%)', maxWidth: '100%' }}>
             {spaceChartsDurationFilterElement}
           </Box>
         </Box>
-      ),
+        )
+      },
     }),
     [
       chartHeaderStyle,
@@ -1449,12 +1640,42 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
       showExportDropdown,
       setShowExportDropdown,
       showChartsTab,
-      spaceChartsTabReflowBase,
-      spaceMainTabReflowBase,
       spaceChartReflowLocked,
       spaceChartsDurationFilterElement,
+      pinChartsDurationFilter,
       spaceWidgetRenderContext,
       isWidgetVisible,
+      getSpaceChartsSlotSpan,
+      getSpaceMainSlotSpan,
+      toggleSpaceCardSpan,
+      toggleSpaceFullscreen,
+      spaceFullscreenCardId,
+    ]
+  );
+
+  const spaceSortableSensors = useBasicDashboardSortableSensors();
+
+  const wrapSpaceLayout = useCallback(
+    (layout, ctx = {}) => {
+      const isCharts = ctx.activeTab === SPACE_TAB_IDS.CHARTS;
+      return (
+        <BasicDashboardSortableProvider
+          items={isCharts ? spaceChartsVisibleOrder : spaceMainVisibleOrder}
+          sensors={spaceSortableSensors}
+          locked={spaceChartReflowLocked}
+          onReorder={isCharts ? onReorderSpaceChartsTab : onReorderSpaceMainTab}
+        >
+          {layout}
+        </BasicDashboardSortableProvider>
+      );
+    },
+    [
+      spaceChartsVisibleOrder,
+      spaceMainVisibleOrder,
+      spaceSortableSensors,
+      spaceChartReflowLocked,
+      onReorderSpaceChartsTab,
+      onReorderSpaceMainTab,
     ]
   );
 
@@ -1463,12 +1684,22 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
       SpaceLayoutRenderer,
       layoutAdapter: basicSpaceLayoutAdapter,
       layoutRuntime: spaceLayoutRuntime,
+      wrapSpaceLayout,
     }),
-    [basicSpaceLayoutAdapter, spaceLayoutRuntime]
+    [basicSpaceLayoutAdapter, spaceLayoutRuntime, wrapSpaceLayout]
   );
 
   return (
-    <Box
+    <>
+      {pinChartsDurationFilter && chartsPinnedFilterMount
+        ? createPortal(
+            <Box sx={{ width: 'min(330px, 100%)', maxWidth: '100%' }}>
+              {spaceChartsDurationFilterElement}
+            </Box>,
+            chartsPinnedFilterMount
+          )
+        : null}
+      <Box
       onMouseDown={(e) => {
         if (e && typeof e.stopPropagation === 'function') {
           e.stopPropagation();
@@ -1542,6 +1773,10 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
         />
       )}
 
+      {ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS && extraBasicSpaceGraphCards.length > 0
+        ? extraBasicSpaceGraphCards
+        : null}
+
       {/* Material-UI Snackbar for email notifications */}
       <Snackbar
         open={snackbarOpen}
@@ -1575,6 +1810,7 @@ const SpaceUtilization = ({ title, data, isLoading = false, globalLoadingProp = 
       </Snackbar>
       {/* Email Input Dialog - DISABLED: No popup, using saved email only */}
     </Box>
+    </>
   )
 }
 

@@ -14,7 +14,7 @@ export const customizedMainLayoutAdapter = {
   getFrameSx(ctx) {
     return {
       width: "100%",
-      minHeight: "calc(100vh - 100px)",
+      minHeight: "calc(100dvh - 100px)",
       backgroundColor: ctx.backgroundColor,
       backgroundImage: "var(--app-background-image, none)",
       backgroundSize: "cover",
@@ -104,12 +104,12 @@ export const customizedMainLayoutAdapter = {
       boxSizing: "border-box",
       minHeight:
         pathname === "/dashboard"
-          ? "calc(100vh - 50px)"
+          ? "calc(100dvh - 50px)"
           : pathname === "/lutronwebsite-page"
-            ? "calc(100vh - 200px)"
+            ? "calc(100dvh - 200px)"
             : pathname === "/heatmap"
-              ? "calc(100vh - 180px)"
-              : "calc(100vh - 120px)",
+              ? { xs: "calc(100dvh - 167px)", sm: "calc(100dvh - 150px)", md: "calc(100dvh - 180px)" }
+              : "calc(100dvh - 120px)",
     };
 
     if (ctx.isFullBleedFormRoute) {
@@ -118,8 +118,8 @@ export const customizedMainLayoutAdapter = {
           ...base,
           p: 0,
           overflowY: "hidden",
-          height: "calc(100vh - 180px)",
-          maxHeight: "calc(100vh - 180px)",
+          height: "calc(100dvh - 180px)",
+          maxHeight: "calc(100dvh - 180px)",
           mb: 0,
           display: "flex",
           flexDirection: "column",
@@ -140,20 +140,23 @@ export const customizedMainLayoutAdapter = {
       overflowY:
         pathname === "/lutronwebsite-page" ||
         pathname.includes("/settings") ||
+        pathname.startsWith("/setting") ||
         pathname === "/heatmap"
           ? "hidden"
           : "auto",
       height:
         pathname === "/lutronwebsite-page" ||
         pathname.includes("/settings") ||
+        pathname.startsWith("/setting") ||
         pathname === "/heatmap"
-          ? "calc(100vh - 200px)"
+          ? "calc(100dvh - 200px)"
           : "auto",
       maxHeight:
         pathname === "/lutronwebsite-page" ||
         pathname.includes("/settings") ||
+        pathname.startsWith("/setting") ||
         pathname === "/heatmap"
-          ? "calc(100vh - 200px)"
+          ? "calc(100dvh - 200px)"
           : "none",
       mb:
         pathname === "/lutron"

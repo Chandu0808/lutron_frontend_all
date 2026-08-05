@@ -30,6 +30,7 @@ import {
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
+import { normalizeOccupancyModeString } from '../../redux/slice/settingsslice/heatmap/occupancyModeUtils';
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (txt) =>
@@ -38,6 +39,11 @@ function toTitleCase(str) {
 }
 
 const modeOptions = ['Disabled', 'Auto', 'Vacancy'];
+
+const normalizeSelectableMode = (raw) => {
+  const n = normalizeOccupancyModeString(raw);
+  return modeOptions.includes(n) ? n : '';
+};
 
 const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const dispatch = useDispatch();
@@ -52,6 +58,8 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const buttonColor = appTheme?.application_theme?.button || '#232323';
 
   const [selectedGroup, setSelectedGroup] = useState("");
+  const [localMode, setLocalMode] = useState('');
+  const [pendingMode, setPendingMode] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -73,8 +81,11 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
     if (open) {
       dispatch(fetchAreaGroups());
     } else {
-      // Reset selection when dialog closes
       setSelectedGroup('');
+      setLocalMode('');
+      setPendingMode(false);
+      setIsUpdating(false);
+      setShowSuccessMessage(false);
     }
   }, [open, dispatch]);
 
@@ -92,52 +103,48 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
     }
   }, [open, selectedGroup, dispatch]);
 
-  // Handle mode change
+  // Keep local highlight in sync with backend status (unless a click is pending).
+  useEffect(() => {
+    if (!open) return;
+    const normalized = normalizeSelectableMode(status);
+    if (pendingMode) {
+      if (normalized && normalized === localMode) {
+        setPendingMode(false);
+      }
+      return;
+    }
+    if (normalized) {
+      setLocalMode(normalized);
+    }
+  }, [status, open, pendingMode, localMode]);
+
   const handleModeChange = (mode) => {
-    if (!selectedGroup) return;
-    
+    if (!selectedGroup || isUpdating || updating || loading) return;
+    const nextMode = normalizeSelectableMode(mode) || mode;
+
+    setLocalMode(nextMode);
+    setPendingMode(true);
     setIsUpdating(true);
     setShowSuccessMessage(false);
-    
-    dispatch(updateGroupOccupancy({ groupId: selectedGroup, mode }))
+
+    dispatch(updateGroupOccupancy({ groupId: selectedGroup, mode: nextMode }))
+      .unwrap()
       .then(() => {
-        dispatch(fetchGroupOccupancyStatus(selectedGroup));
+        setPendingMode(false);
         setIsUpdating(false);
         setShowSuccessMessage(true);
-        
-        // Hide success message after 3 seconds
+        dispatch(fetchGroupOccupancyStatus(selectedGroup));
         setTimeout(() => {
           setShowSuccessMessage(false);
         }, 3000);
       })
       .catch(() => {
+        setPendingMode(false);
         setIsUpdating(false);
+        setLocalMode(normalizeSelectableMode(status));
       });
   };
 
-  // const handleGroupChange = (e) => {
-  //   setSelectedGroup(e.target.value);
-  // };
-  const handleGroupChange = (e) => {
-    const groupId = e.target.value;
-    setSelectedGroup(groupId);
-  
-    const group = allSelectableGroups.find(
-      (g) => String(g.group_id) === String(groupId)
-    );
-  
-    if (!group) return;
-  
-    // 🔥 EXTRACT AREA IDS
-    const areaIds = group.floors?.flatMap(f => f.area_ids || []) || [];
-  
-    // 🔥 STORE GLOBALLY (optional but recommended)
-    // dispatch(setSelectedAreaIds(areaIds));
-  
-    // 🔥 OR DIRECT API CALL
-    fetchConsumption(areaIds);
-    fetchUtilization(areaIds);
-  };
   const fetchConsumption = async (areaIds) => {
     try {
       const res = await fetch(
@@ -161,6 +168,25 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
       console.error("Utilization error:", err);
     }
   };
+
+  const handleGroupChange = (e) => {
+    const groupId = e.target.value;
+    setSelectedGroup(groupId);
+    setLocalMode('');
+    setPendingMode(false);
+    setShowSuccessMessage(false);
+
+    const group = allSelectableGroups.find(
+      (g) => String(g.group_id) === String(groupId)
+    );
+
+    if (!group) return;
+
+    const areaIds = group.floors?.flatMap((f) => f.area_ids || []) || [];
+    fetchConsumption(areaIds);
+    fetchUtilization(areaIds);
+  };
+
   return (
     <Dialog
       open={open}
@@ -295,7 +321,7 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
           {/* Mode Toggle Buttons */}
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 2 }}>
             {modeOptions.map((mode) => {
-              const isActive = status && status !== "Mixed" && status === mode;
+              const isActive = Boolean(localMode) && localMode === mode;
               const isCurrentModeUpdating = isUpdating && isActive;
               
               return (
@@ -335,6 +361,11 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
           {selectedGroup && status === "Mixed" && (
             <Box sx={{ textAlign: 'center', mt: 1, color: 'red', fontWeight: 500 }}>
               Occupancy status is mixed for this group.
+            </Box>
+          )}
+          {selectedGroup && !loading && !localMode && String(status).toLowerCase() === 'unknown' && (
+            <Box sx={{ textAlign: 'center', mt: 1, color: '#666', fontWeight: 500, fontSize: 13 }}>
+              Current occupancy mode unavailable. Select a mode below.
             </Box>
           )}
           

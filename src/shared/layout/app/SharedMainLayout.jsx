@@ -10,6 +10,7 @@ import { Box } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import SharedAppShell from "../SharedAppShell";
 import { getAppLayoutBindings } from "./bindAppLayoutModule";
+import { dispatchFetchApplicationThemeOnce } from "../../utils/bootstrapFetchGuards";
 
 const contentPanelRadius = {
   xs: "8px",
@@ -51,7 +52,7 @@ export function SharedMainLayout({ adapter }) {
 
   useEffect(() => {
     if (!appTheme || !appTheme.application_theme) {
-      dispatch(fetchApplicationTheme());
+      dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
     }
   }, [dispatch, appTheme, fetchApplicationTheme]);
 
@@ -154,10 +155,13 @@ function SecondaryRibbon({ ctx, containerPx, ScheduleHeaderDropdown }) {
         right: 0,
         zIndex: 10001,
         px: containerPx,
-        py: 0.5,
-        minHeight: { xs: 32, sm: 32, md: 34 },
+        py: "10px",
+        minHeight: 48,
+        height: "auto",
+        boxSizing: "border-box",
         display: "flex",
         alignItems: "center",
+        overflow: "visible",
       }}
       data-testid="shared-secondary-ribbon"
     >
@@ -169,13 +173,21 @@ function SecondaryRibbon({ ctx, containerPx, ScheduleHeaderDropdown }) {
           gap: "6px",
           whiteSpace: "nowrap",
           overflow: "visible",
-          textOverflow: "ellipsis",
           maxWidth: { xs: "100%", sm: "100%", md: "100%" },
-          lineHeight: 1.1,
+          lineHeight: "22px",
           width: "100%",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            lineHeight: "22px",
+            overflow: "visible",
+            py: "2px",
+          }}
+        >
           {(() => {
             const segments = ctx.secondaryRibbonBreadcrumbText.split(" > ");
             const first = segments[0];
@@ -188,6 +200,8 @@ function SecondaryRibbon({ ctx, containerPx, ScheduleHeaderDropdown }) {
                     color: "#ffffff",
                     fontSize: { xs: "14px", md: "15px" },
                     fontWeight: 400,
+                    lineHeight: "22px",
+                    display: "inline-block",
                   }}
                 >
                   {first}
@@ -196,7 +210,12 @@ function SecondaryRibbon({ ctx, containerPx, ScheduleHeaderDropdown }) {
                   <>
                     <Box
                       component="span"
-                      sx={{ color: "rgba(255, 255, 255, 0.66)", fontSize: "15px" }}
+                      sx={{
+                        color: "rgba(255, 255, 255, 0.66)",
+                        fontSize: "15px",
+                        lineHeight: "22px",
+                        display: "inline-block",
+                      }}
                     >
                       ›
                     </Box>
@@ -208,6 +227,10 @@ function SecondaryRibbon({ ctx, containerPx, ScheduleHeaderDropdown }) {
                         fontWeight: 500,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+                        lineHeight: "18px",
+                        display: "inline-block",
+                        maxWidth: "min(72vw, 420px)",
+                        verticalAlign: "middle",
                       }}
                     >
                       {rest}

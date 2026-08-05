@@ -8,7 +8,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear'; // Add this import
 import { styled, darken } from '@mui/material/styles';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchFloors } from "../../redux/slice/floor/floorSlice";
+import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import {
   setSelectedFloorId,
   setDisplayMode,
@@ -18,6 +18,7 @@ import {
 import GroupOccupancyModel from '../heatmap/GroupOccupancymodel'
 
 import { UseAuth } from '../../customhooks/UseAuth';
+import { dispatchFetchFloorsOnce } from '../../../../shared/utils/bootstrapFetchGuards';
 import {
   handleRovingTablistKeyDown,
 } from '../../../../utils/keyboard/rovingTablistKeyboard';
@@ -121,7 +122,8 @@ const HeatmapControls = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
-  const { floors, status: floorStatus } = useSelector(state => state.floor);
+  const floors = useSelector(selectFloors);
+  const floorStatus = useSelector((state) => state.floor.status);
 
   // const { selectedFloorId, displayMode = 'Light' } = useSelector(state => state.heatmap || {});
   const { selectedFloorId, displayMode = 'Light', searchTerm = "" } = useSelector(state => state.heatmap || {});
@@ -171,14 +173,8 @@ const HeatmapControls = () => {
 
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch, currentUserRole]);
-
-  useEffect(() => {
-    // if (!floors || floors.length === 0) {
-    dispatch(fetchFloors());
-    // }
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   useEffect(() => {
     if (!displayMode) dispatch(setDisplayMode('Light'));
@@ -259,7 +255,8 @@ const HeatmapControls = () => {
       // Force refresh all heatmap data
       dispatch(refreshAllHeatmapData({
         floorId: selectedFloorId,
-        areaId: null
+        areaId: null,
+        displayMode,
       }));
     }
   };

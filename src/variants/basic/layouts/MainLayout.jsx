@@ -6,7 +6,6 @@ import {
   DEFAULT_APP_CONTENT,
   isWhiteAreaPickerChrome,
 } from "../utils/themeOnSurface";
-import { getSettingsHomeTabLabelFromSearch } from "../utils/settingsHomeTabParams";
 import { getSettingsUsersActionSuffixFromSearch } from "../utils/settingsUsersBreadcrumbParams";
 import * as homeSlice from "../redux/slice/home/homeSlice";
 import TopbarComponent from "../components/TopbarComponent";
@@ -26,7 +25,6 @@ bindAppLayoutModule({
     isWhiteAreaPickerChrome,
   },
   breadcrumbUtils: {
-    getSettingsHomeTabLabelFromSearch,
     getSettingsUsersActionSuffixFromSearch,
   },
   homeSlice,

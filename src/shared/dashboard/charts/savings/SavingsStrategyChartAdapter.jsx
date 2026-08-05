@@ -41,11 +41,18 @@ function SavingsStrategyChartAdapterInner({
   showHeader = true,
 }) {
   const theme = useMemo(() => {
+    // Advanced (standalone or embedded): keep white chrome/labels. Do not pass
+    // embedded:true — that resolves to basicEmbedded dark text on dark cards.
+    if (shellVariant === 'advanced-card') {
+      return resolveSavingsStrategyTheme({
+        preset: SAVINGS_STRATEGY_THEME_PRESETS.advanced,
+      });
+    }
+    if (embedded && chartSurface === 'dark') {
+      return resolveSavingsStrategyTheme({ preset: SAVINGS_STRATEGY_THEME_PRESETS.customized });
+    }
     if (embedded) {
       return resolveSavingsStrategyTheme({ preset: SAVINGS_STRATEGY_THEME_PRESETS.basicEmbedded });
-    }
-    if (shellVariant === 'advanced-card') {
-      return resolveSavingsStrategyTheme({ preset: SAVINGS_STRATEGY_THEME_PRESETS.advanced });
     }
     if (shellVariant === 'customized-builtin') {
       return resolveSavingsStrategyTheme({ preset: SAVINGS_STRATEGY_THEME_PRESETS.customized });

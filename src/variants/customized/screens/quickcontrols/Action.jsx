@@ -2,11 +2,26 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchAreaScenes, selectAreaScenes } from "../../redux/slice/settingsslice/heatmap/areaSettingsSlice";
 import { BaseUrl } from "../../BaseUrl";
-import { Box, Typography, Button, Slider } from "@mui/material";
+import { Box, Typography, Button, Slider, MenuItem, Select } from "@mui/material";
 import PaginatedList from '../../utils/PaginatedList';
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
+import { customizedScheduleModalFilterMenuProps } from '../../../../shared/settings/schedule/scheduleSelectMenuProps';
+import {
+  ALL_ZONES_VALUE,
+  buildAllZonesProxy,
+} from '../../../../shared/quickcontrols/zoneActionHelpers';
 
-const Action = ({ areaId, onActionSelect, initialAction = null }) => {
+const customizedSelectSx = {
+  backgroundColor: '#ffffff',
+  color: '#000000',
+  borderRadius: '6px',
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderColor: '#ccc',
+  },
+  '& .MuiSelect-icon': { color: '#000000' },
+};
+
+const Action = ({ areaId, onActionSelect, initialAction = null, menuProps = customizedScheduleModalFilterMenuProps, hideZoneOption = false, hideSceneOption = false }) => {
   const dispatch = useDispatch();
   const areaScenes = useSelector(selectAreaScenes) || [];
   const appTheme = useSelector(selectApplicationTheme);
@@ -68,17 +83,33 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     }
   }, [initialAction]);
 
+  // Keep selection on an allowed type when Scene/Zone options are hidden (add mode).
+  useEffect(() => {
+    if (hideSceneOption && selectedAction === "scene") {
+      setSelectedAction(hideZoneOption ? "occupancy" : "zone");
+    } else if (hideZoneOption && selectedAction === "zone") {
+      setSelectedAction(hideSceneOption ? "occupancy" : "scene");
+    }
+  }, [hideSceneOption, hideZoneOption, selectedAction]);
+
   // Auto-select first zone when zones are loaded and no zone is selected
   useEffect(() => {
     if (selectedAction === "zone" && zones.length > 0 && !selectedZoneId && !initialAction) {
-      const firstZone = zones[0];
-      handleZoneSelect(firstZone.id || firstZone.zone_id);
+      const controllable = zones.filter(
+        (z) => String(z?.type || z?.zone_type || '').toLowerCase() !== 'shade'
+      );
+      if (controllable.length >= 2) {
+        handleZoneSelect(ALL_ZONES_VALUE);
+      } else {
+        const firstZone = controllable[0] || zones[0];
+        handleZoneSelect(firstZone.id || firstZone.zone_id);
+      }
     }
   }, [zones, selectedAction, initialAction]);
 
   // When a zone is selected, initialize its values - FIXED to not override existing values
   useEffect(() => {
-    if (selectedZoneId && zones.length > 0) {
+    if (selectedZoneId && selectedZoneId !== ALL_ZONES_VALUE && zones.length > 0) {
       const zone = zones.find(z => String(z.id) === String(selectedZoneId));
       if (zone) {
         setZoneValues(prev => ({
@@ -163,6 +194,22 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     onActionSelect({ type: "scene", scene }); // scene contains id and name
   };
 
+  const getControllableZones = () =>
+    (zones || []).filter(
+      (z) => String(z?.type || z?.zone_type || '').toLowerCase() !== 'shade'
+    );
+
+  const emitZoneSelection = (zone, values, applyToAllZones = false) => {
+    const controllable = getControllableZones();
+    onActionSelect({
+      type: "zone",
+      zone,
+      values,
+      applyToAllZones,
+      zones: applyToAllZones ? controllable : undefined,
+    });
+  };
+
   // FIXED: Zone value change handler for smooth slider updates
   const handleZoneValueChange = (changed) => {
     const updatedValues = {
@@ -174,13 +221,13 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     
     // Only notify parent for non-slider changes (fade/delay time) to prevent lag
     if (changed.fadeTime || changed.delayTime) {
+      if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+        emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+        return;
+      }
       const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
       if (zone) {
-        onActionSelect({
-          type: "zone",
-          zone: zone,
-          values: updatedValues
-        });
+        emitZoneSelection(zone, updatedValues, false);
       }
     }
   };
@@ -202,18 +249,33 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
       [type]: value
     };
 
+    if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+      emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+      return;
+    }
     const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
     if (zone) {
-      onActionSelect({
-        type: "zone",
-        zone: zone,
-        values: updatedValues
-      });
+      emitZoneSelection(zone, updatedValues, false);
     }
   };
 
   // Update the zone selection handler - FIXED to notify parent immediately
   const handleZoneSelect = (zoneId) => {
+    if (String(zoneId) === ALL_ZONES_VALUE) {
+      const proxy = buildAllZonesProxy(zones);
+      setSelectedZoneId(ALL_ZONES_VALUE);
+      const initialValues = {
+        on_off: 'On',
+        brightness: undefined,
+        cct: undefined,
+        fadeTime: '02',
+        delayTime: '00'
+      };
+      setZoneValues(initialValues);
+      emitZoneSelection(proxy, initialValues, true);
+      return;
+    }
+
     const zone = zones.find(z => String(z.id || z.zone_id) === String(zoneId));
     if (!zone) return;
     
@@ -231,11 +293,7 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     setZoneValues(initialValues);
     
     // Notify parent immediately with initial values
-    onActionSelect({
-      type: "zone",
-      zone: zone,
-      values: initialValues
-    });
+    emitZoneSelection(zone, initialValues, false);
   };
 
   // Handler for occupancy selection
@@ -294,24 +352,19 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
 
   return (
     <div style={{ minWidth: 300, color: "#222", fontFamily: "inherit" }}>
-      <select
+      <Select
         id="action-select"
         value={selectedAction}
         onChange={handleActionChange}
-        style={{
-          width: "100%",
-          padding: "8px 12px",
-          borderRadius: 6,
-          border: "1px solid",
-          background: "white",
-          marginBottom: 16
-        }}
+        fullWidth
+        MenuProps={menuProps}
+        sx={{ ...customizedSelectSx, mb: 2 }}
       >
-        <option value="scene">Scene</option>
-        <option value="zone">Zone</option>
-        <option value="occupancy">Occupancy</option>
-        <option value="shade">Shade</option>
-      </select>
+        {!hideSceneOption && <MenuItem value="scene">Scene</MenuItem>}
+        {!hideZoneOption && <MenuItem value="zone">Zone</MenuItem>}
+        <MenuItem value="occupancy">Occupancy</MenuItem>
+        <MenuItem value="shade">Shade</MenuItem>
+      </Select>
 
       {selectedAction === "scene" && (
         <div>
@@ -353,26 +406,28 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
           {!zonesLoading && !zonesError && (
             zones && zones.length > 0 ? (
               <>
-                <select
+                <Select
                   value={selectedZoneId}
                   onChange={e => handleZoneSelect(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: 10,
-                    border: `2px solid ${buttonColor}`,
-                    marginBottom: 16,
-                    fontSize: 16
-                  }}
+                  fullWidth
+                  displayEmpty
+                  MenuProps={menuProps}
+                  sx={{ ...customizedSelectSx, mb: 2, fontSize: 16 }}
                 >
+                  {getControllableZones().length >= 2 && (
+                    <MenuItem value={ALL_ZONES_VALUE}>All Zones</MenuItem>
+                  )}
                   {zones.map(z => (
-                    <option key={z.id || z.zone_id} value={z.id || z.zone_id}>
+                    <MenuItem key={z.id || z.zone_id} value={String(z.id || z.zone_id)}>
                       {z.name}
-                    </option>
+                    </MenuItem>
                   ))}
-                </select>
+                </Select>
                 {selectedZoneId && (() => {
-                  const zoneObj = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
+                  const zoneObj =
+                    String(selectedZoneId) === ALL_ZONES_VALUE
+                      ? buildAllZonesProxy(zones)
+                      : zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
                   if (!zoneObj) return null;
 
                   const brightnessMin = zoneObj.brightness_min ?? 0;
@@ -408,14 +463,13 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
                           <div
                             onClick={() => {
                               const newOnOff = safeValues.on_off === 'On' ? 'Off' : 'On';
-                              handleZoneValueChange({ on_off: newOnOff });
-                              const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
-                              if (zone) {
-                                onActionSelect({
-                                  type: "zone",
-                                  zone: zone,
-                                  values: { ...safeValues, on_off: newOnOff }
-                                });
+                              const updatedValues = { ...safeValues, on_off: newOnOff };
+                              setZoneValues(updatedValues);
+                              if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+                                emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+                              } else {
+                                const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
+                                if (zone) emitZoneSelection(zone, updatedValues, false);
                               }
                             }}
                             style={{
@@ -726,23 +780,20 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
         <>
           {/* Shade Group Dropdown */}
           <div style={{ marginBottom: 16 }}>
-            <select
+            <Select
               value={selectedShadeId}
               onChange={(e) => handleShadeSelect(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: 10,
-                border: `2px solid ${buttonColor}`,
-                fontSize: 16
-              }}
+              fullWidth
+              displayEmpty
+              MenuProps={menuProps}
+              sx={{ ...customizedSelectSx, fontSize: 16 }}
             >
               {shades.map(sh => (
-                <option key={sh.id || sh.zone_id} value={sh.id || sh.zone_id}>
+                <MenuItem key={sh.id || sh.zone_id} value={String(sh.id || sh.zone_id)}>
                   {sh.name}
-                </option>
+                </MenuItem>
               ))}
-            </select>
+            </Select>
           </div>
 
           {/* Preset Buttons + Slider */}

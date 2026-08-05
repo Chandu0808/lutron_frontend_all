@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toSafeReactText } from '../../../../../utils/safeReactText';
 import {
     Box,
     Typography,
@@ -373,7 +374,7 @@ const ManageModules = () => {
                                         </Box>
                                     ) : error ? (
                                         <Alert severity="error" sx={{ mb: 2 }}>
-                                            {error}
+                                            {toSafeReactText(error)}
                                         </Alert>
                                 ) : modules.length > 0 ? (
                                     <Box>

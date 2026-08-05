@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchQuickControlDetails,
@@ -16,25 +16,38 @@ import Action from './Action';
 import { BaseUrl } from '../../BaseUrl';
 import { UseAuth } from '../../customhooks/UseAuth';
 import { fetchFloors, selectFloors } from '../../redux/slice/floor/floorSlice';
+import { dispatchFetchFloorsOnce } from '../../../../shared/utils/bootstrapFetchGuards';
 import { MenuItem, Select } from "@mui/material";
 import {
-  scheduleFormCardStyle,
-  scheduleLocationRowStyle,
-  scheduleLocationTextStyle,
   schedulePanelLabel,
   schedulePrimaryButtonStyle,
-  scheduleRightHeaderStyle,
-  scheduleRightListScrollStyle,
-  scheduleRightPanelStyle,
   scheduleSmallActionButtonStyle,
   scheduleTextInputStyle,
-  scheduleFixedActionBarStyle,
-  schedulePageWithFixedActionBarStyle,
 } from "../../utils/scheduleCreateStyles";
 import {
-  scheduleFilterMenuProps,
+  getAdvancedQuickControlDetailsShellStyle,
+  getAdvancedQuickControlDetailsTableCardStyle,
+  getAdvancedQuickControlDetailsTablePanelStyle,
+  getAdvancedQuickControlDetailsActionBarStyle,
+  quickControlDetailsActionColStyle,
+  quickControlDetailsHeaderTrailingColStyle,
+  quickControlDetailsListScrollStyle,
+  quickControlDetailsListScrollWrapStyle,
+  quickControlDetailsLocationColStyle,
+  quickControlDetailsStickyHeaderStyle,
+  quickControlDetailsTableHeaderRowStyle,
+  quickControlDetailsTableRowStyle,
+} from "../../utils/quickControlTableLayout";
+import {
+  scheduleModalFilterMenuProps,
   scheduleSelectFieldSx,
 } from "../../utils/scheduleSelectMenuProps";
+import {
+  renderQuickControlModalLayer,
+  quickControlModalOverlaySx,
+  quickControlModalPanelSx,
+  quickControlModalTitleSx,
+} from "../../utils/quickControlModalStyles";
 import {
   QC_MODAL_LABEL,
   QC_RADIO_BORDER,
@@ -54,14 +67,23 @@ import {
   tagAreasWithLoadedActions,
   withIndividualSource,
 } from '../../utils/scheduleActionPriority';
+import { detailsRowActionControlsStyle } from '../../../../utils/detailsRowActionControlsStyle';
+import ActionChooserModal from '../../../../shared/quickcontrols/ActionChooserModal';
+import { getQuickControlActionShortLabel } from '../../../../shared/quickcontrols/quickControlActionLabels';
+import {
+  convertApiActionToUiAction,
+  expandQuickControlActionData,
+  lightStatusSettingsFromAreaAction,
+  locationHasSceneAction,
+  locationHasZoneAction,
+  mergeExpandedActionsIntoLocation,
+} from '../../../../shared/quickcontrols/zoneActionHelpers';
 
 const QuickControlDetails = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { id } = useParams();
   const buttonColor = "var(--app-button)";
-  const modalBg = 'var(--schedule-modal-bg, #d6dde8)';
-  const modalTitleColor = 'var(--schedule-modal-title-color, #000000)';
   const schedulePanelInputStyle = (enabled) => ({
     border: "1px solid var(--schedule-panel-border, #ccc)",
     background: "var(--schedule-select-bg, #fff)",
@@ -172,8 +194,8 @@ const QuickControlDetails = () => {
   const [areaTreeIndexLoading, setAreaTreeIndexLoading] = useState(false);
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,9 +239,13 @@ const QuickControlDetails = () => {
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [actionDialogIdx, setActionDialogIdx] = useState(null);
   const [selectedActionData, setSelectedActionData] = useState(null);
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editAllMode, setEditAllMode] = useState(false);
+  const [actionChooser, setActionChooser] = useState(null); // { mode, locationIdx }
 
   // New state for common action functionality
   const [showCommonActionDialog, setShowCommonActionDialog] = useState(false);
+  const [editingAreaStatus, setEditingAreaStatus] = useState(null); // { locationIdx } when editing Light Status
   const [selectedCommonActionType, setSelectedCommonActionType] = useState('light_status');
   const [selectedOccupancySetting, setSelectedOccupancySetting] = useState(null);
   const [selectedZoneType, setSelectedZoneType] = useState('switched');
@@ -228,6 +254,14 @@ const QuickControlDetails = () => {
     dimmed: { brightness: 50, fadeTime: '02', delayTime: '00' },
     whitetune: { brightness: 50, cct: 2700, fadeTime: '02', delayTime: '00' }
   });
+
+  const resetCommonActionDialog = () => {
+    setShowCommonActionDialog(false);
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+  };
 
   // New state for zone names
   const [zoneNames, setZoneNames] = useState({});
@@ -597,149 +631,136 @@ const QuickControlDetails = () => {
     if (!editableControl) {
       return;
     }
+    setEditingActionIdx(null);
+    setEditAllMode(false);
     setActionDialogIdx(idx);
     setSelectedActionData(null);
   };
 
-  // Add action to location - EXACT SAME AS ScheduleDetails
+  // Add / update action(s) on a location (supports All Zones expand + multi-action merge)
   const handleAddAction = (idx, actionData) => {
+    const expanded = expandQuickControlActionData(actionData);
     setEditableControl(prev => ({
       ...prev,
       quick_control_areas: prev.quick_control_areas.map((loc, i) => {
         if (i !== idx) return loc;
-        
-        // Convert action data to the correct format for the API
-        let newAction = actionData;
-        
-        if (actionData.type === "scene" && actionData.scene) {
-          newAction = {
-            type: "set_scene",
-            scene_code: Number(actionData.scene.id), // Convert to number
-            scene_name: actionData.scene.name
-          };
-        } else if (actionData.type === "zone" && actionData.zone) {
-          // Check if this is a simple On/Off for switched zone without zone_id (area-level control)
-          if (actionData.zone.type === "switched" && 
-              (!actionData.zone.id || actionData.zone.id === null) &&
-              actionData.values?.on_off &&
-              !actionData.values.brightness &&
-              !actionData.values.cct) {
-            // Use area_status for simple On/Off area control (uses /area/zone_on-off API)
-            newAction = {
-              type: "area_status",
-              area_status: actionData.values.on_off
-            };
-          } else {
-            // For specific zone controls, use zone_status
-            newAction = {
-              type: "zone_status",
-              zone_id: Number(actionData.zone.id || actionData.zone.zone_id),
-              zone_type: actionData.zone.type,
-              zone_name: actionData.zone.name,
-              zone_status: actionData.values?.on_off || "Off"
-            };
-            
-            // ONLY set brightness if user actually provided a value
-            if (actionData.values && actionData.values.brightness !== undefined && actionData.values.brightness !== null) {
-              newAction.zone_brightness = actionData.values.brightness.toString().includes('%') ? actionData.values.brightness : `${actionData.values.brightness}%`;
-            }
-            
-            // ONLY set temperature if user actually provided a value
-            if (actionData.values && actionData.values.cct !== undefined && actionData.values.cct !== null) {
-              newAction.zone_temperature = actionData.values.cct.toString().includes('K') ? actionData.values.cct : `${actionData.values.cct}K`;
-            }
-          
-            // Add fade and delay times for dimmed and whitetune zones
-            if (actionData.zone.type === "dimmed" || actionData.zone.type === "whitetune") {
-              newAction.fade_time = actionData.values?.fadeTime || "02";
-              newAction.delay_time = actionData.values?.delayTime || "00";
-            }
-          }
-        } else if (actionData.type === "occupancy" && actionData.action) {
-          newAction = {
-            type: "occupancy",
-            occupancy_setting: actionData.action
-          };
-        } else if (actionData.type === "shade" && actionData.shade) {
-          newAction = {
-            type: "shade_group_status",
-            shade_group_id: Number(actionData.shade.id || actionData.shade.zone_id),
-            shade_group_name: actionData.shade.name,
-            shade_level: actionData.value.toString().includes('%') ? actionData.value : `${actionData.value}%`
-          };
-        }
-        
-        // COMPLETELY REPLACE all actions with the new one (remove all old actions)
-        return { ...loc, actions: [withIndividualSource(newAction)] };
-      })
+        return {
+          ...loc,
+          actions: mergeExpandedActionsIntoLocation(loc.actions, expanded, {
+            editingActionIdx: editAllMode ? null : editingActionIdx,
+            editAllMode,
+            withSource: withIndividualSource,
+          }),
+        };
+      }),
     }));
     setActionDialogIdx(null);
     setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
   };
 
-  // Handle edit action - SIMPLIFIED (same as CreateQuickControl)
-  const handleEditAction = (locationIdx, actionIdx) => {
+  const openEditForAction = (locationIdx, actionIdx) => {
     const location = editableControl.quick_control_areas[locationIdx];
     const action = location.actions[actionIdx];
-    
-    // Convert action to the format expected by Action component
-    let convertedAction = null;
-    
-    if (action.type === "set_scene") {
-      convertedAction = {
-        type: "scene",
-        scene: {
-          id: action.scene_code || action.scene_id,
-          name: action.scene_name
-        }
-      };
-    } else if (action.type === "area_status") {
-      // For area_status, convert to zone action with switched type for editing
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: null,
-          name: "Area",
-          type: "switched"
-        },
-        values: {
-          on_off: action.area_status || "Off"
-        }
-      };
-    } else if (action.type === "zone_status") {
-      convertedAction = {
-        type: "zone",
-        zone: {
-          id: action.zone_id,
-          name: action.zone_name,
-          type: action.zone_type
-        },
-        values: {
-          on_off: action.zone_status || "On",
-          brightness: action.zone_brightness ? parseInt(action.zone_brightness.replace('%', '')) : undefined,
-          cct: action.zone_temperature ? parseInt(action.zone_temperature.replace('K', '')) : undefined,
-          fadeTime: action.fade_time || '02',
-          delayTime: action.delay_time || '00'
-        }
-      };
-    } else if (action.type === "occupancy") {
-      convertedAction = {
-        type: "occupancy",
-        action: action.occupancy_setting
-      };
-    } else if (action.type === "shade_group_status") {
-      convertedAction = {
-        type: "shade",
-        shade: {
-          id: action.shade_group_id,
-          name: action.shade_group_name
-        },
-        value: parseInt(action.shade_level.replace('%', ''))
-      };
+    if (!action) return;
+
+    // Light Status (area_status) uses the common-action Light Status UI, not Zone editor
+    if (action.type === 'area_status') {
+      setEditingAreaStatus({ locationIdx });
+      setSelectedCommonActionType('light_status');
+      setSelectedOccupancySetting(null);
+      setSelectedZoneType('switched');
+      setLightStatusSettings((prev) => ({
+        ...prev,
+        ...lightStatusSettingsFromAreaAction(action),
+      }));
+      setShowCommonActionDialog(true);
+      return;
     }
-    
+
+    const convertedAction = convertApiActionToUiAction(action);
+    setEditingActionIdx(actionIdx);
+    setEditAllMode(false);
     setSelectedActionData(convertedAction);
     setActionDialogIdx(locationIdx);
+  };
+
+  const handleEditButtonClick = (locationIdx) => {
+    const location = editableControl.quick_control_areas[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      handleOpenActionDialog(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      openEditForAction(locationIdx, 0);
+      return;
+    }
+    setActionChooser({ mode: 'edit', locationIdx });
+  };
+
+  const handleDeleteButtonClick = (locationIdx) => {
+    const location = editableControl.quick_control_areas[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      setActionToDelete({ areaIndex: locationIdx, area: location, deleteLocation: true });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    if (actions.length === 1) {
+      setActionToDelete({
+        areaIndex: locationIdx,
+        area: location,
+        actionIndex: 0,
+        action: actions[0],
+      });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    setActionChooser({ mode: 'delete', locationIdx });
+  };
+
+  const handleChooserPickEdit = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    if (pick === 'all') {
+      setEditAllMode(true);
+      setEditingActionIdx(null);
+      setSelectedActionData(null);
+      setActionDialogIdx(locationIdx);
+      return;
+    }
+    openEditForAction(locationIdx, pick);
+  };
+
+  const handleChooserPickDelete = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    const location = editableControl.quick_control_areas[locationIdx];
+    if (pick === 'all') {
+      setEditableControl((prev) => ({
+        ...prev,
+        quick_control_areas: prev.quick_control_areas.map((loc, i) =>
+          i === locationIdx ? { ...loc, actions: [] } : loc
+        ),
+      }));
+      return;
+    }
+    setActionToDelete({
+      areaIndex: locationIdx,
+      area: location,
+      actionIndex: pick,
+      action: location.actions[pick],
+    });
+    setShowDeleteActionDialog(true);
+  };
+
+  // Handle edit action - kept for compatibility
+  const handleEditAction = (locationIdx, actionIdx) => {
+    openEditForAction(locationIdx, actionIdx);
   };
 
   // Handle common action selection
@@ -773,7 +794,26 @@ const QuickControlDetails = () => {
   // Apply common action to all areas - UPDATED to ensure action is applied
   const handleApplyCommonAction = () => {
     if (!editableControl || !editableControl.quick_control_areas) {
-      setShowCommonActionDialog(false);
+      resetCommonActionDialog();
+      return;
+    }
+
+    // Editing a single location's Light Status (area_status)
+    if (editingAreaStatus != null && selectedCommonActionType === 'light_status') {
+      const { locationIdx } = editingAreaStatus;
+      const commonAction = {
+        type: "area_status",
+        area_status: lightStatusSettings.switched.on_off
+      };
+      setEditableControl(prev => ({
+        ...prev,
+        quick_control_areas: prev.quick_control_areas.map((area, i) =>
+          i === locationIdx
+            ? { ...area, actions: applyCommonActionToActions(area.actions, commonAction) }
+            : area
+        )
+      }));
+      resetCommonActionDialog();
       return;
     }
     
@@ -807,10 +847,7 @@ const QuickControlDetails = () => {
     }
     
     // Close the dialog and reset
-    setShowCommonActionDialog(false);
-    setSelectedCommonActionType('light_status');
-    setSelectedOccupancySetting(null);
-    setSelectedZoneType('switched');
+    resetCommonActionDialog();
   };
 
   // Don't auto-apply when dialog opens - wait for "Apply to All" button
@@ -886,19 +923,24 @@ const QuickControlDetails = () => {
     setEditableControl(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handle delete action
+  // Handle delete action / location
   const handleDeleteAction = (areaIndex) => {
-    const area = editableControl.quick_control_areas[areaIndex];
-    setActionToDelete({ areaIndex, area });
-    setShowDeleteActionDialog(true);
+    handleDeleteButtonClick(areaIndex);
   };
 
   const confirmDeleteAction = () => {
     if (actionToDelete) {
       setEditableControl(prev => {
         const updatedAreas = [...prev.quick_control_areas];
-        // Remove the entire area (location + action) at the specified index
-        updatedAreas.splice(actionToDelete.areaIndex, 1);
+        if (actionToDelete.deleteLocation) {
+          updatedAreas.splice(actionToDelete.areaIndex, 1);
+        } else if (actionToDelete.actionIndex != null) {
+          const area = { ...updatedAreas[actionToDelete.areaIndex] };
+          area.actions = (area.actions || []).filter((_, i) => i !== actionToDelete.actionIndex);
+          updatedAreas[actionToDelete.areaIndex] = area;
+        } else {
+          updatedAreas.splice(actionToDelete.areaIndex, 1);
+        }
         return { ...prev, quick_control_areas: updatedAreas };
       });
       setShowDeleteActionDialog(false);
@@ -906,13 +948,77 @@ const QuickControlDetails = () => {
     }
   };
 
-  if (selectedControlLoading || !selectedControl) {
-    return <div style={{ color: schedulePanelLabel, padding: 40 }}>Loading...</div>;
-  }
-
   const quickControlAreas = editMode
     ? editableControl?.quick_control_areas
     : selectedControl?.quick_control_areas;
+
+  const listScrollRef = useRef(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
+  const updateScrollDownVisibility = useCallback(() => {
+    const el = listScrollRef.current;
+    if (!el) {
+      setShowScrollDown(false);
+      return;
+    }
+    setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (selectedControlLoading || !selectedControl) {
+      setShowScrollDown(false);
+      return undefined;
+    }
+
+    const syncScrollDown = () => updateScrollDownVisibility();
+    syncScrollDown();
+    const rafId = requestAnimationFrame(syncScrollDown);
+    const t50 = window.setTimeout(syncScrollDown, 50);
+    const t300 = window.setTimeout(syncScrollDown, 300);
+
+    const el = listScrollRef.current;
+    if (!el) {
+      return () => {
+        cancelAnimationFrame(rafId);
+        window.clearTimeout(t50);
+        window.clearTimeout(t300);
+      };
+    }
+
+    el.addEventListener('scroll', syncScrollDown, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncScrollDown) : null;
+    resizeObserver?.observe(el);
+    window.addEventListener('resize', syncScrollDown);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(t50);
+      window.clearTimeout(t300);
+      el.removeEventListener('scroll', syncScrollDown);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', syncScrollDown);
+    };
+  }, [
+    quickControlAreas,
+    selectedControl,
+    selectedControlLoading,
+    updateScrollDownVisibility,
+  ]);
+
+  const handleScrollDown = () => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (remaining <= 0) return;
+    const step = Math.max(el.clientHeight * 0.75, 120);
+    el.scrollBy({ top: Math.min(step, remaining), behavior: 'smooth' });
+    window.setTimeout(updateScrollDownVisibility, 300);
+  };
+
+  if (selectedControlLoading || !selectedControl) {
+    return <div style={{ color: schedulePanelLabel, padding: 40 }}>Loading...</div>;
+  }
 
   const saveDisabled =
     updateStatus === "loading" ||
@@ -925,287 +1031,297 @@ const QuickControlDetails = () => {
 
   return (
     <div
-      style={{
-        padding: isLargeScreen ? 40 : isDesktop ? 32 : 24,
-        borderRadius: 20,
-        maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,
-        width: "100%",
-        boxSizing: "border-box",
-        ...schedulePageWithFixedActionBarStyle(isLargeScreen, isDesktop, isTablet),
-      }}
+      className="quick-control-details-shell"
+      style={getAdvancedQuickControlDetailsShellStyle(isLargeScreen, isDesktop, isTablet)}
     >
-      {!editMode && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginBottom: isLargeScreen ? 24 : isDesktop ? 20 : 16,
-          }}
-        >
-          <button
-            onClick={canTriggerQuickControl() ? handleTrigger : undefined}
-            disabled={triggerStatus === "loading" || !canTriggerQuickControl()}
-            title={
-              !canTriggerQuickControl()
-                ? "You do not have permission to trigger Quick Controls"
-                : ""
-            }
-            style={{
-              ...permissionButtonStyle(canTriggerQuickControl()),
-              opacity: canTriggerQuickControl() ? 1 : 0.6,
-            }}
-          >
-            {triggerStatus === "loading" ? "Triggering..." : "Trigger"}
-          </button>
-        </div>
-      )}
-
       <div
         style={{
           display: "flex",
-          gap: isLargeScreen ? 32 : isDesktop ? 28 : 24,
+          justifyContent: "space-between",
           alignItems: "flex-start",
+          flexDirection: "row",
+          gap: isTablet ? 12 : 0,
+          flexShrink: 0,
         }}
       >
         <div
           style={{
-            flex: "0 1 400px",
-            minWidth: isLargeScreen ? 380 : isDesktop ? 360 : 340,
-            maxWidth: isLargeScreen ? 480 : isDesktop ? 440 : 420,
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            width: "auto",
+            flex: isTablet ? "1" : "auto",
           }}
         >
+          {editMode ? (
+            <input
+              type="text"
+              value={editableControl.name}
+              onChange={(e) => handleEditChange("name", e.target.value)}
+              style={{
+                fontSize: isTablet ? 20 : isLargeScreen ? 24 : isDesktop ? 22 : 20,
+                fontWeight: 700,
+                marginBottom: isTablet ? 16 : 24,
+                minWidth: isTablet ? 200 : 300,
+                width: "auto",
+                ...scheduleTextInputStyle(isLargeScreen, isDesktop, buttonColor),
+                ...schedulePanelInputStyle(true),
+              }}
+            />
+          ) : (
+            <h2
+              style={{
+                color: schedulePanelLabel,
+                marginBottom: isTablet ? 16 : 24,
+                fontSize: isTablet ? 20 : isLargeScreen ? 24 : isDesktop ? 22 : 20,
+                fontWeight: 700,
+                marginTop: 0,
+              }}
+            >
+              Quick Control: {selectedControl?.name}
+            </h2>
+          )}
+        </div>
+        {!editMode && (
           <div
             style={{
-              marginBottom: isLargeScreen ? 15 : isDesktop ? 12 : 10,
-              ...scheduleFormCardStyle(isLargeScreen, isDesktop),
+              display: "flex",
+              alignItems: "center",
+              gap: isTablet ? 8 : 16,
+              flexWrap: "nowrap",
+              justifyContent: "flex-end",
+              width: "auto",
             }}
           >
-            <label
+            <button
+              onClick={canTriggerQuickControl() ? handleTrigger : undefined}
+              disabled={triggerStatus === "loading" || !canTriggerQuickControl()}
+              title={
+                !canTriggerQuickControl()
+                  ? "You do not have permission to trigger Quick Controls"
+                  : ""
+              }
               style={{
-                fontWeight: 500,
-                color: schedulePanelLabel,
-                display: "block",
-                marginBottom: isLargeScreen ? 10 : 8,
-                fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                ...permissionButtonStyle(canTriggerQuickControl()),
+                opacity: canTriggerQuickControl() ? 1 : 0.6,
               }}
             >
-              Quick Control Name
-            </label>
-            {editMode ? (
-              <input
-                type="text"
-                value={editableControl.name}
-                onChange={(e) => handleEditChange("name", e.target.value)}
-                style={{
-                  width: "100%",
-                  ...scheduleTextInputStyle(isLargeScreen, isDesktop, buttonColor),
-                  ...schedulePanelInputStyle(true),
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
-                  borderRadius: 8,
-                  fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-                  minHeight: 44,
-                  ...schedulePanelInputStyle(false),
-                }}
-              >
-                {selectedControl?.name}
-              </div>
-            )}
+              {triggerStatus === "loading" ? "Triggering..." : "Trigger"}
+            </button>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div style={scheduleRightPanelStyle(isLargeScreen, isDesktop)}>
-          <div style={scheduleRightHeaderStyle(isLargeScreen, isDesktop)}>
-            <span
-              style={{
-                flex: "0 0 300px",
-                cursor: editMode ? "pointer" : "default",
-                textAlign: "left",
-                color: schedulePanelLabel,
-              }}
-              onClick={() => editMode && setShowLocationDialog(true)}
-            >
-              {editMode ? "+ Add Location" : "Location"}
-            </span>
-            <span
-              style={{
-                flex: "1 1 300px",
-                textAlign: "left",
-                color: schedulePanelLabel,
-              }}
-            >
-              {editMode ? "Add Action" : "Action"}
-            </span>
-            {editMode && (
-              <span
-                style={{
-                  flex: "0 0 180px",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  whiteSpace: "nowrap",
-                  color: schedulePanelLabel,
-                }}
-                onClick={() => setShowCommonActionDialog(true)}
-              >
-                + Add Common Action
-              </span>
-            )}
-          </div>
-
-          <div style={scheduleRightListScrollStyle}>
-        {(quickControlAreas || []).map((area, aidx) => {
-          const uniqueKey = `${area.floor_id}-${area.area_id}-${aidx}`;
-          const hasActions = area.actions && area.actions.length > 0;
-          const locationLabel = decodeHtmlEntities(
-            formatQuickControlAreaLocationLabel(
-              area,
-              floors,
-              areaTreeIndex,
-              LOCATION_ENTITY.QUICK_CONTROL,
-              id
-            )
-          );
-
-          return (
-            <div
-              key={uniqueKey}
-              style={{
-                ...scheduleLocationRowStyle(false),
-                alignItems: "center",
-                gap: 16,
-              }}
-            >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          width: "100%",
+        }}
+      >
+        <div style={getAdvancedQuickControlDetailsTablePanelStyle(isLargeScreen, isDesktop)}>
+          <div style={getAdvancedQuickControlDetailsTableCardStyle(isLargeScreen, isDesktop)}>
+            <div className="quick-control-details-list-scroll-wrap" style={quickControlDetailsListScrollWrapStyle}>
               <div
-                style={{
-                  flex: "0 0 300px",
-                  ...scheduleLocationTextStyle,
-                  whiteSpace: "normal",
-                  wordBreak: "break-word",
-                }}
+                ref={listScrollRef}
+                className="quick-control-details-list-scroll"
+                style={quickControlDetailsListScrollStyle}
               >
-                {locationLabel}
-              </div>
-
-              <div
-                style={{
-                  flex: "1 1 300px",
-                  ...scheduleLocationTextStyle,
-                  minWidth: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px",
-                }}
-              >
-                {editMode ? (
-                  hasActions ? (
-                    area.actions.map((action, actidx) => {
-                      const actionKey = `${uniqueKey}-action-${actidx}`;
-                      return (
-                        <div
-                          key={actionKey}
-                          style={{
-                            wordWrap: 'break-word',
-                            wordBreak: 'break-word',
-                            lineHeight: '1.4',
-                            width: '100%',
-                            textAlign: 'left'
-                          }}
-                        >
-                          {renderActionDisplay(action)}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <button
-                      onClick={() => handleOpenActionDialog(aidx)}
-                      style={scheduleSmallActionButtonStyle(buttonColor)}
-                    >
-                      Add Action
-                    </button>
-                  )
-                ) : hasActions ? (
-                  area.actions.map((action, actidx) => {
-                    const actionKey = `${uniqueKey}-action-${actidx}`;
-                    return (
-                      <div
-                        key={actionKey}
-                        style={{
-                          marginBottom: 4,
-                          wordWrap: 'break-word',
-                          wordBreak: 'break-word',
-                          lineHeight: '1.4',
-                          width: '100%'
-                        }}
-                      >
-                        {renderActionDisplay(action)}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div
-                    style={{
-                      color: "var(--schedule-panel-muted-text, rgba(0,0,0,0.5))",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    No action
-                  </div>
-                )}
-              </div>
-
-              {editMode && (
                 <div
                   style={{
-                    flex: "0 0 180px",
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    alignItems: "center",
-                    gap: 8,
+                    ...quickControlDetailsTableHeaderRowStyle,
+                    ...quickControlDetailsStickyHeaderStyle(),
                   }}
                 >
-                  {hasActions && (
-                    <button
-                      onClick={() => handleEditAction(aidx, 0)}
-                      style={scheduleSmallActionButtonStyle(buttonColor)}
-                    >
-                      Edit Action
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteAction(aidx)}
+                  <span
                     style={{
-                      background: buttonColor,
-                      border: "none",
-                      borderRadius: 4,
-                      color: "#fff",
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      minWidth: "32px",
-                      height: "32px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      ...quickControlDetailsLocationColStyle,
+                      cursor: editMode ? "pointer" : "default",
                     }}
-                    title="Delete"
+                    onClick={() => editMode && setShowLocationDialog(true)}
                   >
-                    🗑️
-                  </button>
+                    {editMode ? "+ Add Location" : "Location"}
+                  </span>
+                  <span style={quickControlDetailsActionColStyle}>Action</span>
+                  {editMode && (
+                    <span
+                      style={{
+                        ...quickControlDetailsHeaderTrailingColStyle,
+                        cursor: "pointer",
+                      }}
+                      onClick={() => {
+                        setEditingAreaStatus(null);
+                        setSelectedCommonActionType('light_status');
+                        setSelectedOccupancySetting(null);
+                        setSelectedZoneType('switched');
+                        setLightStatusSettings((prev) => ({
+                          ...prev,
+                          switched: { on_off: 'On' },
+                        }));
+                        setShowCommonActionDialog(true);
+                      }}
+                    >
+                      + Add Common Action
+                    </span>
+                  )}
                 </div>
+
+                {(quickControlAreas || []).map((area, aidx) => {
+                  const uniqueKey = `${area.floor_id}-${area.area_id}-${aidx}`;
+                  const hasActions = area.actions && area.actions.length > 0;
+                  const locationLabel = decodeHtmlEntities(
+                    formatQuickControlAreaLocationLabel(
+                      area,
+                      floors,
+                      areaTreeIndex,
+                      LOCATION_ENTITY.QUICK_CONTROL,
+                      id
+                    )
+                  );
+
+                  return (
+                    <div key={uniqueKey} style={quickControlDetailsTableRowStyle}>
+                      <div style={quickControlDetailsLocationColStyle}>{locationLabel}</div>
+
+                      <div
+                        style={{
+                          ...quickControlDetailsActionColStyle,
+                          minWidth: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                        }}
+                      >
+                        {editMode ? (
+                          hasActions ? (
+                            <>
+                              {area.actions.map((action, actidx) => {
+                              const actionKey = `${uniqueKey}-action-${actidx}`;
+                              return (
+                                <div
+                                  key={actionKey}
+                                  style={{
+                                    wordWrap: "break-word",
+                                    wordBreak: "break-word",
+                                    lineHeight: "1.4",
+                                    width: "100%",
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  {renderActionDisplay(action)}
+                                </div>
+                              );
+                            })}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenActionDialog(aidx)}
+                                style={{
+                                  ...scheduleSmallActionButtonStyle(buttonColor),
+                                  background: 'transparent',
+                                  color: buttonColor,
+                                  border: `1px solid ${buttonColor}`,
+                                  alignSelf: 'flex-start',
+                                  marginTop: 4,
+                                }}
+                              >
+                                + Add Action
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleOpenActionDialog(aidx)}
+                              style={scheduleSmallActionButtonStyle(buttonColor)}
+                            >
+                              Add Action
+                            </button>
+                          )
+                        ) : hasActions ? (
+                          area.actions.map((action, actidx) => {
+                            const actionKey = `${uniqueKey}-action-${actidx}`;
+                            return (
+                              <div
+                                key={actionKey}
+                                style={{
+                                  marginBottom: 4,
+                                  wordWrap: "break-word",
+                                  wordBreak: "break-word",
+                                  lineHeight: "1.4",
+                                  width: "100%",
+                                }}
+                              >
+                                {renderActionDisplay(action)}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div
+                            style={{
+                              color: "var(--schedule-panel-muted-text, rgba(0,0,0,0.5))",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            No action
+                          </div>
+                        )}
+                      </div>
+
+                      {editMode && (
+                        <div style={detailsRowActionControlsStyle(180)}>
+                          {hasActions && (
+                            <button
+                              onClick={() => handleEditButtonClick(aidx)}
+                              style={scheduleSmallActionButtonStyle(buttonColor)}
+                            >
+                              Edit Action
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteButtonClick(aidx)}
+                            style={{
+                              background: buttonColor,
+                              border: "none",
+                              borderRadius: 4,
+                              color: "#fff",
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: "14px",
+                              minWidth: "32px",
+                              height: "32px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            title="Delete"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {showScrollDown && (
+                <button
+                  type="button"
+                  className="quick-control-details-scroll-btn"
+                  onClick={handleScrollDown}
+                  aria-label="Scroll down"
+                >
+                  ▼
+                </button>
               )}
             </div>
-          );
-        })}
           </div>
         </div>
       </div>
 
-      <div style={scheduleFixedActionBarStyle(isLargeScreen, isDesktop, isTablet)}>
+      <div
+        className="quick-control-details-action-bar"
+        style={getAdvancedQuickControlDetailsActionBarStyle()}
+      >
         {!editMode && (
           <>
             <button
@@ -1287,30 +1403,13 @@ const QuickControlDetails = () => {
       </div>
 
       {/* Common Action Dialog */}
-      {showCommonActionDialog && (
-        <div style={{
-          position: 'fixed',
-          left: 0, top: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.25)",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }}>
-          <div
-            className="quick-control-modal"
-            style={{
-            background: modalBg,
-            borderRadius: 18,
-            padding: 28,
-            minWidth: 340,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-            position: "relative",
-            color: modalTitleColor
-          }}
-          >
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: modalTitleColor }}>
-              Add Common Action
+      {renderQuickControlModalLayer(
+        true,
+        showCommonActionDialog && (
+        <div style={quickControlModalOverlaySx}>
+          <div style={{ ...quickControlModalPanelSx, minWidth: 340 }}>
+            <div style={quickControlModalTitleSx}>
+              {editingAreaStatus ? 'Edit Action' : 'Add Common Action'}
             </div>
             
             {/* Action Type Dropdown */}
@@ -1321,11 +1420,12 @@ const QuickControlDetails = () => {
                 value={selectedCommonActionType}
                 onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
                 fullWidth
-                MenuProps={scheduleFilterMenuProps}
+                disabled={!!editingAreaStatus}
+                MenuProps={scheduleModalFilterMenuProps}
                 sx={scheduleSelectFieldSx}
               >
                 <MenuItem value="light_status">Light Status</MenuItem>
-                <MenuItem value="occupancy">Occupancy Setting</MenuItem>
+                {!editingAreaStatus && <MenuItem value="occupancy">Occupancy Setting</MenuItem>}
               </Select>
             </div>
 
@@ -1435,15 +1535,10 @@ const QuickControlDetails = () => {
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "pointer" : "not-allowed"
                 }}
               >
-                Apply to All
+                {editingAreaStatus ? 'Update' : 'Apply to All'}
               </button>
               <button
-                onClick={() => { 
-                  setShowCommonActionDialog(false); 
-                  setSelectedCommonActionType(''); 
-                  setSelectedOccupancySetting(null); 
-                  setSelectedZoneType('switched');
-                }}
+                onClick={resetCommonActionDialog}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
@@ -1459,6 +1554,7 @@ const QuickControlDetails = () => {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Location Dialog */}
@@ -1469,29 +1565,12 @@ const QuickControlDetails = () => {
       />
 
       {/* Action Dialog */}
-      {actionDialogIdx !== null && (
-        <div style={{
-          position: 'fixed',
-          left: 0, top: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.25)",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }}>
-          <div
-            className="quick-control-modal"
-            style={{
-            background: modalBg,
-            borderRadius: 18,
-            padding: 28,
-            minWidth: 340,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-            position: "relative",
-            color: modalTitleColor
-          }}
-          >
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: modalTitleColor }}>
+      {renderQuickControlModalLayer(
+        true,
+        actionDialogIdx !== null && (
+        <div style={quickControlModalOverlaySx}>
+          <div style={{ ...quickControlModalPanelSx, minWidth: 340 }}>
+            <div style={quickControlModalTitleSx}>
               {selectedActionData ? 'Edit Action' : 'Add Action'}
               {selectedActionData && (
                 <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
@@ -1506,6 +1585,21 @@ const QuickControlDetails = () => {
               areaId={editableControl?.quick_control_areas[actionDialogIdx]?.area_id}
               onActionSelect={action => setSelectedActionData(action)}
               initialAction={selectedActionData}
+              menuProps={scheduleModalFilterMenuProps}
+              hideZoneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasSceneAction(
+                  editableControl?.quick_control_areas?.[actionDialogIdx]?.actions
+                )
+              }
+              hideSceneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasZoneAction(
+                  editableControl?.quick_control_areas?.[actionDialogIdx]?.actions
+                )
+              }
             />
             <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button
@@ -1549,6 +1643,7 @@ const QuickControlDetails = () => {
             </div>
           </div>
         </div>
+        )
       )}
 
       <ConfirmDialog
@@ -1571,13 +1666,33 @@ const QuickControlDetails = () => {
       {/* Delete Action Confirmation Dialog */}
       <ConfirmDialog
         open={showDeleteActionDialog}
-        title="Delete Action"
-        message={`Are you sure you want to delete the action for "${actionToDelete?.area?.area_name}"?`}
+        title={actionToDelete?.deleteLocation ? "Delete Location" : "Delete Action"}
+        message={
+          actionToDelete?.deleteLocation
+            ? `Are you sure you want to delete location "${actionToDelete?.area?.area_name}"?`
+            : `Are you sure you want to delete "${getQuickControlActionShortLabel(actionToDelete?.action)}" from "${actionToDelete?.area?.area_name}"?`
+        }
         onConfirm={confirmDeleteAction}
         onCancel={() => {
           setShowDeleteActionDialog(false);
           setActionToDelete(null);
         }}
+      />
+
+      <ActionChooserModal
+        open={Boolean(actionChooser)}
+        mode={actionChooser?.mode || 'edit'}
+        actions={
+          actionChooser != null
+            ? editableControl?.quick_control_areas?.[actionChooser.locationIdx]?.actions || []
+            : []
+        }
+        buttonColor={buttonColor}
+        onPick={(pick) => {
+          if (actionChooser?.mode === 'delete') handleChooserPickDelete(pick);
+          else handleChooserPickEdit(pick);
+        }}
+        onCancel={() => setActionChooser(null)}
       />
 
       <Toast

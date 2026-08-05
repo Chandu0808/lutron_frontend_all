@@ -56,6 +56,21 @@ export const authFieldSx = {
     px: 1.5,
     py: 1,
   },
+  /* Eye icon on white password fields — keep dark across all advanced themes */
+  '& .MuiInputAdornment-root .MuiIconButton-root': {
+    color: 'var(--auth-password-icon-color, #111111)',
+  },
+  '& .MuiInputAdornment-root .MuiIconButton-root .MuiSvgIcon-root': {
+    color: 'var(--auth-password-icon-color, #111111)',
+  },
+};
+
+/** Password show/hide toggle — dark on white field backgrounds */
+export const authPasswordVisibilityIconSx = {
+  color: 'var(--auth-password-icon-color, #111111) !important',
+  '& .MuiSvgIcon-root': {
+    color: 'var(--auth-password-icon-color, #111111) !important',
+  },
 };
 
 export const authButtonSx = {

@@ -1,14 +1,22 @@
 // src/screens/quickcontrols/AreaTreeDialog.jsx
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Dialog, DialogTitle, DialogContent, Checkbox, Button, Typography, Collapse, IconButton, FormControl, Select, MenuItem
+  Box, Checkbox, Button, Typography, Collapse, IconButton, FormControl, Select, MenuItem
 } from '@mui/material';
 import { AddBoxOutlined, IndeterminateCheckBoxOutlined } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchFloors, selectFloors, getLeafByFloorID } from "../../redux/slice/floor/floorSlice";
 import { UseAuth } from '../../customhooks/UseAuth';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
-
+import {
+  renderScheduleModalLayer,
+} from '../../../../shared/settings/schedule/scheduleModalLayer';
+import { quickControlModalOverlaySx } from '../../utils/quickControlModalStyles';
+import { customizedScheduleModalFilterMenuProps } from '../../../../shared/settings/schedule/scheduleSelectMenuProps';
+import {
+  dispatchFetchFloorsOnce,
+  dispatchFetchLeafByFloorOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards';
 const AreaTreeDialog = ({ open, onClose, onAdd }) => {
   const dispatch = useDispatch();
   const floors = useSelector(selectFloors);
@@ -259,83 +267,84 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
     onClose();
   };
 
-  // Auto-select first available floor when floors are loaded
+  // Auto-select first available floor only when dialog is open
   useEffect(() => {
+    if (!open) return;
     const availableFloors = getAvailableFloors();
     if (availableFloors && availableFloors.length > 0 && !selectedFloor) {
       setSelectedFloor(availableFloors[0].id.toString());
     }
-  }, [floors, currentUserRole, userProfile]);
+  }, [open, floors, currentUserRole, userProfile, selectedFloor]);
 
   // In the useEffect for dialog open, reset selectedAreaCodes and fetch floors
   useEffect(() => {
     if (open) {
       setSelectedAreaCodes([]);
       setExpanded({});
-      // Fetch floors when dialog opens
-      dispatch(fetchFloors());
+      dispatchFetchFloorsOnce(
+        dispatch,
+        fetchFloors,
+        Array.isArray(floors) && floors.length > 0
+      );
     }
-  }, [open, dispatch]);
+  }, [open, dispatch, floors]);
 
-  // Fetch area tree when floor changes
+  // Fetch area tree when floor changes (only while dialog open)
   useEffect(() => {
-    if (selectedFloor) {
-      dispatch(getLeafByFloorID(selectedFloor));
-    }
-  }, [selectedFloor, dispatch]);
+    if (!open || !selectedFloor) return;
+    dispatchFetchLeafByFloorOnce(dispatch, getLeafByFloorID, selectedFloor);
+  }, [open, selectedFloor, dispatch]);
 
-  return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="sm" 
-      fullWidth 
-      BackdropProps={{
-        sx: {
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        }
-      }}
-      PaperProps={{ 
-        sx: { 
-          backgroundColor: 'transparent', 
-          boxShadow: 'none',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative'
-        } 
-      }}
-    >
-      <Box sx={{ 
-        backgroundColor: '#D2C29D', 
-        borderRadius: 1, 
-        p: 2, 
-        width: 600, 
-        maxWidth: '90vw',
-        maxHeight: '90vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden'
-      }}>
-        <DialogTitle sx={{ fontSize: 16, flexShrink: 0 }}>Select Area</DialogTitle>
-        <DialogContent sx={{ 
-          flex: 1,
-          overflow: 'hidden',
-          padding: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0
-        }}>
+  return renderScheduleModalLayer(
+    open,
+    open && (
+      <div
+        style={quickControlModalOverlaySx}
+        onClick={onClose}
+        role="presentation"
+      >
+        <Box
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            backgroundColor: '#D2C29D',
+            borderRadius: 1,
+            p: 2,
+            width: 600,
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <Typography sx={{ fontSize: 16, flexShrink: 0, fontWeight: 600, px: 1, pt: 1 }}>
+            Select Area
+          </Typography>
+          <Box sx={{
+            flex: 1,
+            overflow: 'hidden',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}>
           <FormControl fullWidth size="small" sx={{ mb: 2, flexShrink: 0 }}>
             <Select
               value={selectedFloor}
               displayEmpty
               onChange={(e) => setSelectedFloor(e.target.value)}
-              MenuProps={{ 
-                PaperProps: { 
-                  sx: { 
-                    backgroundColor: '#FFFFFF', 
-                    borderRadius: '10px',
+              sx={{
+                backgroundColor: '#ffffff',
+                color: '#000000',
+                '& .MuiSelect-icon': { color: '#000000' },
+              }}
+              MenuProps={{
+                ...customizedScheduleModalFilterMenuProps,
+                PaperProps: {
+                  ...customizedScheduleModalFilterMenuProps.PaperProps,
+                  sx: {
+                    ...customizedScheduleModalFilterMenuProps.PaperProps.sx,
+                    backgroundColor: '#FFFFFF',
                     maxHeight: '200px',
                     overflowY: 'auto',
                     '&::-webkit-scrollbar': {
@@ -352,12 +361,12 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
                     '&::-webkit-scrollbar-thumb:hover': {
                       background: '#555',
                     },
-                  } 
-                } 
+                  },
+                },
               }}
             >
               {getAvailableFloors()?.map((floor) => (
-                <MenuItem key={floor.id} value={floor.id}>
+                <MenuItem key={floor.id} value={floor.id.toString()}>
                   {floor.floor_name}
                 </MenuItem>
               ))}
@@ -414,9 +423,10 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
               Add
             </Button>
           </Box>
-        </DialogContent>
-      </Box>
-    </Dialog>
+          </Box>
+        </Box>
+      </div>
+    )
   );
 };
 export default AreaTreeDialog;

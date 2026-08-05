@@ -297,7 +297,7 @@ const CreateHelp = () => {
                         }}
                     >
                         <Box display="flex" alignItems="center" gap={1.2}>
-                            <PictureAsPdfIcon color="error" fontSize="small" />
+                            <PictureAsPdfIcon sx={{ color: '#d32f2f' }} fontSize="small" />
                             <Typography fontSize="14px" fontWeight={600}>
                                 {selectedHelp}
                             </Typography>

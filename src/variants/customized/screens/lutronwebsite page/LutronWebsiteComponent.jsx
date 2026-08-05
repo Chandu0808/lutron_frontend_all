@@ -661,7 +661,6 @@ const LutronWebsiteComponent = () => {
               ...CARD_SCROLL_STYLES,
             }}
           >
-            {/* Show description - Search functionality commented out */}
             {description &&
               description.trim().toLowerCase() !== 'no description available.' && (
                 <Typography
@@ -678,8 +677,6 @@ const LutronWebsiteComponent = () => {
                   dangerouslySetInnerHTML={{ __html: description }}
                 />
               )}
-            
-          
           </Box>
         </Box>
       )}

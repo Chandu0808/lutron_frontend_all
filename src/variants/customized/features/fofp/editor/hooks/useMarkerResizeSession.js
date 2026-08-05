@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
-import { markerResizeFromHandle } from "../../../../screens/settings/fofp/fofpMarkerResize";
+import {
+  markerResizeFromHandle,
+  computeStretchAnchorEdges,
+  isStretchResizeHandle,
+} from "../../../../screens/settings/fofp/fofpMarkerResize";
 import { resolveFofpMarkerHalfAxes } from "../../../../screens/heatmap/fofpMarkerDimensions";
 import { resolveFofpMarkerShape } from "../../../../screens/heatmap/fofpMarkerShapes";
 import {
   clampMarkerSizeForShapeChange,
-  clampMarkerSizePatchToArea,
   hasValidAreaRings,
 } from "../../geometry/markerContainment";
 
@@ -71,15 +74,19 @@ export const useMarkerResizeSession = ({
         if (!pt) return;
         const pos = positionsByZoneId.get(Number(active.zoneId));
         if (!pos) return;
-        const { halfX, halfY } = resolveFofpMarkerHalfAxes(pos, resolvedSize);
+        // Stretch must use drag-start size/center so the opposite edge stays fixed.
+        const halfX = active.originHalfX;
+        const halfY = active.originHalfY;
+        const centerX = active.originX;
+        const centerY = active.originY;
         const rings = areaRingsById?.get(Number(pos.area_id));
         const shape = resolveFofpMarkerShape(pos.marker_shape, resolvedShape);
         const patch = markerResizeFromHandle(
           active.handleId,
           pt.x,
           pt.y,
-          pos.x,
-          pos.y,
+          centerX,
+          centerY,
           halfX,
           halfY,
           {
@@ -87,10 +94,19 @@ export const useMarkerResizeSession = ({
             rings,
             lastValidHalfX: active.lastValidHalfX,
             lastValidHalfY: active.lastValidHalfY,
+            lastValidX: active.lastValidX,
+            lastValidY: active.lastValidY,
+            stretchAnchor: active.stretchAnchor,
           }
         );
         active.lastValidHalfX = patch.shape_size_x;
         active.lastValidHalfY = patch.shape_size_y;
+        if (patch.x != null && Number.isFinite(Number(patch.x))) {
+          active.lastValidX = patch.x;
+        }
+        if (patch.y != null && Number.isFinite(Number(patch.y))) {
+          active.lastValidY = patch.y;
+        }
         livePatchRef.current = patch;
         if (typeof onLiveResizePatch === "function") {
           onLiveResizePatch(patch);
@@ -139,12 +155,24 @@ export const useMarkerResizeSession = ({
         }
       }
       livePatchRef.current = null;
+      const originX = Number(pos.x);
+      const originY = Number(pos.y);
       resizeDragRef.current = {
         zoneId: resizingZoneId,
         handleId,
         pointerId: e.pointerId,
+        originX,
+        originY,
+        originHalfX: halfX,
+        originHalfY: halfY,
         lastValidHalfX: halfX,
         lastValidHalfY: halfY,
+        lastValidX: originX,
+        lastValidY: originY,
+        // Mid-edge stretch: freeze opposite edge for the whole drag.
+        stretchAnchor: isStretchResizeHandle(handleId)
+          ? computeStretchAnchorEdges(originX, originY, halfX, halfY)
+          : null,
       };
     },
     [isEditing, positionsByZoneId, resolvedSize, resizingZoneId]

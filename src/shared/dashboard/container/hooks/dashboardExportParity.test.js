@@ -99,7 +99,7 @@ describe('dashboard export action resolvers parity', () => {
     });
   });
 
-  it('buildGroupEnergyExportApiParams uses calculateDateParameters without navigating flag', () => {
+  it('buildGroupEnergyExportApiParams excludes dashboard location scope', () => {
     const calculateDateParameters = () => ({
       startDate: '2025-05-01',
       endDate: '2025-05-31',
@@ -108,12 +108,12 @@ describe('dashboard export action resolvers parity', () => {
 
     const params = buildGroupEnergyExportApiParams(selection, calculateDateParameters);
     expect(params).toEqual({
-      areaIds: [1, 2],
-      floorIds: [],
       timeRange: 'this-month',
       startDate: '2025-05-01',
       endDate: '2025-05-31',
     });
+    expect(params.areaIds).toBeUndefined();
+    expect(params.floorIds).toBeUndefined();
     expect(params.isNavigating).toBeUndefined();
   });
 

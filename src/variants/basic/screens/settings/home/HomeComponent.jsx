@@ -1,13 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-
-// Suppress findDOMNode warning for ReactQuill (third-party library issue)
-const originalError = console.error;
-console.error = (...args) => {
-    if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
-        return;
-    }
-    originalError.call(console, ...args);
-};
 import {
     Box,
     Button,
@@ -27,6 +18,7 @@ import { settingsSidebarColumnDividerSx } from '../../../utils/settingsSidebarTa
 import SettingsSidebarNav from '../../../components/SettingsSidebarNav';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { BASIC_HOME_FONT_SIZE_WHITELIST } from '../../../utils/basicQuillFontSize';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
@@ -34,6 +26,7 @@ import { MdFileUpload } from "react-icons/md";
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
+import { BASIC_MANAGE_AREA_GROUPS_PATH } from '../../../utils/basicSettingsPaths';
 import {
     getLutronData,
     getLutronDataClient,
@@ -46,6 +39,10 @@ import {
     homeDataClient,
     homeDataProject
 } from '../../../redux/slice/home/homeSlice';
+import {
+    dispatchFetchClientOnce,
+    dispatchFetchProjectOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
 import { SETTINGS_HOME_TAB_QUERY } from '../../../utils/settingsHomeTabParams';
 import {
   getRovingTabIndex,
@@ -56,6 +53,15 @@ import {
   requestSettingsSidebarFocus,
 } from '../../../../../utils/keyboard/pageSubNavBridge';
 import { isKeyboardNavBlockedTarget } from '../../../../../utils/keyboard/keyboardNavUtils';
+
+// Suppress findDOMNode warning for ReactQuill (third-party library issue)
+const originalError = console.error;
+console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
+        return;
+    }
+    originalError.call(console, ...args);
+};
 
 const HOME_TAB_KEYS = ['Lutron', 'Client', 'Project'];
 
@@ -163,6 +169,8 @@ const stripHtmlTags = (html) => {
  * The sidebar filtering is handled by getVisibleSidebarItems() utility function
  * which ensures consistent role-based access control.
  */
+const BASIC_HOME_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 const HomeComponent = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const displayMode = useMemo(() => {
@@ -301,11 +309,9 @@ const HomeComponent = () => {
     // Redirect if user doesn't have permission
     useEffect(() => {
         if (!canAccessHome) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(BASIC_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessHome, navigate]);
-
-    if (!canAccessHome) return null;
 
     // Redux selectors
     const appTheme = useSelector(selectApplicationTheme);
@@ -430,11 +436,11 @@ const HomeComponent = () => {
         }
         if (!dataLoadedRef.current.client && (!homeClientData || !homeClientData.name)) {
             dataLoadedRef.current.client = true;
-            dispatch(getLutronDataClient());
+            dispatchFetchClientOnce(dispatch, getLutronDataClient);
         }
         if (!dataLoadedRef.current.project && (!homeProjectData || !homeProjectData.name)) {
             dataLoadedRef.current.project = true;
-            dispatch(getLutronDataProject());
+            dispatchFetchProjectOnce(dispatch, getLutronDataProject);
         }
     }, [dispatch]); // Only depend on dispatch to prevent infinite loops
 
@@ -453,10 +459,9 @@ const HomeComponent = () => {
         if (displayMode === 'Lutron' && homeData) {
             setDescription(homeData.description || '');
             if (homeData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
                 const imageUrl = homeData.background_image.startsWith("http")
                     ? homeData.background_image
-                    : `${API_URL}${homeData.background_image}`;
+                    : `${BASIC_HOME_API_URL}${homeData.background_image}`;
                 setImagePreview(imageUrl);
             }
             // Installed solutions not supported for Lutron mode
@@ -470,17 +475,15 @@ const HomeComponent = () => {
             setDescription(homeClientData.description || '');
             setClientName(homeClientData.name || '');
             if (homeClientData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
                 const imageUrl = homeClientData.background_image.startsWith("http")
                     ? homeClientData.background_image
-                    : `${API_URL}${homeClientData.background_image}`;
+                    : `${BASIC_HOME_API_URL}${homeClientData.background_image}`;
                 setImagePreview(imageUrl);
             }
             if (homeClientData.logo_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
                 const logoUrl = homeClientData.logo_image.startsWith("http")
                     ? homeClientData.logo_image
-                    : `${API_URL}${homeClientData.logo_image}`;
+                    : `${BASIC_HOME_API_URL}${homeClientData.logo_image}`;
                 setLogoPreview(logoUrl);
             }
             // Installed solutions not supported for Client mode
@@ -612,7 +615,7 @@ const HomeComponent = () => {
             if (saveClientData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
                 // FIXED: Only refresh once after successful save
-                await dispatch(getLutronDataClient());
+                await dispatchFetchClientOnce(dispatch, getLutronDataClient, { force: true });
             }
         } else if (displayMode === 'Project') {
             if (description) formData.append('description', cleanDescription(description));
@@ -627,7 +630,7 @@ const HomeComponent = () => {
             const result = await dispatch(saveProjectData(formData));
             if (saveProjectData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
-                dispatch(getLutronDataProject());
+                await dispatchFetchProjectOnce(dispatch, getLutronDataProject, { force: true });
             }
         }
     };
@@ -674,17 +677,17 @@ const HomeComponent = () => {
         );
     };
 
-    /** Toolbar order/icons match reference UI (lists → size → color → styles → align → link/image → clear). */
+    /** Toolbar: lists → color → styles → align → link/image → clear → numeric font size. */
     const modules = {
         toolbar: [
             [{ list: 'ordered' }, { list: 'bullet' }],
-            [{ size: ['small', false, 'large', 'huge'] }],
             [{ color: [] }],
             ['bold', 'italic', 'underline', 'strike'],
             ['blockquote', 'code-block'],
             [{ align: [] }],
             ['link', 'image'],
             ['clean'],
+            [{ size: BASIC_HOME_FONT_SIZE_WHITELIST }],
         ],
         clipboard: {
             matchVisual: false,
@@ -751,6 +754,8 @@ const HomeComponent = () => {
             ))}
         </Box>
     );
+
+    if (!canAccessHome) return null;
 
     return (
         <Box className="settings-container" sx={{

@@ -26,7 +26,10 @@ export const advancedSpaceContainerAdapter = {
   },
 
   buildLoadingState(widgetOptions) {
-    return buildSpaceLoadingState(widgetOptions);
+    const loading = buildSpaceLoadingState(widgetOptions);
+    // Per-widget loaders only — anyLoading would force every Space widget to
+    // flash together when one chart API is in flight (tab switch flicker).
+    return { ...loading, anyLoading: false };
   },
 
   buildWidgetContext(params) {

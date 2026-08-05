@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   Box, Button, FormControl, IconButton, InputBase,
   MenuItem, Paper, Select, useMediaQuery, useTheme
@@ -7,7 +7,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear'; // Add this import
 import { styled, darken } from '@mui/material/styles';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchFloors } from "../../redux/slice/floor/floorSlice";
+import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import {
   setSelectedFloorId,
   setDisplayMode,
@@ -18,9 +18,11 @@ import { useNavigate } from "react-router-dom";
 import GroupOccupancyModel from '../heatmap/GroupOccupancymodel'
 
 import { UseAuth } from '../../customhooks/UseAuth'; // Add this import
+import { useSlidingTabIndicator } from '../../hooks/useSlidingTabIndicator';
 
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { getThemeButtonColor } from '../../utils/themePageBackground';
+import { dispatchFetchFloorsOnce } from '../../../../shared/utils/bootstrapFetchGuards';
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -71,7 +73,8 @@ const HeatmapControls = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
-  const { floors, status: floorStatus } = useSelector(state => state.floor);
+  const floors = useSelector(selectFloors);
+  const floorStatus = useSelector((state) => state.floor.status);
 
   // const { selectedFloorId, displayMode = 'Light' } = useSelector(state => state.heatmap || {});
   const appTheme = useSelector(selectApplicationTheme);
@@ -87,7 +90,13 @@ const HeatmapControls = () => {
   const tabsContainerRef = useRef(null);
   const tabRefs = useRef({});
   const displayModeRef = useRef(displayMode);
-  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false });
+  const tabIndicator = useSlidingTabIndicator({
+    activeKey: displayMode,
+    tabRefs,
+    containerRef: tabsContainerRef,
+    enabled: true,
+    layoutDeps: [isMobile, isTablet, isLaptop, isDesktop],
+  });
 
   displayModeRef.current = displayMode;
 
@@ -155,31 +164,6 @@ const HeatmapControls = () => {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [dispatch]);
-
-  // Position the sliding pill under the active display mode (re-measures on mode/size change)
-  useLayoutEffect(() => {
-    const measure = () => {
-      const activeEl = tabRefs.current[displayMode];
-      if (!activeEl) return false;
-      const width = activeEl.offsetWidth;
-      if (width <= 0) return false;
-      setTabIndicator({ left: activeEl.offsetLeft, width, ready: true });
-      return true;
-    };
-    if (measure()) return;
-    const rafId = requestAnimationFrame(() => { measure(); });
-    return () => cancelAnimationFrame(rafId);
-  }, [displayMode]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      const activeEl = tabRefs.current[displayMode];
-      if (!activeEl) return;
-      setTabIndicator({ left: activeEl.offsetLeft, width: activeEl.offsetWidth, ready: true });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [displayMode]);
 
   // Shared sizing tokens to keep everything aligned in one row - matching Dashboard
   const CONTROL_HEIGHT = { xs: 28, sm: 30, md: 34, lg: 36 };
@@ -275,14 +259,8 @@ const HeatmapControls = () => {
 
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch, currentUserRole]);
-
-  useEffect(() => {
-    // if (!floors || floors.length === 0) {
-    dispatch(fetchFloors());
-    // }
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   useEffect(() => {
     if (!displayMode) dispatch(setDisplayMode('Light'));
@@ -318,7 +296,8 @@ const HeatmapControls = () => {
       // Force refresh all heatmap data
       dispatch(refreshAllHeatmapData({
         floorId: selectedFloorId,
-        areaId: null
+        areaId: null,
+        displayMode,
       }));
     }
   };
@@ -393,7 +372,7 @@ const HeatmapControls = () => {
         pb: '2px',
         px: { xs: 0.5, sm: 1, md: 0.5 },
         gap: { xs: 0.3, sm: 0.5, md: 0.8 },
-        flexWrap: { xs: 'wrap', md: 'nowrap' },
+        flexWrap: 'nowrap',
         overflow: { xs: 'visible', md: 'hidden' },
         minHeight: { xs: 36, sm: 38, md: 40 },
       }}>
@@ -613,7 +592,7 @@ const HeatmapControls = () => {
           display: 'flex',
           justifyContent: 'flex-end',
           flexShrink: 0,
-          ml: { xs: 0.3, sm: 0.5, md: 0.8 },
+          ml: 'auto',
         }}>
           {displayMode === 'Light' && canCreateAreaGroup() && (
             <Button

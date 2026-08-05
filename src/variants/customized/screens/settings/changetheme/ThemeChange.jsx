@@ -1,6 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Box, Button, Grid, Typography, useMediaQuery } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { Box, Button, Typography } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import SettingsSidebar from '../../../components/SettingsSidebar';
@@ -22,11 +21,35 @@ import {
 import { Snackbar, Alert } from '@mui/material';
 import { ThemeContext } from '../theme/ThemeContext';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
-import { isLightSurface } from '../../../utils/themeOnSurface';
-import { settingsSidebarColumnDividerSx } from '../../../utils/settingsSidebarTabStyles';
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
 import UiVariantSelector from '../../../../../components/UiVariantSelector';
 import FofpThemeColorCard from './FofpThemeColorCard';
+import {
+    dispatchFetchApplicationThemeOnce,
+    dispatchFetchBackgroundImageOnce,
+    dispatchFetchClientOnce,
+    dispatchFetchHeatMapThemeOnce,
+    dispatchFetchThemeSettingsOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+import CustomizedSettingsPageShell from '../../../components/CustomizedSettingsPageShell';
+import {
+    CUSTOMIZED_THEME_PICKER_HEX,
+    customizedThemePageSx,
+    themePickerCardsGridSx,
+    themePickerCardCellSx,
+    themePickerCardColumnSx,
+    themePickerCardSx,
+} from './themePickerLayout';
+
+const THEME_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+function resolveThemeMediaUrl(path) {
+    if (path == null) return null;
+    const p = String(path).trim();
+    if (!p) return null;
+    if (/^(https?:|blob:|data:)/i.test(p)) return p;
+    return `${THEME_API_URL}${p.startsWith('/') ? p : `/${p}`}`;
+}
 
 const ThemeChange = () => {
     const normalizeColor = (color) => {
@@ -62,13 +85,9 @@ const ThemeChange = () => {
 
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const muiTheme = useTheme();
-    const isTablet = useMediaQuery(muiTheme.breakpoints.between('sm', 'md'));
-    const settingsSidebarMdUp = useMediaQuery(muiTheme.breakpoints.up('md'));
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
     const contentColor = appTheme?.application_theme?.content || '#ffffff';
-    const isDefaultWhiteTheme = isLightSurface(contentColor);
     const heatMapTheme = useSelector(selectHeatMapTheme)
     const apibgImage = useSelector(selectBackgroundImage)
     const DEFAULT_THEME_COLORS = {
@@ -100,7 +119,10 @@ const ThemeChange = () => {
     const [activeHeatmapTab, setActiveHeatmapTab] = useState('Light');
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
-        dispatch(getLutronDataClient());
+        dispatchFetchClientOnce(dispatch, getLutronDataClient);
+    }, [dispatch]);
+
+    useEffect(() => {
         setDynamicButtonColor(themeColorMap?.Button || '#232323');
     }, [themeColorMap?.Button]);
 
@@ -111,16 +133,16 @@ const ThemeChange = () => {
     useEffect(() => {
         // Only fetch if not already loaded
         if (!appTheme || !appTheme.application_theme) {
-            dispatch(fetchApplicationTheme());
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
         }
         if (!heatMapTheme || !heatMapTheme.application_theme) {
-            dispatch(fetchHeatMapTheme());
+            dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
         }
         const bgApiLoaded =
             apibgImage &&
             (apibgImage.status != null || Object.prototype.hasOwnProperty.call(apibgImage, 'background_image'));
         if (!bgApiLoaded) {
-            dispatch(fetchBackgroundImage());
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
     useEffect(() => {
@@ -260,17 +282,6 @@ const ThemeChange = () => {
             // Optionally handle error feedback here
         }
     };
-    const sidebarItemPaths = {
-        "Home": "/main",
-        "Theme": "/theme-change",
-        "Widgets": "/widgets/",
-        "Manage Area Groups": "/manage-area-groups",
-        "Area Size & Load": "/area-size-load",
-        "Email Server": "/email-server/",
-        "Users": "/users",
-        "Floor": "/floor",
-        "Help": "/create-help/"
-    };
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
     const fileInputRef = React.useRef();
@@ -290,7 +301,7 @@ const ThemeChange = () => {
                 backgroundRemovedRef.current = false;
                 dispatch(updateApplicationTheme({ background_image: backendPath }));
                 const bgResponse = await dispatch(fetchBackgroundImage()).unwrap();
-                dispatch(fetchThemeSettings());
+                dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
                 const bgUrl = bgResponse?.background_image?.trim();
                 if (bgUrl) {
                     reloadTheme(
@@ -321,9 +332,9 @@ const ThemeChange = () => {
                 },
                 ''
             );
-            dispatch(fetchThemeSettings());
-            dispatch(fetchBackgroundImage());
-            dispatch(fetchApplicationTheme());
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage, { force: true });
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
             setSnackbarSeverity('success');
             setSnackbarMessage('Background image removed.');
             setSnackbarOpen(true);
@@ -360,10 +371,14 @@ const ThemeChange = () => {
     
     const normalizedRole = role ? role.toLowerCase() : '';
     const canAccessTheme = normalizedRole === 'superadmin' || normalizedRole === 'super admin' || normalizedRole === 'admin';
+    // FOFP marker palette is Superadmin-only; Admin keeps Background + heatmap pickers.
+    // Keep a 3-column grid so Admin's two cards stay the same width as Superadmin's.
+    const canEditFofpThemeColor =
+        normalizedRole === 'superadmin' || normalizedRole === 'super admin';
 
     useEffect(() => {
         if (!canAccessTheme) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate('/setting/manage-area-groups', { replace: true });
         }
     }, [canAccessTheme, navigate]);
 
@@ -379,80 +394,27 @@ const ThemeChange = () => {
     };
 
     return (
-        <Grid
-            container
-            sx={{
-                maxWidth: '100%',
-                borderRadius: '10px',
-                alignItems: 'flex-start',
-                p: '18px',
-                ml: '18px',
-            }}
+        <>
+        <CustomizedSettingsPageShell
+            sidebarItems={visibleSidebarItemsWithPaths}
+            NavigationComponent={(props) => <SettingsSidebar {...props} embedded />}
+            contentColor={contentColor}
         >
-            <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
-                <Typography
-                    variant="h6"
-                    sx={{
-                        color: muiTheme.palette.text.secondary,
-                        fontSize: 24,
-                        fontWeight: 600,
-                        letterSpacing: 0.5,
-                        mb: 1,
-                    }}
-                >
-                    Settings
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
-                    <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
-                </Box>
-            </Grid>
-
-            <Grid
-                item
-                xs={12}
-                md={2}
-                sx={{
-                    p: 0,
-                    ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp && !isTablet),
-                }}
-            >
-                <SettingsSidebar items={visibleSidebarItemsWithPaths} embedded />
-            </Grid>
-
-            <Grid
-                item
-                xs={12}
-                md={10}
-                sx={{
-                    backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
-                    p: 3,
-                    borderTopRightRadius: '10px',
-                    borderBottomRightRadius: '10px',
-                }}
-            >
+                <Box className="customized-theme-page" sx={customizedThemePageSx}>
                 <Box sx={{ margin: "1em", marginBottom: 0 }}>
                     <UiVariantSelector />
                 </Box>
                 <Box
-                    sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-                        columnGap: 3,
-                        rowGap: 2,
-                        alignItems: 'flex-start',
-                        margin: '1em',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                    }}
+                    className="theme-picker-cards-grid theme-picker-cards-grid--cols-3"
+                    sx={themePickerCardsGridSx}
                 >
                     {/* Theme Picker Card */}
-                    <Box sx={{ display: 'flex', minWidth: 0 }}>
-                        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <Box sx={themePickerCardCellSx}>
+                        <Box sx={themePickerCardColumnSx}>
                             <Typography variant="subtitle1" sx={{ ...themePickerTitleSx, visibility: 'hidden' }} aria-hidden>
                                 &nbsp;
                             </Typography>
-                            <Box className="color-picker-card" sx={{ backgroundColor: "white", padding: "1em", borderRadius: "1em", width: '100%' }}>
+                            <Box className="color-picker-card" sx={themePickerCardSx}>
                             {renderTabs(['Background', 'Content', 'Button'], activeThemeTab, setActiveThemeTab, themeColorMap, setSelectedThemeColor)}
                             <HexColorPicker
                                 colorMap={themeColorMap}
@@ -460,9 +422,9 @@ const ThemeChange = () => {
                                 selectedColor={selectedThemeColor}
                                 setSelectedColor={setSelectedThemeColor}
                                 activeTarget={activeThemeTab}
-                                width={200}
-                                height={220}
-                                hexRadius={8}
+                                width={CUSTOMIZED_THEME_PICKER_HEX.width}
+                                height={CUSTOMIZED_THEME_PICKER_HEX.height}
+                                hexRadius={CUSTOMIZED_THEME_PICKER_HEX.hexRadius}
                             />
                             <Box mt={2} display="flex" justifyContent="space-between" px={2} gap={2}>
                                 <Button
@@ -500,12 +462,12 @@ const ThemeChange = () => {
                     </Box>
 
                     {/* Heatmap Picker Card */}
-                    <Box sx={{ display: 'flex', minWidth: 0 }}>
-                        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <Box sx={themePickerCardCellSx}>
+                        <Box sx={themePickerCardColumnSx}>
                             <Typography variant="subtitle1" sx={{ ...themePickerTitleSx, visibility: 'hidden' }} aria-hidden>
                                 &nbsp;
                             </Typography>
-                            <Box className="color-picker-card" sx={{ backgroundColor: "white", padding: "1em", borderRadius: "1em", width: '100%' }}>
+                            <Box className="color-picker-card" sx={themePickerCardSx}>
                             {renderTabs(['Light', 'Occupancy', 'Energy'], activeHeatmapTab, setActiveHeatmapTab, heatmapColorMap, setSelectedHeatmapColor)}
                             <HexColorPicker
                                 colorMap={heatmapColorMap}
@@ -513,9 +475,9 @@ const ThemeChange = () => {
                                 selectedColor={selectedHeatmapColor}
                                 setSelectedColor={setSelectedHeatmapColor}
                                 activeTarget={activeHeatmapTab}
-                                width={200}
-                                height={220}
-                                hexRadius={8}
+                                width={CUSTOMIZED_THEME_PICKER_HEX.width}
+                                height={CUSTOMIZED_THEME_PICKER_HEX.height}
+                                hexRadius={CUSTOMIZED_THEME_PICKER_HEX.hexRadius}
                             />
                             <Box mt={2} display="flex" justifyContent="center">
                                 <Button
@@ -530,15 +492,17 @@ const ThemeChange = () => {
                         </Box>
                     </Box>
 
-                    <FofpThemeColorCard
-                        renderTabs={renderTabs}
-                        dynamicButtonColor={dynamicButtonColor}
-                        actionButtonLabel="#fff"
-                        onSaveMessage={(message) => {
-                            setSnackbarMessage(message);
-                            setSnackbarOpen(true);
-                        }}
-                    />
+                    {canEditFofpThemeColor && (
+                        <FofpThemeColorCard
+                            renderTabs={renderTabs}
+                            dynamicButtonColor={dynamicButtonColor}
+                            actionButtonLabel="#fff"
+                            onSaveMessage={(message) => {
+                                setSnackbarMessage(message);
+                                setSnackbarOpen(true);
+                            }}
+                        />
+                    )}
                 </Box>
                 <Box sx={{ mt: 4, p: 2 }}>
                     <Typography variant="subtitle1" fontWeight="bold" mb={1 } color={"white"}>
@@ -561,7 +525,7 @@ const ThemeChange = () => {
                     >
                         {backgroundImage ? (
                             <img
-                                src={backgroundImage}
+                                src={resolveThemeMediaUrl(backgroundImage)}
                                 alt="Background Preview"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
@@ -624,7 +588,8 @@ const ThemeChange = () => {
                         </Button>
                     </Box>
                 </Box>
-            </Grid>
+                </Box>
+        </CustomizedSettingsPageShell>
             <Snackbar
                 open={snackbarOpen}
                 autoHideDuration={3000}
@@ -639,7 +604,7 @@ const ThemeChange = () => {
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
-        </Grid >
+        </>
 
     );
 };

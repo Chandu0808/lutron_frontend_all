@@ -41,8 +41,8 @@ export function buildBasicEnergyWidgetRenderContext(orchestration, runtime) {
     widgetList,
     getWidgetTitle: widgets.getWidgetTitle,
     data: {
-      energyConsumption: widgets.memoizedEnergyConsumption,
-      energySavings: widgets.memoizedEnergySavings,
+      memoizedEnergyConsumption: widgets.memoizedEnergyConsumption,
+      memoizedEnergySavings: widgets.memoizedEnergySavings,
       savingsByStrategy,
       totalConsumptionByGroup,
       lightPowerDensity,
@@ -129,8 +129,8 @@ export function buildAdvancedEnergyWidgetRenderContext(orchestration, runtime) {
     widgetList,
     getWidgetTitle: widgets.getWidgetTitle,
     data: {
-      energyConsumption: widgets.memoizedEnergyConsumption,
-      energySavings: widgets.memoizedEnergySavings,
+      memoizedEnergyConsumption: widgets.memoizedEnergyConsumption,
+      memoizedEnergySavings: widgets.memoizedEnergySavings,
       savingsByStrategy,
       totalConsumptionByGroup,
       lightPowerDensity,

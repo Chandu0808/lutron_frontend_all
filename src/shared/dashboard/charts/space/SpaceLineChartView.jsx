@@ -64,7 +64,9 @@ export function SpaceLineChartView({
     const heightStyle =
       plotHeightStyle === 'flexFill'
         ? { height: '100%', minHeight: 0 }
-        : { height: '350px' };
+        : plotHeightStyle === 'basicFixed280'
+          ? { height: '320px' }
+          : { height: '350px' };
 
     return {
       ...heightStyle,

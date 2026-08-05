@@ -63,21 +63,27 @@ export function isFofpZonePanelHighlighted(zone, highlight, zonesInArea) {
   );
 }
 
-const normalizeZoneType = (type) => String(type || "").toLowerCase().trim();
+const isWhitening = (type) =>
+  ["whitening", "white tune", "whitetune", "white_tune"].includes(
+    (type || "").toLowerCase()
+  );
+const isDimmed = (type) => (type || "").toLowerCase() === "dimmed";
+const isSwitched = (type) => (type || "").toLowerCase() === "switched";
 
-/** Same ordering as HeatMap zonesToShow. */
+/** Same ordering as HeatMap buildSidebarZonesToShow. */
 export function buildZonesPanelList(zones) {
   if (!Array.isArray(zones)) return [];
-  const whiteTune = zones.filter((z) =>
-    ["whitening", "whitetune"].includes(normalizeZoneType(z.type))
-  );
-  const dimmed = zones.filter((z) => normalizeZoneType(z.type) === "dimmed");
-  const switched = zones.filter((z) => normalizeZoneType(z.type) === "switched");
-  return [...whiteTune, ...dimmed, ...switched];
+  const whiteTune = zones.filter((z) => isWhitening(z.type));
+  const dimmed = zones.filter((z) => isDimmed(z.type));
+  const switched = zones.filter((z) => isSwitched(z.type));
+  if (whiteTune.length > 0 || dimmed.length > 0) {
+    return [...whiteTune, ...dimmed];
+  }
+  return switched;
 }
 
 /**
- * Index of zone in the ordered sidebar list (whiteTune, dimmed, switched).
+ * Index of zone in the ordered sidebar list.
  *
  * @param {Array<{ id?: number, name?: string, type?: string }>} zones
  * @param {{ zoneId?: number, zoneName?: string }} highlight

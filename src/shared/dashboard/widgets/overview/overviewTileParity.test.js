@@ -134,6 +134,16 @@ describe('Overview tile theme resolution', () => {
     expect(theme.ringSizeSpace).toBe(146);
     expect(theme.scheduleNextLabel).toBe('Next event');
   });
+
+  it('advanced theme uses dashboard chart header text on dark cards', () => {
+    const theme = resolveOverviewMetricTileTheme({
+      themeVariant: OVERVIEW_THEME_VARIANTS.ADVANCED,
+    });
+    expect(theme.themeVariant).toBe(OVERVIEW_THEME_VARIANTS.ADVANCED);
+    expect(theme.titleStyle.color).toContain('dashboard-chart-header-text');
+    expect(theme.ringMode).toBe('fixed');
+    expect(theme.iconInTileLarge('primary.main').color).toBe('#ffb74d');
+  });
 });
 
 describe('Overview tile grid helpers', () => {

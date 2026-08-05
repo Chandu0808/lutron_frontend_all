@@ -22,6 +22,10 @@ import { fetchEmailConfigs } from '../../redux/slice/settingsslice/heatmap/group
 import { invokeValidatedEmailExportAction } from '../../../../shared/dashboard/export/emailExportGate';
 import { fetchProfile } from '../../redux/slice/auth/userlogin';
 import {
+  dispatchFetchActiveAlertsOnce,
+  dispatchFetchProfileOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards';
+import {
   Snackbar,
   Alert,
   useTheme,
@@ -211,13 +215,13 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
     // Only fetch alerts once on component mount to prevent multiple API calls
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      dispatch(fetchActiveAlerts());
+      dispatchFetchActiveAlertsOnce(dispatch, fetchActiveAlerts);
     }
   }, [dispatch]);
 
-  // Fetch user profile on component mount
+  // Profile is owned by Topbar; join in-flight / skip if already loaded
   useEffect(() => {
-    dispatch(fetchProfile());
+    dispatchFetchProfileOnce(dispatch, fetchProfile);
   }, [dispatch]);
 
   // Handle download success/error notifications

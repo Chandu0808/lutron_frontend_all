@@ -48,6 +48,18 @@ export const dashboardSelectMenuProps = {
   },
 };
 
+/** Combined Energy / Space duration filter — extra gap under the closed select field. */
+export const dashboardCombinedDurationSelectMenuProps = {
+  ...dashboardSelectMenuProps,
+  PaperProps: {
+    ...dashboardSelectMenuProps.PaperProps,
+    sx: {
+      ...dashboardSelectMenuProps.PaperProps.sx,
+      mt: 1.5,
+    },
+  },
+};
+
 export const dashboardSelectFieldSx = {
   width: '100%',
   fontSize: 12,

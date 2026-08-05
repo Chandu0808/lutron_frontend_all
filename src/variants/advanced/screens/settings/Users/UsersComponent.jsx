@@ -159,7 +159,7 @@ export default function UsersComponent() {
     // Don't redirect if userProfile hasn't loaded yet (checking for both undefined and null as initial state)
     // Only redirect if we've confirmed userProfile exists but doesn't have permission
     if (role && userProfile !== undefined && !canViewUsers()) {
-      navigate('/manage-area-groups', { replace: true });
+      navigate('/setting/manage-area-groups', { replace: true });
     }
   }, [role, userProfile, navigate]);
 

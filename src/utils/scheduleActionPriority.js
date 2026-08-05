@@ -32,27 +32,15 @@ export function stripActionSource(action) {
 }
 
 /**
- * Merge a common action into a location's actions without overwriting individual
- * actions of the same type.
+ * Merge a common action into a location's actions.
+ * "Apply to All" replaces any existing action of the same type (individual or common)
+ * so modify-flow common Light Off/On updates previously saved light status.
  */
 export function applyCommonActionToActions(existingActions, commonAction) {
   const taggedCommon = withCommonSource(commonAction);
   const commonType = commonAction.type;
   const existing = existingActions || [];
 
-  const withoutOldCommonOfType = existing.filter(
-    (action) => !(action.source === ACTION_SOURCE.COMMON && action.type === commonType)
-  );
-
-  const hasIndividualOfType = withoutOldCommonOfType.some(
-    (action) =>
-      (action.source || ACTION_SOURCE.INDIVIDUAL) === ACTION_SOURCE.INDIVIDUAL &&
-      action.type === commonType
-  );
-
-  if (hasIndividualOfType) {
-    return withoutOldCommonOfType;
-  }
-
-  return [...withoutOldCommonOfType, taggedCommon];
+  const withoutSameType = existing.filter((action) => action.type !== commonType);
+  return [...withoutSameType, taggedCommon];
 }

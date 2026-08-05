@@ -30,7 +30,8 @@ export const GOLD_THEME_LIGHT_SURFACE_TEXT = '#2c2820';
 
 /** Theme 3 — fixed slate page/footer gradient (Background anchor #58687B). */
 export const THEME_3_PAGE_GRADIENT =
-  'linear-gradient(180deg, #58687B 0%, #6F8096 15%, #859AB7 45%, #AAB8CD 75%, #D7D8E5 100%)';
+  'radial-gradient(circle at 88% 6%, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.14) 32%, transparent 62%), ' +
+  'linear-gradient(135deg, #58687B 0%, #6F8096 22%, #859AB7 48%, #C8CED9 72%, #E8E9F0 100%)';
 export const THEME_3_BACKGROUND_ANCHOR = '#58687B';
 /** Slate pill/button gradient for Theme 3 (matches page anchor tones). */
 export const THEME_3_TAB_PILL_GRADIENT =
@@ -69,6 +70,9 @@ export const THEME_BACKGROUND_PRESETS = [
   { id: 'theme4', label: 'Brown', color: THEME_4_BACKGROUND_ANCHOR },
 ];
 
+/** Advanced Theme Reset — second background preset swatch (Blue). */
+export const ADVANCED_THEME_RESET_BACKGROUND_SWATCH = THEME_BACKGROUND_PRESETS[1].color;
+
 /** Settings shell panels (all settings routes). */
 export const SETTINGS_PANEL_OUTER_BG = 'var(--settings-panel-outer-bg, #ffffff)';
 export const SETTINGS_PANEL_INNER_BG = 'var(--settings-panel-inner-bg, #ffffff)';
@@ -84,6 +88,9 @@ export const CARD_BACKGROUND =
 // export const CARD_BORDER = '1px solid rgba(255, 255, 255, 0.08)';
 export const CARD_BORDER = 'var(--premium-card-border, 1px solid #ccc)';
 
+/** Inner plot border for advanced space charts — matches ChartLoader shell while loading. */
+export const ADVANCED_SPACE_CHART_PLOT_BORDER = '1px solid #ddd';
+
 // Soft, light drop shadow for refined depth without a heavy black halo
 // (matches the Space Utilization "Instant Occupancy Count" reference look).
 //
@@ -93,7 +100,7 @@ export const CARD_SHADOW = 'var(--premium-card-shadow, 0 2px 4px rgba(0, 0, 0, 0
 
 /** Dashboard chart tooltips / loading shells (theme via CSS variables). */
 export const DASHBOARD_CHART_TOOLTIP_STYLE = {
-  backgroundColor: 'var(--dashboard-chart-tooltip-bg, #3d4a5c)',
+  background: 'var(--dashboard-chart-tooltip-bg, #3d4a5c)',
   border: '1px solid var(--dashboard-chart-tooltip-border-color, #ffffff)',
   borderRadius: '4px',
   color: 'var(--dashboard-chart-tooltip-text, #ffffff)',

@@ -16,9 +16,16 @@
  */
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
-import { useDispatch, useSelector, shallowEqual } from 'react-redux'
+import { useDispatch, useSelector, shallowEqual, useStore } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { SHOW_OVERVIEW_TAB } from '../../config/featureFlags'
+import {
+  SHOW_OVERVIEW_TAB,
+  HIDE_DASHBOARD_VIEW_TABS,
+  ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS,
+} from '../../config/featureFlags'
+import { ADVANCED_VIEWPORT_GUTTER_PX } from '../../utils/advancedViewportGutters'
+import AdvancedEnergySortableSection from './AdvancedEnergySortableSection'
+import { useAdvancedDashboardSortableSensors } from '../../hooks/useAdvancedDashboardSortableSensors'
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -36,10 +43,15 @@ import {
 import ChartExportButton from '../../components/ChartExportButton'
 import NativeDateInput from '../../components/NativeDateInput'
 import {
-  EnergyExportMenu,
+  EnergyChartExportMenuControl,
   resolveAdvancedEnergyExportMenuPreset,
   ADVANCED_EXPORT_MENU_PANEL_CLASS,
 } from '../../../../shared/dashboard/export/components'
+import {
+  DEFAULT_CONSUMPTION_EXPORT_KEYS,
+  DEFAULT_SAVINGS_EXPORT_KEYS,
+  createAdvancedGroupExportKeys,
+} from '../../../../shared/dashboard/container/hooks/exportMenuState'
 import {
   LineChart,
   Line,
@@ -139,9 +151,14 @@ import { getDashboardOverview, selectDashboardOverview, selectDashboardOverviewL
 import { selectProfile, selectProfileLoading, fetchProfile } from '../../redux/slice/auth/userlogin'
 import SpaceUtilization from './SpaceUtilization'
 import DashboardOverview from './DashboardOverview'
+import ConsumptionSavingsCombinedChart from '../../../basic/screens/dashboard/ConsumptionSavingsCombinedChart'
+import { CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS } from '../../../../shared/dashboard/widgets/energy/consumptionSavingsCombinedChrome'
+import DashboardDurationFilterBar from '../../../basic/screens/dashboard/DashboardDurationFilterBar'
+import SavingsByStrategyWidget from '../../../../shared/dashboard/widgets/SavingsByStrategyWidget'
+import { consumptionSavingMergedData as sharedConsumptionSavingMergedData } from '../../../../shared/dashboard/charts/transforms/consumptionSavingMergedData'
 
 import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert, Typography, Button, FormControl, MenuItem, Select } from '@mui/material'; // Add useTheme and useMediaQuery
-import { dashboardSelectFieldSx, dashboardSelectMenuProps } from '../../utils/dashboardSelectMenuProps';
+import { dashboardSelectFieldSx, dashboardSelectMenuProps, dashboardCombinedDurationSelectMenuProps } from '../../utils/dashboardSelectMenuProps';
 import { AddBoxOutlined, IndeterminateCheckBoxOutlined } from '@mui/icons-material';
 import Alerts from './Alerts'
 import {
@@ -152,8 +169,15 @@ import {
   setSelectedAlertType,
 } from '../../redux/slice/dashboard/alertsSlice'
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice'
-import { UseAuth } from '../../customhooks/UseAuth'
-import { fetchRenameWidgets, getWidgetList, fetchEmailConfigs } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
+import { useSlidingTabIndicator } from '../../hooks/useSlidingTabIndicator'
+import { fetchRenameWidgets, getWidgetList, fetchEmailConfigs, fetchWidgetConfiguration, saveWidgetVisibility, selectWidgetConfiguration, selectWidgetConfigurationStatus, fetchCustomGraphs, selectCustomGraphs, fetchDashboardChartOrder, saveDashboardChartOrder, selectDashboardChartOrder, selectDashboardChartOrderStatus } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { useCustomGraphDashboardData } from '../../../../shared/dashboard/customGraphs/useCustomGraphDashboardData'
+import { isCustomGraphVisible } from '../../../../shared/dashboard/customGraphs/customGraphVisibility'
+import { CUSTOM_GRAPH_VARIANTS, CUSTOM_GRAPHS_UPDATED_EVENT } from '../../../../shared/dashboard/customGraphs/customGraphConstants'
+import { buildCustomGraphWidgetKey } from '../../../../shared/dashboard/customGraphs/customGraphStorage'
+import EnergyCustomGraphCard from '../../../customized/components/dashboard/EnergyCustomGraphCard'
+import { BaseUrl } from '../../BaseUrl'
 import { getThemeButtonColor, usesGoldPageTheme } from '../../utils/themePageBackground';
 import {
   buildThemeAwareChartPalette,
@@ -171,6 +195,15 @@ import {
   parseDateFromState,
 } from '../../../../shared/dashboard/utils/dashboardDateState'
 import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
+import {
+  dispatchFetchAreaGroupsOnce,
+  dispatchFetchAlertTypesOnce,
+  dispatchFetchCustomGraphsOnce,
+  dispatchFetchFloorsOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchWidgetConfigurationOnce,
+  dispatchFetchWidgetTitlesOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards'
 import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
 import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
 import { useAreaTreeSelection } from '../../../../shared/dashboard/hooks/useAreaTreeSelection'
@@ -238,26 +271,34 @@ function Dashboard() {
   // to filter floors based on user permissions
 
   const dispatch = useDispatch()
+  const store = useStore()
   const theme = useTheme()
   const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
+  const isTabletViewport = useMediaQuery(theme.breakpoints.between('sm', 'lg'))
   const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'))
   const is2XLargeScreen = useMediaQuery('(min-width: 1600px)')
 
   const chartHeaderStyle = useMemo(() => ({
     margin: 0,
-    color: '#fff',
+    color: 'var(--dashboard-chart-header-text, #ffffff)',
     fontWeight: 600,
     fontFamily: 'inherit',
     fontSize: isLargeScreen ? '18px' : '16px'
   }), [isLargeScreen])
 
   // User authentication
-  const { user } = UseAuth()
+  const { user, role: currentUserRole } = UseAuth()
+  /** Superadmin may rearrange/resize Energy cards; Admin/Operator see shared layout only. */
+  const energyLayoutLocked = !isSuperadminRole(currentUserRole)
+  const dashboardChartOrder = useSelector(selectDashboardChartOrder)
+  const dashboardChartOrderStatus = useSelector(selectDashboardChartOrderStatus)
 
   const alertTypes = useSelector(selectAlertTypes)
   const selectedAlertType = useSelector(selectSelectedAlertType)
   const widgetList = useSelector(getWidgetList)
+  const widgetConfiguration = useSelector(selectWidgetConfiguration)
+  const widgetConfigurationStatus = useSelector(selectWidgetConfigurationStatus)
 
   // Local state for multi-select dropdown
   const [showDropdown, setShowDropdown] = useState(false)
@@ -341,9 +382,9 @@ function Dashboard() {
     setShowAreaDropdown,
   });
 
-  // Fetch user profile on component mount
+  // Fetch user profile on component mount (Topbar may already own this)
   useEffect(() => {
-    dispatch(fetchProfile());
+    dispatchFetchProfileOnce(dispatch, fetchProfile);
   }, [dispatch]);
 
   // Set default behavior to show data for all areas
@@ -443,7 +484,13 @@ function Dashboard() {
   // Refs + state for the sliding tab-indicator pill
   const tabsContainerRef = useRef(null)
   const tabRefs = useRef({})
-  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0, ready: false })
+  const tabIndicator = useSlidingTabIndicator({
+    activeKey: activeTab,
+    tabRefs,
+    containerRef: tabsContainerRef,
+    enabled: !HIDE_DASHBOARD_VIEW_TABS && activeTab !== 'overview',
+    layoutDeps: [isLargeScreen, isMediumScreen],
+  })
 
   // Keep dashboard tab synced with URL path for deep links and refresh.
   useEffect(() => {
@@ -453,41 +500,11 @@ function Dashboard() {
     }
   }, [location.pathname, activeTab, getTabFromPath])
 
-  // Position the sliding tab-indicator pill under the active tab.
-  // Re-measures whenever the active tab or viewport size changes.
-  useLayoutEffect(() => {
-    if (activeTab === 'overview') return
-    const measure = () => {
-      const containerEl = tabsContainerRef.current
-      const activeEl = tabRefs.current[activeTab]
-      if (!containerEl || !activeEl) return false
-      const left = activeEl.offsetLeft
-      const width = activeEl.offsetWidth
-      if (width <= 0) return false
-      setTabIndicator({ left, width, ready: true })
-      return true
-    }
-    if (measure()) return
-    // Fallback: retry on next frame if refs/layout weren't ready yet
-    const rafId = requestAnimationFrame(() => { measure() })
-    return () => cancelAnimationFrame(rafId)
-  }, [activeTab])
-
-  // Re-measure indicator on window resize so it stays under the active tab on viewport changes
+  // Overview has no chart APIs — never leave the global loader stuck from other tabs.
   useEffect(() => {
-    const handleResize = () => {
-      if (activeTab === 'overview') return
-      const activeEl = tabRefs.current[activeTab]
-      if (!activeEl) return
-      setTabIndicator({
-        left: activeEl.offsetLeft,
-        width: activeEl.offsetWidth,
-        ready: true,
-      })
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [activeTab])
+    if (activeTab !== 'overview') return
+    dispatch(setGlobalLoading(false))
+  }, [activeTab, dispatch])
 
   // Fetch and auto-refresh dashboard overview when Overview tab is active
   useEffect(() => {
@@ -544,41 +561,28 @@ function Dashboard() {
     setFilterKey(prev => prev + 1)
   }, [focusAlertFromLocation, activeTab])
 
-  // Close area tree when clicking outside (including tabs and anywhere else)
+  // Close area dropdown / floor tree when clicking outside (capture phase — dashboard shell uses stopPropagation on click).
   useEffect(() => {
+    if (!showAreaDropdown) return;
+
     const handleClickOutside = (event) => {
-      // If area tree is open, check if click is outside
+      if (areaDropdownRef.current?.contains(event.target)) return;
+
+      setShowAreaDropdown(false);
       if (expandedFloorId !== null) {
-        // Check if click is inside the entire area dropdown
-        const isInsideDropdown = areaDropdownRef.current && areaDropdownRef.current.contains(event.target);
-
-        // If click is completely outside the dropdown, close everything immediately
-        if (!isInsideDropdown) {
-          setExpandedFloorId(null);
-          setExpandedNodes(new Set());
-          if (showAreaDropdown) {
-            setShowAreaDropdown(false);
-          }
-          return;
-        }
-
-        // If click is inside dropdown, don't close - let the user interact with the tree
-        // Only close when clicking outside the dropdown
+        setExpandedFloorId(null);
+        setExpandedNodes(new Set());
       }
     };
 
-    // Add event listener when area tree is open
-    if (expandedFloorId !== null) {
-      // Use setTimeout to avoid immediate closure when opening the tree
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-      }, 100);
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside, true);
+    }, 0);
 
-      return () => {
-        clearTimeout(timeoutId);
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside, true);
+    };
   }, [expandedFloorId, showAreaDropdown]);
 
   const [lightingUnit, setLightingUnit] = useState('Watt / Sq ft') // Add this for lighting power density unit
@@ -614,6 +618,12 @@ function Dashboard() {
     dispatch,
     showOverviewTab: SHOW_OVERVIEW_TAB,
     widgetList,
+    widgetConfiguration,
+    widgetConfigurationStatus,
+    role: currentUserRole,
+    saveWidgetVisibility,
+    saveDashboardChartOrder,
+    energyLayoutLocked,
     energyConsumption,
     energySavings,
     energyConsumptionLoading,
@@ -663,7 +673,15 @@ function Dashboard() {
   })
 
   const {
-    visibility: { showOverviewTab },
+    visibility: {
+      showOverviewTab,
+      isWidgetVisible,
+      setEnergyCardOrder,
+      writeEnergyCardOrder,
+      setEnergyCardSpan,
+      writeEnergyCardSpan,
+      hydrateEnergyLayoutFromApi,
+    },
     widgets: {
       chartLoading,
       setChartLoading,
@@ -677,6 +695,7 @@ function Dashboard() {
       savingsColors,
       consumptionIsLoading,
       savingsIsLoading,
+      embeddedSavingsByStrategyLoading,
       startEnergyTabLoading,
       completeEnergyTabLoading,
       planEnergyTabApiCalls,
@@ -686,6 +705,7 @@ function Dashboard() {
       getCurrentDateParameters,
       calculateDateParameters,
       calculateCurrentDateParameters,
+      energyCustomNeedsDates,
       handlePrevious,
       handleNext,
       getCurrentPeriodText,
@@ -717,7 +737,7 @@ function Dashboard() {
   // Fetch alert options/data when Alerts tab is active
   useEffect(() => {
     if (activeTab === 'alerts') {
-      dispatch(fetchAlertTypes())
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes)
       // Note: fetchActiveAlerts is handled by the Alerts component itself
     }
   }, [activeTab, dispatch])
@@ -725,9 +745,27 @@ function Dashboard() {
   // Fetch rename widgets when Dashboard mounts (only if not already loaded)
   useEffect(() => {
     if (!widgetList || (Array.isArray(widgetList) && widgetList.length === 0) || (widgetList && !widgetList.titles)) {
-      dispatch(fetchRenameWidgets())
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets)
     }
   }, [dispatch, widgetList])
+
+  useEffect(() => {
+    dispatch(fetchDashboardChartOrder())
+  }, [dispatch])
+
+  useEffect(() => {
+    if (dashboardChartOrderStatus !== 'succeeded') return
+    const blob = dashboardChartOrder?.advanced_dashboard_order
+    if (blob && typeof hydrateEnergyLayoutFromApi === 'function') {
+      hydrateEnergyLayoutFromApi(blob)
+    }
+  }, [dashboardChartOrder, dashboardChartOrderStatus, hydrateEnergyLayoutFromApi])
+
+  useEffect(() => {
+    if (widgetConfigurationStatus === 'idle') {
+      dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration)
+    }
+  }, [dispatch, widgetConfigurationStatus])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -741,24 +779,6 @@ function Dashboard() {
     return () => document.removeEventListener('click', handleClickOutside, true)
   }, [])
 
-  // Close area dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Only handle if dropdown is open
-      if (showAreaDropdown && areaDropdownRef.current && !areaDropdownRef.current.contains(event.target)) {
-        // Close dropdown and expanded tree when clicking outside
-        setShowAreaDropdown(false);
-        if (expandedFloorId !== null) {
-          setExpandedFloorId(null);
-          setExpandedNodes(new Set());
-        }
-      }
-    }
-    // Use passive listener to prevent flickering
-    document.addEventListener('click', handleClickOutside, { passive: true })
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [expandedFloorId, showAreaDropdown])
-
   const handleTypeToggle = (type) => {
     applyAlertTypeToggle({
       type,
@@ -771,10 +791,8 @@ function Dashboard() {
   // Note: The backend automatically filters floors based on user permissions
   // Operators will only receive floors they have access to
   useEffect(() => {
-    // if (floors.length === 0 && floorStatus !== 'loading') {
-    dispatch(fetchFloors())
-    // }
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length))
+  }, [dispatch, floors?.length])
 
   // Clear dashboard data and set default duration when component mounts
   // This ensures each user starts with a clean state
@@ -787,7 +805,6 @@ function Dashboard() {
   }, [dispatch]) // Remove selectedDuration from dependencies to prevent infinite loop
 
   // Get current user role for floor filtering
-  const { role: currentUserRole } = UseAuth()
   const isOperator = currentUserRole === 'Operator'
 
   // Function to get available floors based on user permissions
@@ -822,6 +839,7 @@ function Dashboard() {
 
   // Track if we've done the initial reload on login
   const hasInitialReloadRef = useRef(false);
+  const loadAllAreasInFlightRef = useRef(false);
 
   // Load all areas from all floors when floors are loaded
   useEffect(() => {
@@ -871,6 +889,9 @@ function Dashboard() {
   // Function to load all areas from all floors (only accessible floors for operators)
   const loadAllAreasFromAllFloors = async () => {
     try {
+      if (loadAllAreasInFlightRef.current) {
+        return;
+      }
       if (
         shouldSkipLoadAllAreas({
           allAreasLoaded,
@@ -884,12 +905,13 @@ function Dashboard() {
         return;
       }
 
+      loadAllAreasInFlightRef.current = true;
       let allAreaIds = [];
 
       for (const floor of getAvailableFloors()) {
         const result = await dispatch(getLeafByFloorID(floor.id));
 
-        if (result.payload && (result.payload.tree || result.payload.areas)) {
+        if (result?.payload && (result.payload.tree || result.payload.areas)) {
           const processed = processFloorPayloadForAreaLoad({
             payload: result.payload,
             floorId: floor.id,
@@ -903,6 +925,8 @@ function Dashboard() {
       setAllAreasLoaded(true);
     } catch (error) {
       // Error loading all areas
+    } finally {
+      loadAllAreasInFlightRef.current = false;
     }
   }
 
@@ -1035,7 +1059,7 @@ function Dashboard() {
   // Fetch area groups on component mount
   useEffect(() => {
     if (!areaGroups) {
-      dispatch(fetchAreaGroups());
+      dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups);
     }
   }, [dispatch, areaGroups])
 
@@ -1300,6 +1324,38 @@ function Dashboard() {
     isNavigating,
   });
 
+  const customGraphs = useSelector(selectCustomGraphs);
+
+  useEffect(() => {
+    if (!ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS || activeTab !== 'energy') return undefined;
+    dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs);
+    const onUpdate = () => dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs, { force: true });
+    window.addEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate);
+  }, [activeTab, dispatch]);
+
+  const energyCustomGraphs = useMemo(
+    () =>
+      ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS && activeTab === 'energy'
+        ? (Array.isArray(customGraphs) ? customGraphs : []).filter(
+            (g) =>
+              String(g?.page || '').toLowerCase() === 'energy' &&
+              isCustomGraphVisible(CUSTOM_GRAPH_VARIANTS.advanced, 'energy', g?.id, true)
+          )
+        : [],
+    [customGraphs, activeTab]
+  );
+
+  const { customGraphData, customGraphLoading, customGraphError } = useCustomGraphDashboardData({
+    customGraphs: energyCustomGraphs,
+    apiParams: activeTab === 'energy' ? apiParams : null,
+    apiParamsKey: activeTab === 'energy' ? apiParamsString : '',
+    dispatch,
+    store,
+    baseUrlClient: BaseUrl,
+    dispatchThunks: false,
+  });
+
   // Add request cancellation to prevent race conditions
   const abortControllerRef = useRef(null);
   const debounceTimeoutRef = useRef(null);
@@ -1381,6 +1437,10 @@ function Dashboard() {
   const unifiedApiParamsRef = useRef(null);
   const lastApiParamsStringRef = useRef(null);
   const lastActiveTabRef = useRef(null);
+  // Skip Space/charts refetch on tab revisit when filters unchanged (stops widget flicker)
+  const spaceChartsLoadedParamsRef = useRef(null);
+  // Skip Energy refetch on tab revisit when filters unchanged
+  const energyLoadedParamsRef = useRef(null);
 
   // Refs for batching loading state updates to prevent line chart re-renders
   const pendingLoadingUpdatesRef = useRef(new Set());
@@ -1397,17 +1457,29 @@ function Dashboard() {
 
     // CRITICAL FIX: Only run if apiParams or activeTab actually changed
     // This prevents re-running when donut chart loading states update
-    if (lastApiParamsStringRef.current === apiParamsString && lastActiveTabRef.current === activeTab) {
+    const paramsUnchanged = lastApiParamsStringRef.current === apiParamsString;
+    const tabUnchanged = lastActiveTabRef.current === activeTab;
+    if (paramsUnchanged && tabUnchanged) {
       return;
     }
+
+    // Tab-only switch (Energy ↔ Space ↔ Alerts): keep chrome stable — no global wipe.
+    // Filter/duration changes still use the full global loader below.
+    const isTabOnlySwitch = paramsUnchanged && !tabUnchanged;
 
     // Update refs to track current state
     lastApiParamsStringRef.current = apiParamsString;
     lastActiveTabRef.current = activeTab;
 
     // Prevent duplicate API calls by checking if we're already in the middle of a request
-    // But allow reload if reloadTrigger has changed (automatic reload on login)
-    if (isApiCallInProgressRef.current && reloadTrigger === 0) {
+    // But allow reload if reloadTrigger has changed (automatic reload on login).
+    // Tab-only switches must always proceed — Dashboard no longer remounts, so a
+    // stuck in-progress flag from the previous tab would block Energy↔Space↔Alerts.
+    if (isApiCallInProgressRef.current && reloadTrigger === 0 && !isTabOnlySwitch) {
+      if (activeTab === 'overview') {
+        setGlobalLoading(false);
+        isApiCallInProgressRef.current = false;
+      }
       return;
     }
 
@@ -1417,8 +1489,11 @@ function Dashboard() {
     // CRITICAL FIX: Only show global loader when we have valid API parameters
     // Don't show loader when apiParams is null (no selection made yet)
     // Allow API calls with no parameters (full project data) but don't show loader for initial load
-    if (apiParams && (apiParams.areaIds || apiParams.floorIds)) {
+    // Do not toggle global loader on tab-only switches (prevents whole-page flicker).
+    if (!isTabOnlySwitch && apiParams && (apiParams.areaIds || apiParams.floorIds)) {
       setGlobalLoading(true);
+    } else if (isTabOnlySwitch && (activeTab === 'alerts' || activeTab === 'overview')) {
+      setGlobalLoading(false);
     }
 
     // Only trigger API calls when tab changes or when we have new parameters
@@ -1438,6 +1513,13 @@ function Dashboard() {
 
         // Call APIs for active tab only - WAIT FOR ALL CHARTS BEFORE SHOWING
         if (activeTab === 'energy') {
+          // Revisit with same filters: keep Energy widgets as-is (no loading wipe).
+          if (isTabOnlySwitch && energyLoadedParamsRef.current === apiParamsString) {
+            dispatch(setGlobalLoading(false));
+            isApiCallInProgressRef.current = false;
+            return;
+          }
+
           const {
             shouldCallUnified,
             nextUnifiedApiParamsRef,
@@ -1458,18 +1540,27 @@ function Dashboard() {
           }
 
           apiCalls.push(
-            { name: 'totalConsumptionByGroup', promise: dispatch(fetchTotalConsumptionByGroup(apiParams)) },
+            {
+              name: 'totalConsumptionByGroup',
+              promise: dispatch(fetchTotalConsumptionByGroup(apiParams)),
+            },
             { name: 'lightPowerDensity', promise: dispatch(fetchLightPowerDensity(apiParams)) },
             { name: 'savingsByStrategy', promise: dispatch(fetchSavingsByStrategy(apiParams)) }
           );
 
-          startEnergyTabLoading(shouldCallUnified);
+          // Only show energy loaders when filters/params changed — not on tab revisit.
+          if (!isTabOnlySwitch) {
+            startEnergyTabLoading(shouldCallUnified);
+          }
 
           const completedApis = new Set();
 
           const checkAllReady = () => {
             if (completedApis.size === totalApis) {
-              completeEnergyTabLoading(shouldCallUnified);
+              if (!isTabOnlySwitch) {
+                completeEnergyTabLoading(shouldCallUnified);
+              }
+              dispatch(setGlobalLoading(false));
             }
           };
 
@@ -1487,8 +1578,13 @@ function Dashboard() {
 
           Promise.allSettled(apiCalls.map((apiCall) => apiCall.promise))
             .then(() => {
+              energyLoadedParamsRef.current = apiParamsString;
+              dispatch(setGlobalLoading(false));
               isApiCallInProgressRef.current = false;
             });
+        } else if (activeTab === 'alerts') {
+          dispatch(setGlobalLoading(false));
+          isApiCallInProgressRef.current = false;
         } else if (activeTab === 'space-utilization') {
           // Space Utilization APIs - PARALLEL EXECUTION FOR MAXIMUM SPEED
           const spaceUtilizationApis = [
@@ -1529,6 +1625,14 @@ function Dashboard() {
               isApiCallInProgressRef.current = false;
             });
         } else if (activeTab === 'charts') {
+          // Revisit with same filters: keep existing Redux data, do not refetch
+          // (refetch + loaders caused every Space Utilization widget to flash).
+          if (isTabOnlySwitch && spaceChartsLoadedParamsRef.current === apiParamsString) {
+            dispatch(setGlobalLoading(false));
+            isApiCallInProgressRef.current = false;
+            return;
+          }
+
           // Charts tab - Instant Occupancy Count, Occupancy By Group from logs, and Space Utilization Per Area from logs APIs
           const chartsApis = [
             { name: 'instantOccupancyCount', promise: dispatch(fetchInstantOccupancyCount(apiParams)) },
@@ -1536,13 +1640,15 @@ function Dashboard() {
             { name: 'spaceUtilizationPerFromLogs', promise: dispatch(fetchSpaceUtilizationPerFromLogs(apiParams)) }
           ];
 
-          // Set loading states for all charts APIs
-          setChartLoading(prev => ({
-            ...prev,
-            instantOccupancyCount: true,
-            occupancyByGroupFromLogs: true,
-            spaceUtilizationPerFromLogs: true
-          }));
+          // Per-chart loaders only when filters changed; skip blanket loading on tab revisit
+          if (!isTabOnlySwitch) {
+            setChartLoading(prev => ({
+              ...prev,
+              instantOccupancyCount: true,
+              occupancyByGroupFromLogs: true,
+              spaceUtilizationPerFromLogs: true
+            }));
+          }
 
           // Execute all charts API calls in parallel but handle each completion individually
           chartsApis.forEach(api => {
@@ -1560,13 +1666,18 @@ function Dashboard() {
           // Use Promise.allSettled to reset global states when all calls complete
           Promise.allSettled(chartsApis.map(api => api.promise))
             .then(() => {
+              spaceChartsLoadedParamsRef.current = apiParamsString;
               // Reset global states when all calls complete
               setGlobalLoading(false);
               isApiCallInProgressRef.current = false;
             });
+        } else {
+          dispatch(setGlobalLoading(false));
+          isApiCallInProgressRef.current = false;
         }
       } catch (error) {
-        // Handle errors silently
+        dispatch(setGlobalLoading(false));
+        isApiCallInProgressRef.current = false;
       }
     };
 
@@ -1602,6 +1713,8 @@ function Dashboard() {
         // Force a data reload by clearing cache and resetting flags
         dispatch(clearDataCache());
         isApiCallInProgressRef.current = false;
+        spaceChartsLoadedParamsRef.current = null;
+        energyLoadedParamsRef.current = null;
 
         // Trigger reload by incrementing reloadTrigger
         // This will cause the useEffect that handles apiParams to run again
@@ -1615,6 +1728,10 @@ function Dashboard() {
   // Remove the filterData and related mock data logic entirely
 
   const handleTabChange = (tab) => {
+    if (activeTabRef.current === tab && location.pathname === getPathFromTab(tab)) {
+      return;
+    }
+
     activeTabRef.current = tab;
     // Close area tree and dropdown when switching tabs
     if (expandedFloorId !== null) {
@@ -1629,63 +1746,15 @@ function Dashboard() {
 
     const nextPath = getPathFromTab(tab);
     if (location.pathname !== nextPath) {
-      navigate(nextPath);
+      navigate(nextPath, { replace: true });
     }
 
-    // Show global loader immediately when tab changes
-    setGlobalLoading(true);
+    // Do not setGlobalLoading / clearDataCache / wipe all chartLoading here —
+    // that remounted-style flash on Energy ↔ Space ↔ Alerts. The active-tab
+    // fetch effect already loads only the target tab's APIs and chart loaders.
 
-    // Tab switching state removed to prevent flickering
-
-    // Reset API call progress flag to allow new API calls for the new tab
+    // Reset API call progress flag so the active-tab fetch effect can run
     isApiCallInProgressRef.current = false;
-
-    // Clear data cache when switching tabs to prevent stale data
-    dispatch(clearDataCache());
-
-    // Set loading states for all charts when switching tabs
-    setChartLoading({
-      energyConsumption: true,
-      energySavings: true,
-      peakMinConsumption: true,
-      totalConsumptionByGroup: true,
-      lightPowerDensity: true,
-      occupancyCount: true,
-      occupancyByGroup: true,
-      spaceUtilizationPerArea: true,
-      // peakMinOccupancy: true, // Commented out - not using peak min max API for space utilization
-      savingsByStrategy: true
-    });
-
-    // Trigger API calls for the new tab if we have the required parameters
-    // Use selected areas if available, otherwise use all accessible areas from floors
-    let areasToUse = selectedAreas;
-    let floorsToUse = selectedFloorIds;
-
-    // Always proceed with API calls if we have duration - let backend handle area filtering
-    if (selectedDuration) {
-      // Don't call APIs for custom until both dates are set
-      if (selectedDuration === 'custom' && (!customStartDate || !customEndDate)) {
-        return;
-      }
-
-      // Calculate date parameters for current date (not navigated date)
-      const { startDate, endDate } = calculateCurrentDateParameters();
-
-      // Use the selectedDuration directly - let the Redux slice handle the time_range mapping
-      const params = {
-        // CORRECT LOGIC: If floor is selected, send ONLY floorIds, NOT areaIds
-        areaIds: (floorsToUse && floorsToUse.length > 0) ? null : (areasToUse.length > 0 ? areasToUse : null),
-        floorIds: floorsToUse && floorsToUse.length > 0 ? floorsToUse : null,
-        timeRange: selectedDuration,
-        startDate: startDate,
-        endDate: endDate,
-        isNavigating: false // Reset navigation flag when switching tabs
-      };
-
-      // Don't call APIs directly here - let the useEffect handle it
-      // This prevents multiple API calls that overwrite the complete data
-    }
   }
 
   const handleDashboardTabKeyDown = (event) => {
@@ -1851,6 +1920,58 @@ function Dashboard() {
     [selectedDuration, selectedAreas, areaTree]
   );
 
+  const combinedConsumptionSavingUnit = useMemo(
+    () => energyConsumption?.unit || energySavings?.unit || '',
+    [energyConsumption, energySavings]
+  );
+
+  const consumptionSavingMergedData = useMemo(() => {
+    const consumptionSeries = energyConsumption
+      ? transformDataForCharts(energyConsumption, 'consumption')
+      : [];
+    const savingsSeries = energySavings ? transformDataForCharts(energySavings, 'other') : [];
+    return sharedConsumptionSavingMergedData(consumptionSeries, savingsSeries);
+  }, [energyConsumption, energySavings, transformDataForCharts]);
+
+  const ENERGY_LIGHT_FULL_CARD_HEIGHT_PX = 420 + 228;
+
+  const hideAdvancedHeaderDuration =
+    (activeTab === 'energy' && isWidgetVisible('consumption_saving')) ||
+    (activeTab === 'charts' && isWidgetVisible('instant_utilization_combined'));
+
+  const energyDurationFilterElement = (
+    <DashboardDurationFilterBar
+      selectedDuration={selectedDuration}
+      onDurationChange={handleDurationChange}
+      customDateRange={customDateRange}
+      onCustomStartDateChange={(startDate) =>
+        dispatch(
+          setCustomDateRange({
+            startDate,
+            endDate: (customDateRange.endDate || '').split('T')[0],
+          })
+        )
+      }
+      onCustomEndDateChange={(endDate) =>
+        dispatch(
+          setCustomDateRange({
+            startDate: (customDateRange.startDate || '').split('T')[0],
+            endDate,
+          })
+        )
+      }
+      globalLoading={globalLoading}
+      periodLabel={getCurrentPeriodText()}
+      onPrevious={handlePrevious}
+      onNext={handleNext}
+      isLargeScreen={isLargeScreen}
+      isMediumScreen={isMediumScreen}
+      themedSelect
+      selectMenuProps={dashboardCombinedDurationSelectMenuProps}
+      selectFieldSx={dashboardSelectFieldSx}
+    />
+  );
+
   // Isolated wrapper removed — consumption/savings use UnifiedEnergyWidget
 
   // Add the missing getNavigationButtonText function
@@ -1871,62 +1992,81 @@ function Dashboard() {
     [cardBackground, backgroundColor]
   );
 
+  const extraAdvancedEnergyCards = useMemo(
+    () =>
+      energyCustomGraphs.map((g, idx) => {
+        const id = String(g?.id ?? '');
+        return {
+          key: buildCustomGraphWidgetKey(id || `idx_${idx}`),
+          render: () => (
+            <EnergyCustomGraphCard
+              g={g}
+              shellVariant="advanced"
+              advancedSurface={unifiedEnergyAdvancedSurface}
+              chartHeaderStyle={chartHeaderStyle}
+              customGraphData={customGraphData}
+              customGraphLoading={customGraphLoading}
+              customGraphError={customGraphError}
+              transformDataForCharts={transformDataForCharts}
+              areaGroups={areaGroups}
+              dashboardApiParams={apiParams}
+            />
+          ),
+        };
+      }),
+    [
+      energyCustomGraphs,
+      unifiedEnergyAdvancedSurface,
+      chartHeaderStyle,
+      customGraphData,
+      customGraphLoading,
+      customGraphError,
+      transformDataForCharts,
+      areaGroups,
+      apiParams,
+    ]
+  );
+
   const consumptionExportControl = useMemo(
-    () => (
-      <>
-        <ChartExportButton
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [consumptionTitle]: !prev[consumptionTitle],
-            }))
-          }
+    () => {
+      const exportMenuKey = DEFAULT_CONSUMPTION_EXPORT_KEYS.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={DEFAULT_CONSUMPTION_EXPORT_KEYS.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleConsumptionEmail}
+          onDownload={handleConsumptionDownload}
+          preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
+          renderTrigger={({ onClick }) => <ChartExportButton onClick={onClick} />}
         />
-        {showExportDropdown[consumptionTitle] && (
-          <EnergyExportMenu
-            menuKey={consumptionTitle}
-            isOpen={showExportDropdown[consumptionTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionEmail}
-            onDownload={handleConsumptionDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[consumptionTitle] = el;
-            }}
-            preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
-          />
-        )}
-      </>
-    ),
-    [consumptionTitle, showExportDropdown, exportLoading]
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionEmail, handleConsumptionDownload]
   );
 
   const savingsExportControl = useMemo(
-    () => (
-      <>
-        <ChartExportButton
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [savingsTitle]: !prev[savingsTitle],
-            }))
-          }
+    () => {
+      const exportMenuKey = DEFAULT_SAVINGS_EXPORT_KEYS.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={DEFAULT_SAVINGS_EXPORT_KEYS.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleSavingsEmail}
+          onDownload={handleSavingsDownload}
+          preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
+          renderTrigger={({ onClick }) => <ChartExportButton onClick={onClick} />}
         />
-        {showExportDropdown[savingsTitle] && (
-          <EnergyExportMenu
-            menuKey={savingsTitle}
-            isOpen={showExportDropdown[savingsTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleSavingsEmail}
-            onDownload={handleSavingsDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[savingsTitle] = el;
-            }}
-            preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
-          />
-        )}
-      </>
-    ),
-    [savingsTitle, showExportDropdown, exportLoading]
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleSavingsEmail, handleSavingsDownload]
   );
 
   const savingsByStrategyAdvancedSurface = useMemo(
@@ -1958,32 +2098,27 @@ function Dashboard() {
   );
 
   const totalConsumptionByGroupExportControl = useMemo(
-    () => (
-      <>
-        <ChartExportButton
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [totalConsumptionByGroupTitle]: !prev[totalConsumptionByGroupTitle],
-            }))
-          }
+    () => {
+      const groupExportKeys = createAdvancedGroupExportKeys();
+      const exportMenuKey = groupExportKeys.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={groupExportKeys.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleConsumptionByGroupEmail}
+          onDownload={handleConsumptionByGroupDownload}
+          preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
+          emailLabel=" Send By Email"
+          downloadLabel=" Download To PC"
+          renderTrigger={({ onClick }) => <ChartExportButton onClick={onClick} />}
         />
-        {showExportDropdown[totalConsumptionByGroupTitle] && (
-          <EnergyExportMenu
-            menuKey={totalConsumptionByGroupTitle}
-            isOpen={showExportDropdown[totalConsumptionByGroupTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionByGroupEmail}
-            onDownload={handleConsumptionByGroupDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[totalConsumptionByGroupTitle] = el;
-            }}
-            preset={resolveAdvancedEnergyExportMenuPreset({ marginTop: 0 })}
-          />
-        )}
-      </>
-    ),
-    [totalConsumptionByGroupTitle, showExportDropdown, exportLoading]
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionByGroupEmail, handleConsumptionByGroupDownload]
   );
 
   const energyWidgetRenderContext = useMemo(
@@ -2161,20 +2296,241 @@ function Dashboard() {
     ]
   );
 
+  const [energyFullscreenCardId, setEnergyFullscreenCardId] = useState(null);
+  const energySortableSensors = useAdvancedDashboardSortableSensors();
+
+  const toggleEnergyFullscreen = useCallback((key) => {
+    setEnergyFullscreenCardId((prev) => (String(prev) === String(key) ? null : String(key)));
+  }, []);
+
+  const toggleEnergyCardSpan = useCallback(
+    (key) => {
+      setEnergyCardSpan((prev) => {
+        const next = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {};
+        const cur = next?.[key];
+        const curSpan = cur === 12 || cur === '12' ? 12 : 6;
+        next[key] = curSpan === 12 ? 6 : 12;
+        writeEnergyCardSpan(next);
+        return next;
+      });
+    },
+    [setEnergyCardSpan, writeEnergyCardSpan]
+  );
+
+  useEffect(() => {
+    if (!energyFullscreenCardId) return undefined;
+    const onKeyDown = (e) => {
+      if (e?.key === 'Escape') setEnergyFullscreenCardId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document?.body?.style?.overflow;
+    if (document?.body?.style) document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (document?.body?.style) document.body.style.overflow = prevOverflow || '';
+    };
+  }, [energyFullscreenCardId]);
+
+  const renderAdvancedEnergyCustomCard = useCallback(
+    (slotId) => {
+      if (slotId !== 'consumption_saving') return null;
+      return (
+        <ConsumptionSavingsCombinedChart
+          title={getWidgetTitle('consumption_saving', 'Energy')}
+          mergedData={energyCustomNeedsDates ? [] : consumptionSavingMergedData}
+          unit={combinedConsumptionSavingUnit}
+          isLoading={
+            energyCustomNeedsDates ? false : consumptionIsLoading || savingsIsLoading
+          }
+          selectedDuration={selectedDuration}
+          shellVariant={CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS.advanced}
+          advancedSurface={unifiedEnergyAdvancedSurface}
+          consumptionColor={consumptionColors?.[0]}
+          titleStyle={chartHeaderStyle}
+          onEmail={handleConsumptionEmail}
+          onDownloadReport={handleConsumptionDownload}
+          exportEmailLoading={!!exportLoading['Consumption_email']}
+          exportDownloadLoading={!!exportLoading['Consumption_download']}
+          emptyStateVariant={energyCustomNeedsDates ? 'blank' : 'message'}
+          topControls={
+            <Box
+              sx={{
+                width: '100%',
+                maxWidth: '100%',
+                minWidth: 0,
+                flexShrink: 0,
+                boxSizing: 'border-box',
+              }}
+            >
+              {energyDurationFilterElement}
+            </Box>
+          }
+          strategyContent={
+            <SavingsByStrategyWidget
+              title={savingsByStrategyTitle}
+              savingsByStrategy={savingsByStrategy}
+              allEnergyChartsReady={allEnergyChartsReady}
+              chartLoadingSavingsByStrategy={chartLoading.savingsByStrategy}
+              globalLoading={globalLoading}
+              shellVariant="advanced"
+              chartHeaderStyle={chartHeaderStyle}
+              advancedSurface={unifiedEnergyAdvancedSurface}
+              embedded
+              customDatesIncomplete={energyCustomNeedsDates}
+              energyLightFullCardHeightPx={ENERGY_LIGHT_FULL_CARD_HEIGHT_PX}
+              ChartLoader={ChartLoader}
+            />
+          }
+          strategyLoading={
+            energyCustomNeedsDates ? false : embeddedSavingsByStrategyLoading
+          }
+        />
+      );
+    },
+    [
+      getWidgetTitle,
+      energyCustomNeedsDates,
+      consumptionSavingMergedData,
+      combinedConsumptionSavingUnit,
+      consumptionIsLoading,
+      savingsIsLoading,
+      selectedDuration,
+      handleConsumptionEmail,
+      handleConsumptionDownload,
+      exportLoading,
+      energyDurationFilterElement,
+      savingsByStrategyTitle,
+      savingsByStrategy,
+      allEnergyChartsReady,
+      chartLoading.savingsByStrategy,
+      globalLoading,
+      chartHeaderStyle,
+      unifiedEnergyAdvancedSurface,
+      embeddedSavingsByStrategyLoading,
+      consumptionColors,
+    ]
+  );
+
+  const renderAdvancedEnergySection = useCallback(
+    (energyOrchestration) => (
+      <AdvancedEnergySortableSection
+        orchestration={energyOrchestration}
+        energyWidgetRenderContext={energyWidgetRenderContext}
+        getShellProps={advancedEnergyLayoutRuntime.getShellProps}
+        renderCustomCard={renderAdvancedEnergyCustomCard}
+        extraEnergyCards={extraAdvancedEnergyCards}
+        sensors={energySortableSensors}
+        energyFullscreenCardId={energyFullscreenCardId}
+        toggleEnergyFullscreen={toggleEnergyFullscreen}
+        toggleEnergyCardSpan={toggleEnergyCardSpan}
+        setEnergyCardOrder={setEnergyCardOrder}
+        writeEnergyCardOrder={writeEnergyCardOrder}
+        layoutLocked={energyLayoutLocked}
+      />
+    ),
+    [
+      energyWidgetRenderContext,
+      advancedEnergyLayoutRuntime,
+      renderAdvancedEnergyCustomCard,
+      extraAdvancedEnergyCards,
+      energySortableSensors,
+      energyFullscreenCardId,
+      toggleEnergyFullscreen,
+      toggleEnergyCardSpan,
+      setEnergyCardOrder,
+      writeEnergyCardOrder,
+      energyLayoutLocked,
+    ]
+  );
+
+  const pinAdvancedDashboardScrollChrome =
+    !isTabletViewport &&
+    (activeTab === 'energy' || activeTab === 'charts' || activeTab === 'alerts');
+  const ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX = 120;
+  const ADVANCED_DASHBOARD_TOOLBAR_PX = 85;
+  // Fixed widget-pane top for Energy/Space/Alerts. Driving `top` from live chrome
+  // measurement made the content below the header jump on every tab switch.
+  const ADVANCED_STABLE_CONTENT_TOP_PX =
+    ADVANCED_DASHBOARD_TOOLBAR_PX + ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX;
+  const advancedDashboardChromeRef = useRef(null);
+  const advancedDashboardContentRef = useRef(null);
+  const frozenContentTopRef = useRef(ADVANCED_STABLE_CONTENT_TOP_PX);
+
+  const syncAdvancedDashboardContentTop = useCallback(() => {
+    const chromeEl = advancedDashboardChromeRef.current;
+    const contentEl = advancedDashboardContentRef.current;
+    if (!contentEl) return;
+    if (chromeEl) {
+      const bottom = chromeEl.getBoundingClientRect().bottom;
+      // Never lower the frozen top — filter swaps must not yank widgets.
+      if (bottom > frozenContentTopRef.current) {
+        frozenContentTopRef.current = bottom;
+      }
+    }
+    contentEl.style.top = `${frozenContentTopRef.current}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!pinAdvancedDashboardScrollChrome) {
+      frozenContentTopRef.current = ADVANCED_STABLE_CONTENT_TOP_PX;
+      if (advancedDashboardContentRef.current) {
+        advancedDashboardContentRef.current.style.top = '';
+      }
+      return undefined;
+    }
+
+    syncAdvancedDashboardContentTop();
+    const el = advancedDashboardChromeRef.current;
+    if (!el) return undefined;
+
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(syncAdvancedDashboardContentTop);
+      resizeObserver.observe(el);
+    }
+
+    window.addEventListener('resize', syncAdvancedDashboardContentTop);
+    window.addEventListener('orientationchange', syncAdvancedDashboardContentTop);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', syncAdvancedDashboardContentTop);
+      window.removeEventListener('orientationchange', syncAdvancedDashboardContentTop);
+    };
+  }, [
+    pinAdvancedDashboardScrollChrome,
+    syncAdvancedDashboardContentTop,
+    activeTab,
+    showAreaDropdown,
+    isLargeScreen,
+    isMediumScreen,
+    selectedDuration,
+    hideAdvancedHeaderDuration,
+  ]);
+
+  const showAdvancedDashboardFixedChrome =
+    !HIDE_DASHBOARD_VIEW_TABS || activeTab !== 'overview';
 
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div
+      className="advanced-dashboard-root"
+      onClick={(e) => e.stopPropagation()}
+      style={pinAdvancedDashboardScrollChrome ? { overflow: 'hidden' } : undefined}
+    >
       {/* Fixed Header Section - Static Controls */}
+      {showAdvancedDashboardFixedChrome && (
       <Box
+        ref={advancedDashboardChromeRef}
         sx={{
           position: 'fixed',
-          top: activeTab === 'overview' ? '60px' : '85px',
+          top: HIDE_DASHBOARD_VIEW_TABS ? '60px' : (activeTab === 'overview' ? '60px' : '85px'),
           left: 0,
           right: 0,
           backgroundColor: 'transparent',
           p: 0,
           zIndex: 999,
-
+          boxSizing: 'border-box',
+          // Reserve stable chrome height across Energy/Space/Alerts filter swaps
+          minHeight: pinAdvancedDashboardScrollChrome ? 96 : undefined,
         }}
       >
         <Box
@@ -2182,7 +2538,7 @@ function Dashboard() {
             width: '100%',
             maxWidth: '100%',
             mx: 'auto',
-            px: { xs: 1, sm: 2, md: 3, lg: 6, xl: 8, '2xl': 10 },
+            px: ADVANCED_VIEWPORT_GUTTER_PX,
             py: { xs: 1, md: 2 },
 
 
@@ -2431,9 +2787,22 @@ function Dashboard() {
               </Grid>
             )}
 
-            {/* Duration Dropdown with Date Navigation below */}
+            {/* Duration Dropdown with Date Navigation below — keep slot mounted (hidden) when
+                duration is suppressed so Energy↔Space chrome height does not jump. */}
             {activeTab !== 'alerts' && activeTab !== 'overview' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
+              <Grid
+                item
+                xs={12}
+                sm={6}
+                md={3}
+                lg={3}
+                xl={2}
+                sx={{
+                  visibility: hideAdvancedHeaderDuration ? 'hidden' : 'visible',
+                  pointerEvents: hideAdvancedHeaderDuration ? 'none' : 'auto',
+                }}
+                aria-hidden={hideAdvancedHeaderDuration || undefined}
+              >
                 <div style={{ width: '100%' }}>
                   {/* Duration Dropdown */}
                   <div style={{ position: 'relative', width: '100%', marginBottom: '3px' }}>
@@ -2795,13 +3164,35 @@ function Dashboard() {
               </Grid>
             )}
 
-            {/* Empty Grid container for alerts tab - same size as duration section */}
+            {/* Placeholder for alerts tab – matches duration column height so tab row aligns with Energy/Space */}
             {activeTab === 'alerts' && (
               <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ width: '100%', height: '40px' }}></div>
+                <div style={{ width: '100%' }} aria-hidden="true">
+                  <div style={{ width: '100%', marginBottom: '3px' }}>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        visibility: 'hidden',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      width: '100%',
+                      minHeight: '32px',
+                      padding: '4px 6px',
+                      boxSizing: 'border-box',
+                      visibility: 'hidden',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </div>
               </Grid>
             )}
 
+            {activeTab !== 'overview' && (
             <Grid
               item
               xs={12}
@@ -2817,12 +3208,11 @@ function Dashboard() {
                 flexWrap: 'wrap'
               }}
             >
-              {/* Tabs - hidden on Overview so widget area fills space */}
-              {activeTab !== 'overview' && (
               <div
                 ref={tabsContainerRef}
-                role="tablist"
-                aria-label="Dashboard views"
+                role={HIDE_DASHBOARD_VIEW_TABS ? undefined : 'tablist'}
+                aria-hidden={HIDE_DASHBOARD_VIEW_TABS || undefined}
+                aria-label={HIDE_DASHBOARD_VIEW_TABS ? undefined : 'Dashboard views'}
                 style={{
                   display: 'inline-flex',
                   gap: 0,
@@ -2837,6 +3227,8 @@ function Dashboard() {
                   maxWidth: '100%',
                   flexWrap: 'nowrap',
                   position: 'relative',
+                  visibility: HIDE_DASHBOARD_VIEW_TABS ? 'hidden' : 'visible',
+                  pointerEvents: HIDE_DASHBOARD_VIEW_TABS ? 'none' : 'auto',
                 }}
               >
                 {/* Sliding indicator pill - animates between active tabs */}
@@ -2864,25 +3256,24 @@ function Dashboard() {
                   aria-selected={activeTab === 'overview'}
                   tabIndex={getRovingTabIndex(activeTab === 'overview')}
                   onKeyDown={handleDashboardTabKeyDown}
-                  onClick={globalLoading ? undefined : (e) => {
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleTabChange('overview');
                   }}
-                  aria-disabled={globalLoading || undefined}
                   style={{
                     padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
                     border: 'none',
                     borderRadius: '999px',
                     backgroundColor: 'transparent',
                     color: activeTab === 'overview' ? tabActiveTextColor : tabInactiveTextColor,
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
                     transition: 'color 0.8s ease',
                     boxShadow: 'none',
-                    opacity: globalLoading ? 0.5 : 1,
+                    opacity: 1,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     position: 'relative',
@@ -2899,25 +3290,24 @@ function Dashboard() {
                   aria-selected={activeTab === 'energy'}
                   tabIndex={getRovingTabIndex(activeTab === 'energy')}
                   onKeyDown={handleDashboardTabKeyDown}
-                  onClick={globalLoading ? undefined : (e) => {
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleTabChange('energy');
                   }}
-                  aria-disabled={globalLoading || undefined}
                   style={{
                     padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
                     border: 'none',
                     borderRadius: '999px',
                     backgroundColor: 'transparent',
                     color: activeTab === 'energy' ? tabActiveTextColor : tabInactiveTextColor,
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
                     transition: 'color 0.8s ease',
                     boxShadow: 'none',
-                    opacity: globalLoading ? 0.5 : 1,
+                    opacity: 1,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     position: 'relative',
@@ -2963,25 +3353,24 @@ function Dashboard() {
                   aria-selected={activeTab === 'charts'}
                   tabIndex={getRovingTabIndex(activeTab === 'charts')}
                   onKeyDown={handleDashboardTabKeyDown}
-                  onClick={globalLoading ? undefined : (e) => {
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleTabChange('charts');
                   }}
-                  aria-disabled={globalLoading || undefined}
                   style={{
                     padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
                     border: 'none',
                     borderRadius: '999px',
                     backgroundColor: 'transparent',
                     color: activeTab === 'charts' ? tabActiveTextColor : tabInactiveTextColor,
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
                     transition: 'color 0.8s ease',
                     boxShadow: 'none',
-                    opacity: globalLoading ? 0.5 : 1,
+                    opacity: 1,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     position: 'relative',
@@ -2997,25 +3386,24 @@ function Dashboard() {
                   aria-selected={activeTab === 'alerts'}
                   tabIndex={getRovingTabIndex(activeTab === 'alerts')}
                   onKeyDown={handleDashboardTabKeyDown}
-                  onClick={globalLoading ? undefined : (e) => {
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleTabChange('alerts');
                   }}
-                  aria-disabled={globalLoading || undefined}
                   style={{
                     padding: isLargeScreen ? '10px 30px' : (isMediumScreen ? '8px 25px' : '6px 20px'),
                     border: 'none',
                     borderRadius: '999px',
                     backgroundColor: 'transparent',
                     color: activeTab === 'alerts' ? tabActiveTextColor : tabInactiveTextColor,
-                    cursor: globalLoading ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
                     transition: 'color 0.8s ease',
                     boxShadow: 'none',
-                    opacity: globalLoading ? 0.5 : 1,
+                    opacity: 1,
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     position: 'relative',
@@ -3025,20 +3413,37 @@ function Dashboard() {
                   Alerts
                 </button>
               </div>
-              )}
             </Grid>
+            )}
           </Grid>
 
         </Box>
       </Box>
+      )}
 
-      {/* Scrollable Content Area */}
+      {/* Scrollable Content Area — top is frozen via ref so tab switches don't move widgets */}
       <Box
+        ref={advancedDashboardContentRef}
+        className="advanced-dashboard-scroll-pane"
         onClick={(e) => e.stopPropagation()}
         sx={{
-          // Reduce top/bottom gap for Overview so widgets fit in one viewport
-          mt: activeTab === 'overview' ? 2 : 12,
-          py: activeTab === 'overview' ? 2 : 3
+          ...(pinAdvancedDashboardScrollChrome
+            ? {
+                position: 'fixed',
+                top: `${ADVANCED_STABLE_CONTENT_TOP_PX}px`,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                boxSizing: 'border-box',
+                py: 3,
+                zIndex: 1,
+              }
+            : {
+                mt: activeTab === 'overview' ? 2 : 12,
+                py: activeTab === 'overview' ? 2 : 3,
+              }),
         }}
       >
         <Box
@@ -3047,7 +3452,7 @@ function Dashboard() {
             width: '100%',
             maxWidth: '100%',
             mx: 'auto',
-            px: { xs: 1, sm: 2, md: 3, lg: 0.5, xl: 6, '2xl': 8 },
+            px: ADVANCED_VIEWPORT_GUTTER_PX,
           }}
         >
           <Box
@@ -3063,7 +3468,7 @@ function Dashboard() {
             }}
           >
             {/* Data Container for your next section */}
-            <Box mt={activeTab === 'alerts' ? 0 : 3}>
+            <Box mt={(activeTab === 'alerts' || pinAdvancedDashboardScrollChrome) ? 0 : 3}>
               <DashboardContainer
                 variant="advanced"
                 adapter={advancedDashboardContainerAdapter}
@@ -3086,6 +3491,7 @@ function Dashboard() {
                   focusAlertFromLocation,
                   energyLayoutAdapter: advancedEnergyLayoutAdapter,
                   energyLayoutRuntime: advancedEnergyLayoutRuntime,
+                  renderEnergySection: renderAdvancedEnergySection,
                   widgetList,
                   peakMinConsumption,
                   energyConsumptionLoading,

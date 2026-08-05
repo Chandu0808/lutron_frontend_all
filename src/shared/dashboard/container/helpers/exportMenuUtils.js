@@ -13,7 +13,11 @@ export const EXPORT_MENU_OUTSIDE_CLICK_PROFILES = {
   advanced: {
     buttonSelector: '[data-chart-export="true"]',
     panelSelector: null,
-    panelSelectors: ['.chart-export-dropdown', '.alerts-export-dropdown'],
+    panelSelectors: [
+      '.chart-export-dropdown',
+      '[data-export-dropdown-panel]',
+      '.alerts-export-dropdown',
+    ],
   },
   customizedLegacy: {
     variant: 'customized-legacy',
@@ -41,18 +45,20 @@ export function setExportMenuOpen(previousState, menuKey, isOpen) {
 }
 
 function isCustomizedLegacyExportTarget(event) {
+  if (!event?.target) return false;
+
+  if (event.target.closest('button[data-export-menu="true"]')) return true;
+  if (event.target.closest('[data-chart-export="true"]')) return true;
+  if (event.target.closest('[data-export-dropdown-panel]')) return true;
+  if (event.target.closest('.chart-export-dropdown')) return true;
+  if (event.target.closest('[data-energy-combined-export]')) return true;
+
   const exportButton = event.target.closest('button');
-  const isExportButton =
-    exportButton &&
-    exportButton.textContent.includes('<FileUploadIcon fontSize="small" /> Export');
+  if (exportButton && /\bexport\b/i.test(exportButton.textContent || '')) {
+    return true;
+  }
 
-  const positioned = event.target.closest('div[style*="position: absolute"]');
-  const isInsideDropdown =
-    positioned &&
-    (positioned.style.backgroundColor === 'rgb(205, 192, 160)' ||
-      positioned.style.backgroundColor === '#CDC0A0');
-
-  return Boolean(isExportButton || isInsideDropdown);
+  return false;
 }
 
 export function shouldCloseExportMenusOnOutsideClick(event, profile = EXPORT_MENU_OUTSIDE_CLICK_PROFILES.basic) {

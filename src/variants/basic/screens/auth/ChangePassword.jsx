@@ -1,5 +1,6 @@
 // src/screens/auth/ChangePassword.jsx
 import React, { useState, useEffect } from "react";
+import { toSafeReactText } from '../../../../utils/safeReactText';
 import {
   Box,
   Card,
@@ -244,7 +245,7 @@ const ChangePassword = () => {
               borderRadius: LOGIN_RADIUS_CONTROL,
             }}
           >
-            {error}
+            {toSafeReactText(error)}
           </Alert>
         )}
 

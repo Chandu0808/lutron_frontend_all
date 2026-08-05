@@ -64,17 +64,18 @@ export const SPACE_EXPORT_MESSAGE_PRESETS = {
     downloadRejected: 'Failed to download report. Please try again.',
     downloadCatch: 'Failed to download report. Please try again.',
   },
+  // Same download copy as Energy / Basic — chart-specific success (not generic "Download started").
   advanced: {
-    emailSuccess: () => 'Email sent successfully!',
-    downloadSuccess: () => 'Download started successfully!',
-    downloadRejected: 'Failed to start download. Please try again.',
-    downloadCatch: 'Failed to start download. Please try again.',
+    emailSuccess: (chartTitle) => `${chartTitle} report sent successfully!`,
+    downloadSuccess: (chartTitle) => `${chartTitle} report downloaded successfully!`,
+    downloadRejected: 'Failed to download report. Please try again.',
+    downloadCatch: 'Failed to download report. Please try again.',
   },
   customized: {
-    emailSuccess: () => 'Email sent successfully!',
-    downloadSuccess: () => 'Download started successfully!',
-    downloadRejected: 'Failed to start download. Please try again.',
-    downloadCatch: 'Failed to start download. Please try again.',
+    emailSuccess: (chartTitle) => `${chartTitle} report sent successfully!`,
+    downloadSuccess: (chartTitle) => `${chartTitle} report downloaded successfully!`,
+    downloadRejected: 'Failed to download report. Please try again.',
+    downloadCatch: 'Failed to download report. Please try again.',
   },
 };
 
@@ -91,6 +92,7 @@ export async function runSpaceEmailExport({
   successMessage,
 }) {
   if (!emailThunk) {
+    showSnackbar?.('Export not available for this chart.', 'error');
     return { ok: false };
   }
 
@@ -116,6 +118,7 @@ export async function runSpaceDownloadExport({
   catchMessage,
 }) {
   if (!downloadThunk) {
+    showSnackbar?.(rejectedFallback || catchMessage || 'Export not available for this chart.', 'error');
     return { ok: false };
   }
 

@@ -3,13 +3,14 @@
  * Header: title + tabs | Export; then `topControls`-style duration + date row; chart.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box } from '@mui/material';
+import {
+  resolveSpaceInstantUtilizationCombinedChrome,
+  SPACE_INSTANT_UTILIZATION_COMBINED_SHELL_VARIANTS,
+} from '../../../../shared/dashboard/widgets/space/spaceInstantUtilizationCombinedChrome';
 
-const TAB_ACTIVE = '#1565C0';
-const TAB_INACTIVE = '#64748b';
-/** Mirrors Energy combined chart title styling */
-const chartHeaderStyle = {
+const DEFAULT_TITLE_STYLE = {
   margin: 0,
   fontSize: '18px',
   fontWeight: 600,
@@ -25,10 +26,38 @@ export default function SpaceInstantUtilizationCombinedChart({
   areaSection,
   /** Export control — same corner as Energy (only shown on Trends tab). */
   instantTrendToolbarRight,
-  /** Same role as Energy `topControls`: dropdown + date nav, centered above chart. */
+  /** Duration dropdown + date nav — shown above chart content on both tabs. */
   instantTrendDateNav,
+  contentColor = 'rgba(128, 120, 100, 0.6)',
+  shellVariant = SPACE_INSTANT_UTILIZATION_COMBINED_SHELL_VARIANTS.basic,
+  advancedSurface = null,
+  titleStyle: titleStyleProp,
+  /** Optional controlled tab (`instant` | `area`). Uncontrolled when omitted. */
+  activeTab = null,
+  onTabChange = null,
 }) {
-  const [tab, setTab] = useState('instant');
+  const [tabInternal, setTabInternal] = useState('instant');
+  const isControlled = activeTab === 'instant' || activeTab === 'area';
+  const tab = isControlled ? activeTab : tabInternal;
+  const setTab = (next) => {
+    if (isControlled) {
+      if (typeof onTabChange === 'function') onTabChange(next);
+      return;
+    }
+    setTabInternal(next);
+  };
+
+  const titleStyle = titleStyleProp || DEFAULT_TITLE_STYLE;
+  const chrome = useMemo(
+    () =>
+      resolveSpaceInstantUtilizationCombinedChrome({
+        shellVariant,
+        contentColor,
+        advancedSurface,
+        titleStyle,
+      }),
+    [shellVariant, contentColor, advancedSurface, titleStyle]
+  );
 
   const stop = (e) => {
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -41,16 +70,8 @@ export default function SpaceInstantUtilizationCombinedChart({
       onClick={stop}
       onDoubleClick={stop}
       onContextMenu={stop}
-      sx={{
-        backgroundColor: '#ffffff',
-        borderRadius: '8px',
-        padding: { xs: '12px 14px 8px', sm: '12px 16px 8px' },
-        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.08)',
-        border: '1px solid #e5e7eb',
-        minHeight: 0,
-        width: '100%',
-        marginBottom: { xs: 0.5, sm: 1 },
-      }}
+      className={chrome.shellClassName}
+      sx={chrome.shellSx}
     >
       {/* Same structure as Energy: left column (title + tabs) | Export */}
       <Box sx={{ marginBottom: 1 }}>
@@ -65,12 +86,20 @@ export default function SpaceInstantUtilizationCombinedChart({
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box
               sx={{
-                borderBottom: '1px solid #e5e7eb',
+                borderBottom: chrome.dividerBorder,
                 paddingBottom: 0.75,
                 marginBottom: 0.75,
               }}
             >
-              <Box component="h3" sx={{ ...chartHeaderStyle, fontSize: { xs: '16px', lg: '18px' } }}>
+              <Box
+                component="h3"
+                sx={{
+                  ...chrome.titleStyle,
+                  ...(shellVariant === SPACE_INSTANT_UTILIZATION_COMBINED_SHELL_VARIANTS.basic
+                    ? { fontSize: { xs: '14px', lg: '15px' } }
+                    : { fontSize: { xs: '16px', lg: '18px' } }),
+                }}
+              >
                 {cardTitle}
               </Box>
             </Box>
@@ -83,7 +112,7 @@ export default function SpaceInstantUtilizationCombinedChart({
                   border: 'none',
                   padding: 0,
                   cursor: 'pointer',
-                  color: tab === 'instant' ? TAB_ACTIVE : TAB_INACTIVE,
+                  color: tab === 'instant' ? chrome.tabActiveColor : chrome.tabInactiveColor,
                   fontSize: 12,
                   fontWeight: 600,
                   textDecoration: tab === 'instant' ? 'underline' : 'none',
@@ -101,7 +130,7 @@ export default function SpaceInstantUtilizationCombinedChart({
                   border: 'none',
                   padding: 0,
                   cursor: 'pointer',
-                  color: tab === 'area' ? TAB_ACTIVE : TAB_INACTIVE,
+                  color: tab === 'area' ? chrome.tabActiveColor : chrome.tabInactiveColor,
                   fontSize: 12,
                   fontWeight: 600,
                   textDecoration: tab === 'area' ? 'underline' : 'none',
@@ -119,7 +148,8 @@ export default function SpaceInstantUtilizationCombinedChart({
         </Box>
       </Box>
 
-      {tab === 'instant' && instantTrendDateNav != null && (
+      {/* Same duration/date filter for Trends Over Time and Split By Area */}
+      {instantTrendDateNav != null && (
         <Box
           sx={{
             width: '100%',

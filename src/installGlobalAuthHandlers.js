@@ -1,3 +1,5 @@
+import { isAuthTokenError } from './shared/utils/authErrorDetection';
+
 /**
  * Global auth-error handlers (moved from variant index.js for single CRA entry).
  */
@@ -23,23 +25,13 @@ export function installGlobalAuthHandlers(redirectToLogin, redirectFlagKey) {
   // already fired before variant modules (and this installer) were ready.
   clearRedirectGuard();
 
-  const isAuthFailure = (message, responseStatus) =>
-    (typeof message === 'string' &&
-      (message.includes('token') ||
-        message.includes('authentication') ||
-        message.includes('unauthorized') ||
-        message.includes('401') ||
-        message.includes('403'))) ||
-    responseStatus === 401 ||
-    responseStatus === 403;
-
   const onGlobalError = (event) => {
     const error = event?.error || event;
     const now = Date.now();
     if (now - lastErrorTime > ERROR_WINDOW) resetErrorCount();
     errorCount++;
     lastErrorTime = now;
-    if (isAuthFailure(error?.message)) {
+    if (isAuthTokenError({ message: error?.message })) {
       console.warn(`Redirecting due to auth error: ${error?.message}`);
       redirectToLogin();
     }
@@ -51,7 +43,13 @@ export function installGlobalAuthHandlers(redirectToLogin, redirectFlagKey) {
     if (now - lastErrorTime > ERROR_WINDOW) resetErrorCount();
     errorCount++;
     lastErrorTime = now;
-    if (isAuthFailure(reason?.message, reason?.response?.status)) {
+    if (
+      isAuthTokenError({
+        message: reason?.message,
+        status: reason?.response?.status,
+        apiMessage: reason?.response?.data?.message || reason?.response?.data?.detail,
+      })
+    ) {
       console.warn(`Redirecting due to auth rejection: ${reason?.message || reason}`);
       redirectToLogin();
     }

@@ -11,6 +11,7 @@ import {
   settingsSidebarNavItemBridgeSx,
   settingsSidebarNavRowDividerSx,
 } from '../utils/settingsSidebarTabStyles';
+import { BASIC_SETTINGS_HOME_PATH } from '../utils/basicSettingsPaths';
 import { getSettingsSidebarActiveLabel } from '../../../utils/settingsSidebarNavPath';
 import { SettingsSidebarNavLabel } from '../utils/SettingsSidebarNavLabel';
 import { getRovingTabIndex } from '../../../utils/keyboard/rovingTablistKeyboard';
@@ -19,7 +20,7 @@ import {
   registerSettingsSidebarFocusHandler,
   requestTopbarNavFocus,
 } from '../../../utils/keyboard/pageSubNavBridge';
-import { syncSettingsSidebarKeyboardApi, activateSettingsSidebarItem } from '../../../utils/keyboard/settingsSidebarKeyboard';
+import { syncSettingsSidebarKeyboardApi, activateSettingsSidebarItem, getSettingsSidebarKeyboardNavKey } from '../utils/settingsSidebarKeyboard';
 
 /**
  * Settings left-nav item list (basic variant). Parent supplies the "Settings" heading.
@@ -100,7 +101,11 @@ const SettingsSidebarNav = ({ items = [] }) => {
       return;
     }
 
-    if (event.key === 'ArrowRight' && rovingActiveKey === 'Home' && normalizedPath === '/main') {
+    if (
+      event.key === 'ArrowRight' &&
+      rovingActiveKey === 'Home' &&
+      normalizedPath === BASIC_SETTINGS_HOME_PATH
+    ) {
       event.preventDefault();
       event.stopPropagation();
       focusSettingsHomeTab('Lutron');
@@ -150,7 +155,11 @@ const SettingsSidebarNav = ({ items = [] }) => {
 
   useEffect(() => {
     if (!activeLabel) return undefined;
-    if (!sidebarKeyboardModeRef.current) return undefined;
+    const shouldFocusSidebar =
+      sidebarKeyboardModeRef.current ||
+      getSettingsSidebarKeyboardNavKey() === activeLabel;
+    if (!shouldFocusSidebar) return undefined;
+    sidebarKeyboardModeRef.current = true;
     focusSidebarItem(activeLabel);
     return undefined;
   }, [activeLabel, location.pathname, focusSidebarItem]);

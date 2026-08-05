@@ -8,3 +8,9 @@
 //            (No code is removed - just flip this back to `true` whenever you
 //             want Overview back, no other changes required.)
 export const SHOW_OVERVIEW_TAB = false;
+
+// Advanced only: hide in-page pill strip (Overview / Energy / Space / Alerts).
+// Routes and overview tile navigation still work. Set false to restore the strip.
+export const HIDE_DASHBOARD_VIEW_TABS = false;
+
+export const ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS = true;

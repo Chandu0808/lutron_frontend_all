@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { toSafeReactText } from '../../../../../utils/safeReactText';
 import {
   Alert,
   Box,
@@ -248,7 +249,7 @@ const AddByIpDialog = ({ open, onClose, onAdded }) => {
 
         {error && (
           <Alert severity="error" sx={{ mb: 1.5 }}>
-            {error}
+            {toSafeReactText(error)}
           </Alert>
         )}
 

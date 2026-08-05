@@ -1,15 +1,17 @@
-/** Phase 5.1 — core auth in shared, sidebar RBAC variant-specific */
-export { UseAuth, isSuperadminRole, getOverallPermissionLevel } from "../../../shared/auth/useAuthCore";
 import {
   SETTINGS_SIDEBAR_ITEM_ORDER,
   sortSettingsSidebarNavItems,
 } from "../utils/settingsSidebarTabStyles";
+import { ADVANCED_SETTINGS_SIDEBAR_PATHS } from "../utils/advancedSettingsPaths";
+
+/** Phase 5.1 — core auth in shared, sidebar RBAC variant-specific */
+export { UseAuth, isSuperadminRole, getOverallPermissionLevel } from "../../../shared/auth/useAuthCore";
 
 export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
     const allSidebarItems = [
         "Home",
         "Theme", 
-        "Rename Widget",
+        "Widgets",
         "Manage Area Groups",
         "Area Size & Load",
         "Email Server",
@@ -19,26 +21,12 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Modules",
         "Alerts",
         "Processors",
+        "Maintenance",
         "FOFP",
         "Help",
     ];
 
-    const allPaths = {
-        "Home": "/main",
-        "Theme": "/theme-change",
-        "Rename Widget": "/rename-widget/",
-        "Manage Area Groups": "/manage-area-groups",
-        "Area Size & Load": "/area-size-load",
-        "Email Server": "/email-server/",
-        "Users": "/users",
-        "Floor": "/floor",
-        "Manage Sensors": "/manage-sensors",
-        "Manage Modules": "/manage-modules",
-        "Alerts": "/alerts",
-        "Processors": "/processors",
-        "FOFP": "/fofp",
-        "Help": "/create-help/",
-    };
+    const allPaths = ADVANCED_SETTINGS_SIDEBAR_PATHS;
 
     // Check if role is Superadmin (case-insensitive)
     if (role && (role === 'Superadmin' || role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'super admin')) {
@@ -56,11 +44,12 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         // Admin can see Home, Theme, Manage Area Groups, Area Size & Load, Email Server, Users
         // Cannot see: Rename Widget, Floor, Help, FOFP, Manage Sensors, Manage Modules, Alerts
         const adminItems = allSidebarItems.filter(item => 
-            item !== 'Rename Widget' && 
+            item !== 'Widgets' && 
             item !== 'Floor' && 
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'Maintenance' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
@@ -81,12 +70,13 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             const operatorItems = allSidebarItems.filter(item => 
                 item !== 'Home' && 
                 item !== 'Theme' && 
-                item !== 'Rename Widget' && 
+                item !== 'Widgets' && 
                 item !== 'Email Server' && 
                 item !== 'Floor' && 
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'Maintenance' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -102,12 +92,13 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             const operatorItems = allSidebarItems.filter(item => 
                 item !== 'Home' && 
                 item !== 'Theme' && 
-                item !== 'Rename Widget' && 
+                item !== 'Widgets' && 
                 item !== 'Email Server' && 
                 item !== 'Floor' && 
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'Maintenance' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -125,12 +116,13 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         const operatorItems = allSidebarItems.filter(item => 
             item !== 'Home' && 
             item !== 'Theme' && 
-            item !== 'Rename Widget' && 
+            item !== 'Widgets' && 
             item !== 'Email Server' && 
             item !== 'Floor' &&
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'Maintenance' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'

@@ -116,7 +116,7 @@ const EmailServer = () => {
     // Redirect unauthorized users
     useEffect(() => {
         if (!canAccessEmailServer()) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate('/setting/manage-area-groups', { replace: true });
         }
     }, [role, navigate]);
     

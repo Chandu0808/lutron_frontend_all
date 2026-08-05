@@ -51,6 +51,76 @@ export const getShadesWidgetDescription = () => {
   }
 }
 
+export const getShadesWidgetHyperlink = (fallback = '') => {
+  try {
+    const stored = localStorage.getItem(SHADES_HYPERLINK_KEY)
+    if (stored && stored.trim()) return stored.trim()
+  } catch {
+    /* ignore */
+  }
+  return fallback
+}
+
+/**
+ * Same-origin or root-relative URLs resolve to an in-app pathname; external URLs return null.
+ * @param {string} url
+ * @returns {string|null}
+ */
+export const resolveInternalAppPath = (url) => {
+  const trimmed = String(url || '').trim()
+  if (!trimmed) return null
+  try {
+    if (trimmed.startsWith('/')) {
+      return trimmed.split('#')[0].split('?')[0] || null
+    }
+    if (typeof window === 'undefined') return null
+    const parsed = new URL(trimmed, window.location.origin)
+    if (parsed.origin !== window.location.origin) return null
+    return parsed.pathname || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Open Shades / Carbon Footprint overview tile hyperlink.
+ * Internal app routes navigate in the current tab; external URLs open in a new tab.
+ */
+export const openShadesWidgetHyperlink = (url, { navigate, onNavigateToEnergy } = {}) => {
+  const trimmed = String(url || '').trim()
+  if (!trimmed || trimmed === 'https://') return
+
+  const internalPath = resolveInternalAppPath(trimmed)
+  if (internalPath) {
+    const isEnergyDashboard =
+      internalPath === '/dashboard/energy' || internalPath.startsWith('/dashboard/energy/')
+    if (isEnergyDashboard && typeof onNavigateToEnergy === 'function') {
+      onNavigateToEnergy()
+      return
+    }
+
+    const inAppTarget = trimmed.startsWith('/')
+      ? trimmed
+      : (() => {
+          try {
+            const parsed = new URL(trimmed, window.location.origin)
+            return `${parsed.pathname}${parsed.search}${parsed.hash}`
+          } catch {
+            return internalPath
+          }
+        })()
+
+    if (typeof navigate === 'function') {
+      navigate(inAppTarget)
+      return
+    }
+    window.location.assign(inAppTarget)
+    return
+  }
+
+  window.open(trimmed, '_blank', 'noopener,noreferrer')
+}
+
 export const notifyShadesSettingsChanged = () => {
   try {
     window.dispatchEvent(new CustomEvent(SHADES_SETTINGS_EVENT))

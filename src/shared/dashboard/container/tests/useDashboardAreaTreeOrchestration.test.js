@@ -120,6 +120,24 @@ describe('useDashboardAreaTreeOrchestration', () => {
     expect(spies.setShowAreaDropdown).toHaveBeenCalledWith(false);
   });
 
+  it('commits the floor before areas so the floor reducer cannot erase area selections', () => {
+    const { props, spies } = createHookProps({
+      localSelectedAreas: [10, 11],
+    });
+    const { result } = renderHook((hookProps) => useDashboardAreaTreeOrchestration(hookProps), {
+      initialProps: props,
+    });
+
+    act(() => {
+      result.current.applyAreaTreeSet();
+    });
+
+    const dispatchedTypes = spies.dispatch.mock.calls.map(([action]) => action.type);
+    expect(dispatchedTypes.indexOf('setSelectedFloor')).toBeLessThan(
+      dispatchedTypes.indexOf('setSelectedAreas')
+    );
+  });
+
   it('advanced Clear All matches buildClearAllResolution side effects', () => {
     const { props, spies } = createHookProps({ variant: 'advanced' });
     const { result } = renderHook((hookProps) => useDashboardAreaTreeOrchestration(hookProps), {

@@ -101,7 +101,7 @@ const CreateUserAreaGroup = () => {
             .then(() => {
                 setShowCreateSuccess(true);
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1000);
+                setTimeout(() => navigate('/setting/manage-area-groups'), 1000);
                 setIsDisable(false);
             })
             .catch(() => {
@@ -271,7 +271,7 @@ const CreateUserAreaGroup = () => {
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
                 <Button
                     variant="contained"
-                    onClick={() => navigate('/manage-area-groups')}
+                    onClick={() => navigate('/setting/manage-area-groups')}
                     sx={{ backgroundColor: 'buttonColor', color: '#fff' }}
                 >
                     Cancel

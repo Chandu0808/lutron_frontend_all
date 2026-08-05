@@ -7,9 +7,14 @@ import {
   buildDashboardWidgetOptions,
 } from './dashboardAdapterHelpers';
 
+import {
+  useAdvancedDashboardVisibility,
+} from '../hooks/useDashboardVisibility';
+
 export const advancedDashboardContainerAdapter = {
   variant: 'advanced',
   layoutAdapter: ADVANCED_DASHBOARD_LAYOUT_ADAPTER,
+  useVisibility: useAdvancedDashboardVisibility,
 
   resolveVisibilityOptions(runtime) {
     return buildAdvancedDashboardVisibilityOptions(runtime);

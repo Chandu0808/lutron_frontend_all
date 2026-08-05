@@ -41,6 +41,8 @@ export function applyTheme3PageChrome(root) {
   root.style.setProperty('--users-input-bg', '#ffffff');
   root.style.setProperty('--users-select-menu-bg', '#ffffff');
   root.style.setProperty('--users-select-menu-hover', THEME_3_LIGHT_SECTION_BG);
+  root.style.setProperty('--users-select-menu-checkbox-color', 'rgba(26, 42, 66, 0.55)');
+  root.style.setProperty('--users-select-menu-checkbox-checked-color', THEME_3_BUTTON_SOLID);
   root.style.setProperty('--users-chip-bg', THEME_3_LIGHT_SECTION_BG);
   root.style.setProperty('--users-confirm-dialog-bg', THEME_3_LIGHT_PANEL_BG);
   root.style.setProperty('--users-border', '#C5CDD8');
@@ -49,6 +51,9 @@ export function applyTheme3PageChrome(root) {
   root.style.setProperty('--area-groups-inner-bg', '#ffffff');
   root.style.setProperty('--area-groups-chip-bg', THEME_3_LIGHT_SECTION_BG);
   root.style.setProperty('--area-groups-border', '#C5CDD8');
+  root.style.setProperty('--area-group-on-surface-text', THEME_3_LIGHT_SURFACE_TEXT);
+  root.style.setProperty('--area-group-inner-text', THEME_3_LIGHT_SURFACE_TEXT);
+  root.style.setProperty('--users-input-text', THEME_3_LIGHT_SURFACE_TEXT);
 
   root.style.setProperty('--settings-form-section-bg', THEME_3_LIGHT_SECTION_BG);
   root.style.setProperty('--settings-form-control-bg', '#ffffff');
@@ -157,6 +162,9 @@ export function applyTheme3HeatmapChrome(root) {
   root.style.setProperty('--heatmap-sidebar-section-label-bg', 'rgba(0, 0, 0, 0.12)');
   root.style.setProperty('--heatmap-sidebar-loading-overlay-bg', 'rgba(232, 236, 242, 0.94)');
   root.style.setProperty('--heatmap-sidebar-loading-spinner-color', THEME_3_BUTTON_SOLID);
+  root.style.setProperty('--heatmap-sidebar-scrollbar-thumb', THEME_3_BUTTON_SOLID);
+  root.style.setProperty('--heatmap-sidebar-scrollbar-thumb-hover', '#2f3948');
+  root.style.setProperty('--heatmap-sidebar-scrollbar-track', 'rgba(0, 0, 0, 0.18)');
   root.style.setProperty('--heatmap-tab-pill-bg', THEME_3_TAB_PILL_GRADIENT);
   root.style.setProperty('--heatmap-tab-indicator-bg', '#ffffff');
   root.style.setProperty('--heatmap-tab-active-text', THEME_3_BUTTON_SOLID);

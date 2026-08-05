@@ -71,6 +71,7 @@ export const usersReadonlyFieldSx = {
 export const premiumSelectMenuProps = {
   autoFocus: false,
   PaperProps: {
+    className: 'users-select-menu',
     sx: {
       backgroundColor: 'var(--users-select-menu-bg, #ffffff)',
       color: 'var(--settings-panel-text, #1c2330)',
@@ -78,13 +79,50 @@ export const premiumSelectMenuProps = {
       borderRadius: '8px',
       boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
       maxHeight: 320,
+      '& .MuiCheckbox-root': {
+        color:
+          'var(--users-select-menu-checkbox-color, var(--settings-panel-muted-text, rgba(0, 0, 0, 0.55)))',
+        '&.Mui-checked': {
+          color:
+            'var(--users-select-menu-checkbox-checked-color, var(--app-button, #3d4a5c))',
+        },
+      },
       '& .MuiMenuItem-root': {
         color: 'var(--settings-panel-text, #1c2330)',
         '&:hover': { backgroundColor: 'var(--users-select-menu-hover, #D6DDE8)' },
-        '&.Mui-selected': {
+        '&.Mui-focusVisible': {
           backgroundColor: 'var(--users-select-menu-hover, #D6DDE8)',
-          color: 'var(--settings-panel-text, #1c2330)',
-          '&:hover': { backgroundColor: 'var(--users-border, #C5CDD8)' },
+        },
+        '&.Mui-selected': {
+          backgroundColor:
+            'var(--users-select-menu-selected-bg, var(--dashboard-select-option-selected-bg, var(--users-select-menu-hover, #D6DDE8)))',
+          color:
+            'var(--users-select-menu-selected-text, var(--dashboard-select-option-selected-text, var(--settings-panel-text, #1c2330)))',
+          '&:hover': {
+            backgroundColor:
+              'var(--users-select-menu-selected-hover-bg, var(--dashboard-select-menu-selected-hover, var(--users-border, #C5CDD8)))',
+            color:
+              'var(--users-select-menu-selected-text, var(--dashboard-select-option-selected-text, var(--settings-panel-text, #1c2330)))',
+          },
+          '&.Mui-focusVisible': {
+            backgroundColor:
+              'var(--users-select-menu-selected-hover-bg, var(--dashboard-select-menu-selected-hover, var(--users-border, #C5CDD8)))',
+            color:
+              'var(--users-select-menu-selected-text, var(--dashboard-select-option-selected-text, var(--settings-panel-text, #1c2330)))',
+          },
+          '& .MuiListItemText-primary': {
+            color: 'inherit',
+          },
+          '& .MuiCheckbox-root': {
+            color:
+              'var(--users-select-menu-selected-text, var(--dashboard-select-option-selected-text, var(--settings-panel-muted-text, #4A586C)))',
+            opacity: 0.85,
+            '&.Mui-checked': {
+              opacity: 1,
+              color:
+                'var(--users-select-menu-selected-text, var(--dashboard-select-option-selected-text, var(--app-button, #3d4a5c)))',
+            },
+          },
         },
         '&.Mui-disabled': {
           color: 'var(--settings-panel-muted-text, #4A586C)',

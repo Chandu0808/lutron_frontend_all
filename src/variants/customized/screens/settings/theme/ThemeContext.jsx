@@ -8,7 +8,6 @@ import {
 import {
   createThemeContext,
   createNormalizeUiColors,
-  getPaletteRemountKey,
   rawBackgroundResolvers,
   ThemeMuiProviderShell,
   useThemeProviderBootstrap,
@@ -68,7 +67,7 @@ export const ThemeProviderCustom = ({ children }) => {
 
   return (
     <ThemeContext.Provider value={{ theme, backgroundImage, reloadTheme }}>
-      <ThemeMuiProviderShell theme={theme} remountKey={getPaletteRemountKey(theme)}>
+      <ThemeMuiProviderShell theme={theme}>
         {children}
       </ThemeMuiProviderShell>
     </ThemeContext.Provider>

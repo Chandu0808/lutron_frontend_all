@@ -1,8 +1,12 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import ChartExportButton from '../../components/ChartExportButton';
-import { CARD_BACKGROUND } from '../../config/themeConstants';
+import { CARD_BACKGROUND, CARD_BORDER, CARD_SHADOW } from '../../config/themeConstants';
 import { SpaceWidgetRenderer } from '../../../../shared/dashboard/space/container';
+import SpaceInstantUtilizationCombinedChart from '../../../basic/screens/dashboard/SpaceInstantUtilizationCombinedChart';
+import {
+  SPACE_INSTANT_UTILIZATION_COMBINED_SHELL_VARIANTS,
+} from '../../../../shared/dashboard/widgets/space/spaceInstantUtilizationCombinedChrome';
 
 const chartEventHandlers = {
   onMouseDown: (e) => {
@@ -33,6 +37,13 @@ const SLOT_CHART_LOADER_HEIGHT = {
   instant_occupancy_count: '350px',
   utilization: '350px',
   utilization_by_area_group: '400px',
+};
+
+const ADVANCED_COMBINED_SURFACE = {
+  cardBackground: CARD_BACKGROUND,
+  cardBorder: CARD_BORDER,
+  cardShadow: CARD_SHADOW,
+  cardClassName: 'chart-card-animated',
 };
 
 const SLOT_CARD_SX = {
@@ -103,9 +114,94 @@ export function renderAdvancedSpaceWidgetSlot(slotId, meta, layoutContext, api) 
     ExportDropdown,
     showExportDropdown,
     setShowExportDropdown,
+    spaceChartsDurationFilterElement,
+    isWidgetVisible,
   } = api;
   const widgetRenderContext = layoutContext.widgetRenderContext;
   if (!widgetRenderContext) return null;
+
+  if (slotId === 'instant_utilization_combined') {
+    return (
+      <SpaceInstantUtilizationCombinedChart
+        cardTitle={api.getWidgetTitle('instant_utilization_combined', 'Space Utilization')}
+        shellVariant={SPACE_INSTANT_UTILIZATION_COMBINED_SHELL_VARIANTS.advanced}
+        advancedSurface={ADVANCED_COMBINED_SURFACE}
+        titleStyle={chartHeaderStyle}
+        instantTabLabel="Trends Over Time"
+        areaTabLabel="Split By Area"
+        instantTrendToolbarRight={
+          <Box sx={{ position: 'relative' }}>
+            <ChartExportButton
+              size={isLargeScreen ? 'large' : 'medium'}
+              onClick={() =>
+                setShowExportDropdown((prev) => ({
+                  ...prev,
+                  instant: !prev.instant,
+                }))
+              }
+            />
+            <ExportDropdown
+              isOpen={showExportDropdown.instant}
+              onClose={() =>
+                setShowExportDropdown((prev) => ({ ...prev, instant: false }))
+              }
+              chartTitle={api.getWidgetTitle('instant_occupancy_count', 'Instant Occupancy Count')}
+              dropdownKey="instant"
+            />
+          </Box>
+        }
+        instantTrendDateNav={
+          typeof isWidgetVisible === 'function' &&
+          isWidgetVisible('instant_utilization_combined')
+            ? spaceChartsDurationFilterElement
+            : null
+        }
+        instantSection={
+          <SpaceWidgetRenderer
+            widgetKey="instant_occupancy_count"
+            context={{ ...widgetRenderContext, selectorMode: 'active' }}
+            chartLoaderHeight="clamp(200px, 36vh, 300px)"
+          />
+        }
+        areaSection={
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                marginBottom: { xs: 2, sm: 2.5, md: 3 },
+              }}
+            >
+              <Box sx={{ position: 'relative' }}>
+                <ChartExportButton
+                  size={isLargeScreen ? 'large' : 'medium'}
+                  onClick={() =>
+                    setShowExportDropdown((prev) => ({
+                      ...prev,
+                      table: !prev.table,
+                    }))
+                  }
+                />
+                <ExportDropdown
+                  isOpen={showExportDropdown.table}
+                  onClose={() =>
+                    setShowExportDropdown((prev) => ({ ...prev, table: false }))
+                  }
+                  chartTitle={api.getWidgetTitle('utilization_by_area', 'Utilization By Area')}
+                  dropdownKey="table"
+                />
+              </Box>
+            </Box>
+            <SpaceWidgetRenderer
+              widgetKey="utilization_by_area"
+              context={{ ...widgetRenderContext, selectorMode: 'active' }}
+            />
+          </>
+        }
+      />
+    );
+  }
 
   if (slotId === 'peak_and_minimum_utilization') {
     return (

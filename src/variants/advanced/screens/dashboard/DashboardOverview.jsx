@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Box, Grid, Typography, CircularProgress } from '@mui/material'
 import OverviewMetricTile from '../../../../shared/dashboard/widgets/overview/OverviewMetricTile'
 import AlertsWidget from '../../../../shared/dashboard/widgets/alerts'
@@ -6,20 +6,8 @@ import {
   OVERVIEW_TILE_TYPES,
   OVERVIEW_THEME_VARIANTS,
 } from '../../../../shared/dashboard/widgets/overview'
-
-const cardStyle = {
-  backgroundColor: '#ffffff',
-  borderRadius: 2,
-  p: 2,
-  height: '100%',
-  minHeight: 360,
-  cursor: 'pointer',
-  transition: 'box-shadow 0.2s ease',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  '&:hover': { boxShadow: 3 },
-}
+import { useDashboardWidgetVisibility } from '../../utils/dashboardWidgetVisibility'
+import { resolveAdvancedOverviewCardSx } from '../../utils/advancedOverviewTheme'
 
 function DashboardOverview({
   data,
@@ -32,13 +20,15 @@ function DashboardOverview({
   onNavigateToFloor,
   onNavigateToQuickControls,
 }) {
+  const cardStyle = useMemo(() => resolveAdvancedOverviewCardSx(), [])
   const energy = data?.energy
   const alerts = data?.alerts
   const schedule = data?.schedule?.next
-  const floorsCount = data?.floors?.count
+  // const floorsCount = data?.floors?.count
   const spaceUtil = data?.space_utilization
+  const { isWidgetVisible } = useDashboardWidgetVisibility()
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
         <CircularProgress />
@@ -46,16 +36,26 @@ function DashboardOverview({
     )
   }
 
-  if (error) {
+  if (error && !data) {
+    const message =
+      typeof error === 'string'
+        ? error
+        : error?.message || 'Failed to load dashboard overview.';
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography color="error">Failed to load dashboard overview.</Typography>
+        <Typography color="error" sx={{ mb: 1 }}>
+          {message}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Confirm the API server is reachable, then refresh the page or open the Energy tab.
+        </Typography>
       </Box>
     )
   }
 
   return (
     <Box
+      className="dashboard-overview-variant-root"
       sx={{
         width: '100%',
         minHeight: 460,
@@ -65,17 +65,20 @@ function DashboardOverview({
         overflow: 'hidden',
       }}
     >
-      <Grid container spacing={2} sx={{ p: 1.5 }}>
+      <Grid container spacing={2} className="dashboard-overview-variant-grid" sx={{ p: 1.5 }}>
+        {isWidgetVisible('energy') && (
         <Grid item xs={12} sm={6} md={4}>
           <OverviewMetricTile
             tileType={OVERVIEW_TILE_TYPES.ENERGY}
             energy={energy}
             onClick={onNavigateToEnergy}
-            themeVariant={OVERVIEW_THEME_VARIANTS.GRID}
+            themeVariant={OVERVIEW_THEME_VARIANTS.ADVANCED}
             cardSx={cardStyle}
           />
         </Grid>
+        )}
 
+        {isWidgetVisible('alerts') && (
         <Grid item xs={12} sm={6} md={4}>
           <AlertsWidget
             alerts={alerts}
@@ -84,45 +87,56 @@ function DashboardOverview({
             cardSx={cardStyle}
           />
         </Grid>
+        )}
 
+        {isWidgetVisible('schedules') && (
         <Grid item xs={12} sm={6} md={4}>
           <OverviewMetricTile
             tileType={OVERVIEW_TILE_TYPES.SCHEDULES}
             schedule={schedule}
             onClick={onNavigateToSchedule}
-            themeVariant={OVERVIEW_THEME_VARIANTS.GRID}
+            themeVariant={OVERVIEW_THEME_VARIANTS.ADVANCED}
             cardSx={cardStyle}
           />
         </Grid>
+        )}
 
+        {isWidgetVisible('quick_controls') && (
         <Grid item xs={12} sm={6} md={4}>
           <OverviewMetricTile
             tileType={OVERVIEW_TILE_TYPES.QUICK_CONTROLS}
             onClick={onNavigateToQuickControls}
-            themeVariant={OVERVIEW_THEME_VARIANTS.GRID}
+            themeVariant={OVERVIEW_THEME_VARIANTS.ADVANCED}
             cardSx={cardStyle}
           />
         </Grid>
+        )}
 
+        {/* Floors widget disabled
+        {isWidgetVisible('floors') && (
         <Grid item xs={12} sm={6} md={4}>
           <OverviewMetricTile
             tileType={OVERVIEW_TILE_TYPES.FLOORS}
             floorsCount={floorsCount}
             onClick={onNavigateToFloor}
-            themeVariant={OVERVIEW_THEME_VARIANTS.GRID}
+            themeVariant={OVERVIEW_THEME_VARIANTS.ADVANCED}
             cardSx={cardStyle}
           />
         </Grid>
+        )}
+        */}
 
+        {isWidgetVisible('space_utilization') && (
         <Grid item xs={12} sm={6} md={4}>
           <OverviewMetricTile
             tileType={OVERVIEW_TILE_TYPES.SPACE_UTILIZATION}
             spaceUtil={spaceUtil}
             onClick={onNavigateToSpaceUtilization}
-            themeVariant={OVERVIEW_THEME_VARIANTS.GRID}
+            themeVariant={OVERVIEW_THEME_VARIANTS.ADVANCED}
             cardSx={cardStyle}
           />
         </Grid>
+        )}
       </Grid>
     </Box>
   )

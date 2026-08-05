@@ -19,8 +19,24 @@ export function EnergyLineTooltip({
 
   const formattedLabel = formatPeakMinTimeLabel(label, selectedDuration, currentDate);
 
+  const tooltipTextColor = useCssTooltipStyle
+    ? cssTooltipStyle?.color || 'var(--dashboard-chart-tooltip-text, #ffffff)'
+    : theme.tooltipText;
+
+  const tooltipTitleBorderColor = useCssTooltipStyle
+    ? 'var(--dashboard-chart-tooltip-border-color, #ffffff)'
+    : theme.tooltipTitleBorder;
+
   const boxStyle = useCssTooltipStyle
-    ? { ...cssTooltipStyle, padding: '10px' }
+    ? {
+        ...cssTooltipStyle,
+        background:
+          cssTooltipStyle?.background ||
+          cssTooltipStyle?.backgroundColor ||
+          'var(--dashboard-chart-tooltip-bg, #3d4a5c)',
+        padding: '10px',
+        color: tooltipTextColor,
+      }
     : {
         backgroundColor: theme.tooltipBg,
         border: theme.tooltipBorder,
@@ -36,8 +52,9 @@ export function EnergyLineTooltip({
         style={{
           margin: '0 0 8px 0',
           fontWeight: 'bold',
-          borderBottom: `1px solid ${theme.tooltipTitleBorder}`,
+          borderBottom: `1px solid ${tooltipTitleBorderColor}`,
           paddingBottom: '4px',
+          color: tooltipTextColor,
         }}
       >
         {formattedLabel}
@@ -47,11 +64,11 @@ export function EnergyLineTooltip({
           key={index}
           style={{
             margin: '4px 0',
-            color: theme.tooltipText,
-            fontWeight: '500',
+            color: tooltipTextColor,
+            fontWeight: '600',
           }}
         >
-          {entry.name}: {entry.value}
+          {entry.dataKey || entry.name}: {entry.value}
           {dynamicUnit ? ` ${dynamicUnit}` : ''}
         </p>
       ))}

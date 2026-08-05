@@ -221,7 +221,7 @@ export function createCustomizedFormHelperOverrides() {
         root: {
           color: "#FFFFFF",
           "&.Mui-error": {
-            color: "#FFFFFF",
+            color: "#d32f2f",
           },
         },
       },

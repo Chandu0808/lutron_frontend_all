@@ -8,13 +8,29 @@ import {
   normalizeLightStatus,
   patchAreasLightStatus,
 } from "./heatmapMapSync";
+import { resolveFloorPlanMediaUrl } from "../../../../../../shared/pdf/floorPlanPdf";
+import { mapAreaStatusFetchError } from "../../../../../../shared/heatmap/processorReachable";
 
 // Async Thunks
+const formatFloorMapError = (err) => {
+  const detail = err.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || String(item)).filter(Boolean).join('; ')
+      || 'Failed to load floor plan';
+  }
+  return err.response?.data?.message || err.message || 'Failed to load floor plan';
+};
+
 export const fetchFloorMapData = createAsyncThunk(
   "heatmap/fetchFloorMapData",
-  async ({ floorId }) => {
-    const response = await BaseUrl.get(`/floor/light_status?floor_id=${floorId}`);
-    return response.data;
+  async ({ floorId }, { rejectWithValue }) => {
+    try {
+      const response = await BaseUrl.get(`/floor/light_status?floor_id=${floorId}`);
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(formatFloorMapError(err));
+    }
   }
 );
 
@@ -36,9 +52,13 @@ export const fetchAreaEnergyConsumption = createAsyncThunk(
 
 export const fetchAreaStatus = createAsyncThunk(
   "heatmap/fetchAreaStatus",
-  async (areaId) => {
-    const response = await BaseUrl.get(`/area/full_area_status?area_id=${areaId}`);
-    return response.data;
+  async (areaId, { rejectWithValue }) => {
+    try {
+      const response = await BaseUrl.get(`/area/full_area_status?area_id=${areaId}`);
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(mapAreaStatusFetchError(err));
+    }
   }
 );
 
@@ -158,22 +178,20 @@ export const fetchBaseFloorData = createAsyncThunk(
 // Thunk to refresh all data for a floor and optionally an area
 export const refreshAllHeatmapData = createAsyncThunk(
   'heatmap/refreshAllHeatmapData',
-  async ({ floorId, areaId = null }, { dispatch, rejectWithValue }) => {
+  async ({ floorId, areaId = null, displayMode = 'Light' }, { dispatch, rejectWithValue }) => {
     try {
-      // Always fetch floor map data
-      await dispatch(fetchFloorMapData({ floorId })).unwrap();
-      
-      // Fetch floor-wide data
-      await Promise.all([
-        dispatch(fetchAreaOccupancyStatus({ floorId })),
-        dispatch(fetchAreaEnergyConsumption({ floorId }))
-      ]);
-      
-      // If areaId is provided, also fetch area status
+      if (displayMode === 'Occupancy') {
+        await dispatch(fetchAreaOccupancyStatus({ floorId }));
+      } else if (displayMode === 'Energy') {
+        await dispatch(fetchAreaEnergyConsumption({ floorId }));
+      } else {
+        await dispatch(fetchFloorMapData({ floorId })).unwrap();
+      }
+
       if (areaId) {
         await dispatch(fetchAreaStatus(areaId));
       }
-      
+
       return { success: true };
     } catch (err) {
       return rejectWithValue(err.response?.data?.detail || 'Failed to refresh heatmap data');
@@ -254,10 +272,14 @@ const heatmapSlice = createSlice({
       })
       .addCase(fetchFloorMapData.fulfilled, (state, action) => {
         const areas = (action.payload.areas || []).map((area) => {
-          const levelRaw = Number(area.light_level);
-          const light_level = Number.isFinite(levelRaw)
-            ? Math.max(0, Math.min(100, Math.round(levelRaw)))
-            : area.light_level ?? null;
+          const rawLevel = area.light_level;
+          let light_level = null;
+          if (rawLevel !== null && rawLevel !== undefined && rawLevel !== "") {
+            const levelRaw = Number(rawLevel);
+            if (Number.isFinite(levelRaw)) {
+              light_level = Math.max(0, Math.min(100, Math.round(levelRaw)));
+            }
+          }
           return {
             ...area,
             coordinates: area["co-ordinates"] || area.coordinates || [],
@@ -265,16 +287,22 @@ const heatmapSlice = createSlice({
             id: area.id,      // Always set id
             light_status: (area.light_status || '').toLowerCase().trim(),
             light_level,
+            processor_reachable: area.processor_reachable !== false,
           };
         });
         
         state.heatmapData = { ...action.payload, areas };
       
-        const API_URL = process.env.REACT_APP_API_URL || "";
         const rawPath = action.payload.floor_plan || action.payload.floor_image || "";
-        state.pdfUrl = rawPath.startsWith("http") ? rawPath : `${API_URL}${rawPath}`;
+        state.pdfUrl = resolveFloorPlanMediaUrl(rawPath);
       
         state.loading = false;
+      })
+      .addCase(fetchFloorMapData.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || action.error?.message || 'Failed to load floor plan';
+        state.pdfUrl = null;
+        state.heatmapData = { areas: [] };
       });
 
     // OCCUPANCY STATUS
@@ -289,7 +317,14 @@ const heatmapSlice = createSlice({
             a => (a.area_id === (area.area_id || area.id) || a.id === (area.area_id || area.id))
           );
           return updated
-            ? { ...area, occupancy_status: updated.occupancy_status }
+            ? {
+                ...area,
+                occupancy_status: updated.occupancy_status,
+                processor_reachable:
+                  updated.processor_reachable === false
+                    ? false
+                    : area.processor_reachable,
+              }
             : area;
         });
       }
@@ -367,7 +402,8 @@ const heatmapSlice = createSlice({
       })
       .addCase(fetchAreaStatus.rejected, (state, action) => {
         state.areaStatusLoading = false;
-        state.areaStatusError = action.error.message || "Failed to fetch area status";
+        state.areaStatusError =
+          action.payload || action.error.message || "Failed to fetch area status";
       });
 
     // Toggle all zones in area

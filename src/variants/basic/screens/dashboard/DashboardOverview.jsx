@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Box, Typography, CircularProgress, Divider } from '@mui/material'
 import LinkIcon from '@mui/icons-material/Link'
 import dashboardOverviewBg from '../../assets/images/dashboard-overview-bg.png'
@@ -19,7 +20,8 @@ import {
   getShadesWidgetDescription,
   getShadesWidgetImage,
   getShadesWidgetName,
-  SHADES_HYPERLINK_KEY,
+  getShadesWidgetHyperlink,
+  openShadesWidgetHyperlink,
   SHADES_SETTINGS_EVENT,
 } from '../../utils/shadesWidgetSettings'
 import {
@@ -36,8 +38,8 @@ const SHADES_FLOORPLAN_URL =
 const titleStyle = {
   color: '#1565c0',
   fontWeight: 400,
-  /* 180% of prior 0.95rem / 1.02rem */
-  fontSize: { xs: '1.71rem', sm: '1.84rem' },
+  /* Dense titles for ~15" laptop viewports */
+  fontSize: { xs: '1.2rem', sm: '1.35rem' },
   lineHeight: 1.2,
   textAlign: 'left',
   width: '100%',
@@ -51,11 +53,15 @@ const bodyTextMuted = { color: '#94a3b8' }
 const cardStyle = {
   backgroundColor: '#ffffff',
   borderRadius: 0,
-  p: 1.25,
+  p: 1,
+  // Equal grid cells: allow shrink below content min-size (Alerts / CO₂ must not grow the row).
   minHeight: 0,
+  minWidth: 0,
   width: '100%',
   height: '100%',
   maxHeight: '100%',
+  alignSelf: 'stretch',
+  justifySelf: 'stretch',
   cursor: 'pointer',
   transition: 'box-shadow 0.2s ease',
   display: 'flex',
@@ -63,7 +69,6 @@ const cardStyle = {
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
   boxSizing: 'border-box',
   overflow: 'hidden',
-  minWidth: 0,
   /* Typography/icons can use cqi/cqh so they track card size (and browser zoom via rem-based layout) */
   containerType: 'size',
   containerName: 'overview-card',
@@ -90,12 +95,12 @@ const cardBodyMain = {
   py: 0.25,
 }
 
-const labelSmall = { fontSize: 'clamp(0.58rem, 0.38rem + 2.8cqi, 0.82rem)' }
-const labelMeta = { fontSize: 'clamp(0.52rem, 0.34rem + 2.4cqi, 0.72rem)' }
+const labelSmall = { fontSize: 'clamp(0.52rem, 0.34rem + 2.4cqi, 0.72rem)' }
+const labelMeta = { fontSize: 'clamp(0.48rem, 0.3rem + 2.1cqi, 0.65rem)' }
 
 const iconInTile = (color) => ({
   color,
-  fontSize: 'clamp(1.35rem, 0.75rem + 3.5cqi, 2.35rem) !important',
+  fontSize: 'clamp(1.1rem, 0.65rem + 3cqi, 1.85rem) !important',
   width: '1em !important',
   height: '1em !important',
   flexShrink: 0,
@@ -103,14 +108,25 @@ const iconInTile = (color) => ({
 
 const iconInTileLarge = (color) => ({
   ...iconInTile(color),
-  fontSize: 'clamp(3.1rem, 1.35rem + 5cqh + 2.5cqi, 6.25rem) !important',
+  fontSize: 'clamp(2.4rem, 1.1rem + 4.5cqh + 2cqi, 4.5rem) !important',
 })
 
 function ShadesTileContent({ title, savingsAmount, savingsUnit, gaugePercent, imageUrl, description }) {
   const co2Kg = computeCo2KgFromEnergySavings(savingsAmount, savingsUnit, getShadesCo2Constant())
   const showTeardrop = !imageUrl
   return (
-    <>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+      }}
+    >
       <Box sx={cardHeader}>
         <Typography variant="subtitle1" sx={titleStyle} noWrap>
           {title}
@@ -134,19 +150,30 @@ function ShadesTileContent({ title, savingsAmount, savingsUnit, gaugePercent, im
         )}
       </Box>
       {description ? (
-        <Box sx={{ flexShrink: 0, width: '100%', pt: 0.25, px: 0.25 }}>
-          <Typography component="div" variant="body2" sx={{ ...bodyTextDark, ...labelMeta, lineHeight: 1.2 }}>
+        <Box sx={{ flexShrink: 0, width: '100%', pt: 0.25, px: 0.25, overflow: 'hidden' }}>
+          <Typography
+            component="div"
+            variant="body2"
+            noWrap
+            sx={{ ...bodyTextDark, ...labelMeta, lineHeight: 1.2 }}
+          >
             {description}
           </Typography>
         </Box>
-      ) : (
-        <Box sx={{ flexShrink: 0, width: '100%', pt: 0.25, px: 0.25 }} />
-      )}
-    </>
+      ) : null}
+    </Box>
   )
 }
 
-function CustomOverviewWidgetTile({ widget, savingsAmount, savingsUnit, gaugePercent, tileWidthSx }) {
+function CustomOverviewWidgetTile({
+  widget,
+  savingsAmount,
+  savingsUnit,
+  gaugePercent,
+  tileWidthSx,
+  navigate,
+  onNavigateToEnergy,
+}) {
   const isExternalLink = widget.type === CUSTOM_OVERVIEW_WIDGET_TYPES.EXTERNAL_LINK
   const isCarbon = widget.type === CUSTOM_OVERVIEW_WIDGET_TYPES.CARBON_FOOTPRINT
   const hyperlink = widget.hyperlink?.trim() || ''
@@ -154,7 +181,7 @@ function CustomOverviewWidgetTile({ widget, savingsAmount, savingsUnit, gaugePer
 
   const handleClick = () => {
     if (!isClickable || !hyperlink) return
-    window.open(hyperlink, '_blank', 'noopener,noreferrer')
+    openShadesWidgetHyperlink(hyperlink, { navigate, onNavigateToEnergy })
   }
 
   const showTeardrop = isCarbon || (isExternalLink && !widget.imageUrl)
@@ -167,9 +194,11 @@ function CustomOverviewWidgetTile({ widget, savingsAmount, savingsUnit, gaugePer
       sx={{
         ...cardStyle,
         ...tileWidthSx,
-        aspectRatio: '115 / 116',
-        minHeight: '10rem',
-        height: 'auto',
+        // Match main overview grid cell proportions (equal height/width among custom tiles).
+        aspectRatio: '115 / 92',
+        minHeight: 0,
+        height: '100%',
+        maxHeight: '12.5rem',
         cursor: isClickable ? 'pointer' : 'default',
       }}
       onClick={isClickable ? handleClick : undefined}
@@ -224,6 +253,7 @@ function DashboardOverview({
   onNavigateToFloor,
   onNavigateToQuickControls,
 }) {
+  const navigate = useNavigate()
   const { isWidgetVisible } = useDashboardWidgetVisibility()
   const readShadesTileSettings = () => ({
     name: getShadesWidgetName(),
@@ -250,7 +280,8 @@ function DashboardOverview({
   const showSchedulesTile = isWidgetVisible('schedules')
   const showQuickControlsTile = isWidgetVisible('quick_controls')
   const showShadesTile = isWidgetVisible('shades')
-  const showFloorsTile = isWidgetVisible('floors')
+  // const showFloorsTile = isWidgetVisible('floors')
+  const showFloorsTile = false
   const showSpaceUtilizationTile = isWidgetVisible('space_utilization')
 
   const overviewTileCount =
@@ -421,16 +452,10 @@ function DashboardOverview({
   const bottomRowTileWidthSx = overviewBottomRowTileWidthSx(bottomRowTileCount)
 
   const openShadesFloorplan = () => {
-    let url = SHADES_FLOORPLAN_URL
-    try {
-      const stored = localStorage.getItem(SHADES_HYPERLINK_KEY)
-      if (stored && stored.trim()) {
-        url = stored.trim()
-      }
-    } catch (e) {
-      console.error(e)
-    }
-    window.open(url, '_blank', 'noopener,noreferrer')
+    openShadesWidgetHyperlink(getShadesWidgetHyperlink(SHADES_FLOORPLAN_URL), {
+      navigate,
+      onNavigateToEnergy,
+    })
   }
 
   const energy = data?.energy
@@ -446,10 +471,13 @@ function DashboardOverview({
   )
   const alerts = data?.alerts
   const schedule = data?.schedule?.next
-  const floorsCount = data?.floors?.count
-  const spaceUtil = data?.space_utilization
+  // Floors tile is hidden, but count still drives Space Utilization empty-state.
+  const floorsCount = data?.floors?.count ?? 0
+  // Basic only: without configured floors, do not show occupancy % from CurrentAreaEvent.
+  // Passing null uses existing OverviewMetricTile empty UI ("No data").
+  const spaceUtil = floorsCount > 0 ? data?.space_utilization ?? null : null
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'min(22.5rem, 50%)' }}>
         <CircularProgress />
@@ -457,10 +485,19 @@ function DashboardOverview({
     )
   }
 
-  if (error) {
+  if (error && !data) {
+    const message =
+      typeof error === 'string'
+        ? error
+        : error?.message || 'Failed to load dashboard overview.';
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography color="error">Failed to load dashboard overview.</Typography>
+        <Typography color="error" sx={{ mb: 1 }}>
+          {message}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Confirm the API server is reachable, then refresh the page or open the Energy tab.
+        </Typography>
       </Box>
     )
   }
@@ -507,24 +544,31 @@ function DashboardOverview({
           sx={{
             /* rem/% + aspect-ratio: scales with browser zoom like normal text; avoids vw/dvh fighting rem */
             width: useSevenTileLayout
-              ? 'min(calc(100% - 1rem), 77.33rem, 92%)'
+              ? 'min(calc(100% - 1rem), 62rem, 82%)'
               : useOneTileLayout
-                ? 'min(calc(100% - 1rem), 18.67rem, 92%)'
+                ? 'min(calc(100% - 1rem), 14.5rem, 82%)'
                 : (useFourTileLayout || useTwoTileLayout)
-                  ? 'min(calc(100% - 1rem), 38.33rem, 92%)'
-                  : 'min(calc(100% - 1rem), 58rem, 92%)',
+                  ? 'min(calc(100% - 1rem), 30rem, 82%)'
+                  : useSixTileLayout
+                    ? 'min(calc(100% - 1rem), 52rem, 88%)'
+                    : 'min(calc(100% - 1rem), 46rem, 82%)',
             maxWidth: '100%',
+            /* Taller grid for 5/6 tiles so every card shares equal width/height cells */
             aspectRatio: useSevenTileLayout
-              ? '2 / 1'
+              ? '2.15 / 1'
+              : useSixTileLayout
+                ? '3 / 1.82'
+              : useFiveTileLayout
+                ? '3 / 1.82'
               : useThreeTileLayout
-                ? '3 / 1'
+                ? '3.2 / 1'
                 : useTwoTileLayout
-                  ? '115 / 58'
+                  ? '115 / 52'
                   : (useFourTileLayout || useOneTileLayout)
-                    ? '115 / 116'
-                    : '3 / 2',
+                    ? '115 / 92'
+                    : '3 / 1.55',
             minHeight: 0,
-            maxHeight: 'min(100%, min(42rem, calc(100dvh - 11.5rem)))',
+            maxHeight: 'min(100%, min(32rem, calc(100dvh - 9.5rem)))',
             flex: '0 1 auto',
             boxSizing: 'border-box',
             display: 'grid',
@@ -537,11 +581,15 @@ function DashboardOverview({
                   : (useFourTileLayout || useTwoTileLayout)
                     ? 'repeat(2, minmax(0, 1fr))'
                     : 'repeat(3, minmax(0, 1fr))',
-            gridTemplateRows: (useThreeTileLayout || useTwoTileLayout || useOneTileLayout) ? '1fr' : 'repeat(2, minmax(0, 1fr))',
-            columnGap: 2,
-            rowGap: 2,
-            placeItems: 'stretch',
+            gridTemplateRows: (useThreeTileLayout || useTwoTileLayout || useOneTileLayout)
+              ? 'minmax(0, 1fr)'
+              : 'repeat(2, minmax(0, 1fr))',
+            columnGap: 1.25,
+            rowGap: 1.25,
+            alignItems: 'stretch',
+            justifyItems: 'stretch',
             alignSelf: 'center',
+            overflow: 'hidden',
           }}
         >
           {showEnergyTile && (
@@ -632,6 +680,7 @@ function DashboardOverview({
             </Box>
           ) : null}
 
+          {/* Floors widget disabled
           {(useSevenTileLayout || useFiveTileLayout || useSixTileLayout || useFourTileLayout || useThreeTileLayout || useTwoTileLayout || useOneTileLayout) && showFloorsTile ? (
             <OverviewMetricTile
               tileType={OVERVIEW_TILE_TYPES.FLOORS}
@@ -641,6 +690,7 @@ function DashboardOverview({
               cardSx={resolveGreenTileGridSx('floors', overviewSevenGridSpanSx(2, 4, 6))}
             />
           ) : null}
+          */}
 
           {(useSevenTileLayout || useFiveTileLayout || useSixTileLayout || useFourTileLayout || useThreeTileLayout || useTwoTileLayout || useOneTileLayout) && showSpaceUtilizationTile ? (
             <OverviewMetricTile
@@ -661,6 +711,8 @@ function DashboardOverview({
                 alignItems: 'stretch',
                 gap: 2,
                 width: '100%',
+                minHeight: 0,
+                height: '100%',
               }}
             >
               {showQuickControlsTile && (
@@ -668,13 +720,13 @@ function DashboardOverview({
                   tileType={OVERVIEW_TILE_TYPES.QUICK_CONTROLS}
                   onClick={onNavigateToQuickControls}
                   themeVariant={OVERVIEW_THEME_VARIANTS.BASIC}
-                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx }}
+                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx, aspectRatio: '115 / 92' }}
                 />
               )}
 
               {showShadesTile && (
                 <Box
-                  sx={{ ...cardStyle, ...bottomRowTileWidthSx }}
+                  sx={{ ...cardStyle, ...bottomRowTileWidthSx, aspectRatio: '115 / 92' }}
                   onClick={openShadesFloorplan}
                   role="link"
                   aria-label="Open Shades floorplan in Quantum Vue"
@@ -690,15 +742,17 @@ function DashboardOverview({
                 </Box>
               )}
 
+              {/* Floors widget disabled
               {showFloorsTile && (
                 <OverviewMetricTile
                   tileType={OVERVIEW_TILE_TYPES.FLOORS}
                   floorsCount={floorsCount}
                   onClick={onNavigateToFloor}
                   themeVariant={OVERVIEW_THEME_VARIANTS.BASIC}
-                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx }}
+                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx, aspectRatio: '115 / 92' }}
                 />
               )}
+              */}
 
               {showSpaceUtilizationTile && (
                 <OverviewMetricTile
@@ -706,7 +760,7 @@ function DashboardOverview({
                   spaceUtil={spaceUtil}
                   onClick={onNavigateToSpaceUtilization}
                   themeVariant={OVERVIEW_THEME_VARIANTS.BASIC}
-                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx }}
+                  cardSx={{ ...cardStyle, ...bottomRowTileWidthSx, aspectRatio: '115 / 92' }}
                 />
               )}
             </Box>
@@ -717,10 +771,10 @@ function DashboardOverview({
           <Box
             sx={{
               width: useSevenTileLayout
-                ? 'min(calc(100% - 1rem), 77.33rem, 92%)'
-                : 'min(calc(100% - 1rem), 58rem, 92%)',
+                ? 'min(calc(100% - 1rem), 62rem, 82%)'
+                : 'min(calc(100% - 1rem), 46rem, 82%)',
               maxWidth: '100%',
-              mt: 2,
+              mt: 1.5,
               flexShrink: 0,
             }}
           >
@@ -741,6 +795,8 @@ function DashboardOverview({
                   savingsUnit={shadesCo2Unit}
                   gaugePercent={shadesCo2GaugePercent}
                   tileWidthSx={customOverviewTileWidthSx}
+                  navigate={navigate}
+                  onNavigateToEnergy={onNavigateToEnergy}
                 />
               ))}
             </Box>

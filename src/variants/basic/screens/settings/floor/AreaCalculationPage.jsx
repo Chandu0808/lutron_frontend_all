@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Grid,
@@ -20,12 +20,13 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchFloors, fetchSingleFloor, calculateAreaWithReferenceLength, fetchExistingCalculatedAreas } from '../../../redux/slice/floor/floorSlice';
 import { fetchFloorMapData, fetchAreaOccupancyStatus, fetchAreaEnergyConsumption } from '../../../redux/slice/settingsslice/heatmap/HeatmapSlice';
+import { BASIC_FLOOR_PATH } from '../../../utils/basicSettingsPaths';
 import { MdArrowBack } from 'react-icons/md';
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import { configurePdfJsWorker, buildPdfDocumentFile } from '../../../../../shared/pdf/floorPlanPdf';
 import { getPolygonRings, flattenAreaCoords } from '../../../utils/floorplanCoordinates';
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+configurePdfJsWorker();
 
 export default function AreaCalculationPage() {
   const theme = useTheme();
@@ -43,6 +44,7 @@ export default function AreaCalculationPage() {
   const heatmapData = useSelector((state) => state.heatmap.heatmapData);
   const heatmapLoading = useSelector((state) => state.heatmap.loading);
   const pdfUrl = useSelector((state) => state.heatmap.pdfUrl);
+  const pdfFile = useMemo(() => buildPdfDocumentFile(pdfUrl), [pdfUrl]);
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [scale, setScale] = useState(1);
   const [pageDims, setPageDims] = useState({ width: 800, height: 600 });
@@ -274,7 +276,7 @@ export default function AreaCalculationPage() {
         <Button
           variant="outlined"
           startIcon={<MdArrowBack />}
-          onClick={() => navigate('/floor')}
+          onClick={() => navigate(BASIC_FLOOR_PATH)}
           sx={{
             borderColor: theme.palette.text.secondary,
             color: theme.palette.text.secondary,
@@ -366,7 +368,7 @@ export default function AreaCalculationPage() {
                     }
 
                     return (
-                      <Document file={pdfUrl} key={pdfUrl}>
+                      <Document file={pdfFile} key={pdfUrl}>
                         <Page
                           pageNumber={1}
                           width={pageDims.width}

@@ -35,17 +35,10 @@ export function getThemeAwareMetricPanelBorder(_background) {
 }
 
 /**
- * Pie/donut leader-line labels: white text on custom themes for contrast on dark cards.
+ * Pie/donut leader-line labels: white text on all advanced cards (preset + custom)
+ * so % labels stay readable on dark theme backgrounds. Leader lines keep segment color.
  */
-export function resolvePieChartLabelColors(background, segmentColor) {
-  if (!usesCustomApplicationTheme(background)) {
-    return {
-      textFill: segmentColor,
-      lineStroke: segmentColor,
-      textShadow: undefined,
-    };
-  }
-
+export function resolvePieChartLabelColors(_background, segmentColor) {
   return {
     textFill: '#ffffff',
     lineStroke: segmentColor,

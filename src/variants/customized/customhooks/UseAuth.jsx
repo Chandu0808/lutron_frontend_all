@@ -1,3 +1,5 @@
+import { CUSTOMIZED_SETTINGS_SIDEBAR_PATHS } from "../utils/customizedSettingsPaths.js";
+
 /** Phase 5.1 — core auth in shared, sidebar RBAC variant-specific */
 export { UseAuth, isSuperadminRole, getOverallPermissionLevel } from "../../../shared/auth/useAuthCore.js";
 
@@ -15,26 +17,12 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Manage Modules",
         "Alerts",
         "Processors",
+        "Maintenance",
         "FOFP",
         "Help",
     ];
 
-    const allPaths = {
-        "Home": "/main",
-        "Theme": "/theme-change",
-        "Widgets": "/widgets/",
-        "Manage Area Groups": "/manage-area-groups",
-        "Area Size & Load": "/area-size-load",
-        "Email Server": "/email-server/",
-        "Users": "/users",
-        "Floor": "/floor",
-        "Manage Sensors": "/manage-sensors",
-        "Manage Modules": "/manage-modules",
-        "Alerts": "/alerts",
-        "Processors": "/processors",
-        "FOFP": "/fofp",
-        "Help": "/create-help/",
-    };
+    const allPaths = CUSTOMIZED_SETTINGS_SIDEBAR_PATHS;
 
     // Check if role is Superadmin (case-insensitive)
     if (role && (role === 'Superadmin' || role.toLowerCase() === 'superadmin' || role.toLowerCase() === 'super admin')) {
@@ -57,6 +45,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'Maintenance' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
@@ -83,6 +72,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'Maintenance' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -104,6 +94,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Help' &&
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
+                item !== 'Maintenance' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -127,6 +118,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Help' &&
             item !== 'Alerts' &&
             item !== 'Processors' &&
+            item !== 'Maintenance' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'

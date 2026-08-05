@@ -86,16 +86,15 @@ body,
     overflow-x: auto;
   }
 
-  /* Touch-friendly buttons and inputs */
+  /* Touch-friendly buttons and inputs (exclude compact shade % fields) */
   .MuiButton-root,
-  .MuiTextField-root input {
+  .MuiTextField-root:not(.heatmap-shade-level-input) input {
     min-height: 42px;
   }
 
-  /* Heatmap adjustments for laptop */
+  /* Heatmap adjustments for laptop — cap height; JS availableHeight sets exact fit */
   .heatmap-container {
-    height: calc(100vh - 130px) !important;
-    max-height: calc(100vh - 130px) !important;
+    max-height: calc(100vh - 96px) !important;
   }
 
   /* Area group scrollable adjustments */
@@ -117,8 +116,7 @@ body,
   }
 
   .heatmap-container {
-    height: calc(100vh - 120px) !important;
-    max-height: calc(100vh - 120px) !important;
+    max-height: calc(100vh - 88px) !important;
   }
 
   .area-group-scrollable {
@@ -197,31 +195,148 @@ body,
     overflow-x: auto;
   }
 
-  /* Ensure buttons and inputs are touch-friendly */
+  /* Ensure buttons and inputs are touch-friendly (exclude compact shade % fields) */
   .MuiButton-root,
-  .MuiTextField-root input {
+  .MuiTextField-root:not(.heatmap-shade-level-input) input {
     min-height: 44px;
   }
 }
 
-/* Heatmap specific styles to prevent vertical scroll */
+/* Heatmap specific styles — cap height; JS availableHeight sets exact fit so Shades Apply stays on-screen. */
 .heatmap-container {
-  height: calc(100vh - 120px) !important;
+  max-height: calc(100dvh - 88px) !important;
   overflow: hidden !important;
 }
 
-/* For screens 1440px and above, ensure heatmap has no scroll */
+/* Heatmap: stack map + sidebar on narrow screens (< 600px) */
+@media (max-width: 599px) {
+  .heatmap-container {
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: calc(100dvh - 140px) !important;
+    overflow-y: auto !important;
+  }
+  .heatmap-area-sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    max-height: 50vh !important;
+    border-radius: 14px 14px 0 0 !important;
+  }
+}
+
+/* Customized heatmap sidebar — shade cards + preset labels on light backgrounds */
+.heatmap-container .customized-heatmap-shades-panel .customized-heatmap-shade-card {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+}
+
+.heatmap-container .customized-heatmap-shades-panel .customized-heatmap-shade-card .MuiTypography-root,
+.heatmap-container .customized-heatmap-shades-panel .customized-heatmap-shade-card .MuiOutlinedInput-root,
+.heatmap-container .customized-heatmap-shades-panel .customized-heatmap-shade-card .MuiOutlinedInput-input {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* Shade % field — border on wrapper (native input; MUI outline was invisible) */
+.heatmap-container .heatmap-shade-level-wrap {
+  width: 64px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  box-sizing: border-box !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid rgba(128, 120, 100, 0.7) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 0 0 1px rgba(128, 120, 100, 0.15) !important;
+  overflow: visible !important;
+}
+.heatmap-container .heatmap-shade-level-wrap:hover {
+  border-color: rgba(128, 120, 100, 0.9) !important;
+}
+.heatmap-container .heatmap-shade-level-wrap:focus-within {
+  border-color: #807864 !important;
+  box-shadow: 0 0 0 2px rgba(128, 120, 100, 0.25) !important;
+}
+.heatmap-container .heatmap-shade-level-input {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  text-align: center !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111 !important;
+  font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+}
+
+/* Area status sidebar — shell clips; body scrolls so Shades Apply is reachable */
+.heatmap-container .heatmap-area-sidebar {
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  overscroll-behavior: contain;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.heatmap-container .heatmap-area-sidebar-body {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding-bottom: 96px !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar {
+  width: 10px !important;
+  display: block !important;
+}
+
+.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
+  background: rgba(128, 120, 100, 0.65) !important;
+  border-radius: 5px !important;
+}
+
+/* For screens 1440px+: keep floorplan from scrolling, but NOT the area sidebar body */
 @media (min-width: 1440px) {
   .heatmap-container {
     overflow: hidden !important;
-    height: calc(100vh - 120px) !important;
-    max-height: calc(100vh - 120px) !important;
+    max-height: calc(100vh - 88px) !important;
   }
 
-  .heatmap-container * {
+  .heatmap-container > *:not(.heatmap-area-sidebar),
+  .heatmap-container > *:not(.heatmap-area-sidebar) * {
     overflow: hidden !important;
     overflow-y: hidden !important;
     overflow-x: hidden !important;
+  }
+
+  .heatmap-container .heatmap-area-sidebar {
+    overflow: hidden !important;
+  }
+
+  .heatmap-container .heatmap-area-sidebar-body {
+    overflow-x: hidden !important;
+    overflow-y: scroll !important;
   }
 }
 
@@ -300,6 +415,23 @@ body,
   overflow: visible !important;
   position: relative !important;
   box-sizing: border-box !important;
+}
+
+/* Shared settings shell — scrollable content panel (matches advanced behavior). */
+.settings-main-inner-panel {
+  min-width: 0;
+  max-width: 100%;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+@media (max-width: 899px) {
+  .settings-main-inner-panel {
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 /* Responsive adjustments for settings containers */

@@ -1,5 +1,5 @@
 /**
- * Resolve schedule detail area rows to "Floor > Area" labels (same logic as basic ScheduleDetails).
+ * Resolve schedule detail area rows to "Floor / Area" labels (same logic as basic ScheduleDetails).
  */
 
 function normNameKey(name) {
@@ -198,16 +198,19 @@ export function mapAreasToScheduleLocations(areas, floors, areaTreeIndex) {
   });
 }
 
-/** Display label for location column (e.g. "1st Floor > ELECTRICAL ROOM 1"). */
+/** Display label for location column (e.g. "1st Floor / ELECTRICAL ROOM 1"). */
 export function formatScheduleLocationLabel(loc) {
-  const parts = [loc?.floorName, loc?.areaName]
-    .map((p) => String(p ?? '').trim())
-    .filter(Boolean);
-  return parts.length > 0 ? parts.join(' > ') : 'Unknown Location';
+  const floor = String(loc?.floorName ?? '').trim();
+  const area = String(loc?.areaName ?? '').trim();
+  const hasRealFloor = floor && floor !== 'Unknown Floor';
+  if (hasRealFloor && area) return `${floor} / ${area}`;
+  if (hasRealFloor) return floor;
+  if (area) return area;
+  return 'Unknown Location';
 }
 
 /**
- * Quick Control details: resolve "Floor > Area" from API area row (same as basic QuickControlDetails).
+ * Quick Control details: resolve "Floor / Area" from API area row (same as basic QuickControlDetails).
  * @param {object} area - quick_control_areas item
  * @param {Array} floors - Redux floors list
  * @param {Map|null|undefined} [areaTreeIndex] - optional from loadAreaTreeIndex

@@ -5,7 +5,6 @@ export const SPACE_PEAK_MIN_THEME_PRESETS = {
 };
 
 const ADVANCED_PANEL_BG = 'var(--dashboard-chart-loading-bg, #232323)';
-const CUSTOMIZED_PANEL_BG = 'var(--dashboard-chart-plot-background, #232323)';
 
 export function resolveSpacePeakMinLoading({
   instantOccupancyCountLoading = false,
@@ -69,11 +68,11 @@ export function resolveSpacePeakMinTheme({
   if (preset === SPACE_PEAK_MIN_THEME_PRESETS.customized) {
     return {
       preset,
-      panelBg: CUSTOMIZED_PANEL_BG,
+      panelBg: '#232323',
       panelBorder: null,
-      panelLayout: 'centered-fixed',
-      rowGap: null,
-      rowHeight: 220,
+      panelLayout: 'centered',
+      rowGap: '15px',
+      rowHeight: null,
       timeColor: '#ccc',
       loaderSpinnerStyle: {
         width: '20px',

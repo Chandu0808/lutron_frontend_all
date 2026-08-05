@@ -12,6 +12,7 @@ import {
     Alert
 } from '@mui/material';
 import { SidebarItems, getVisibleSidebarItems } from '../../utils/sidebarItems';
+import { BASIC_MANAGE_AREA_GROUPS_PATH } from '../../utils/basicSettingsPaths';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { createEmail, fetchEmailConfigs, getEmailData, testEmail } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
@@ -123,7 +124,7 @@ const EmailServer = () => {
     // Redirect unauthorized users
     useEffect(() => {
         if (!canAccessEmailServer()) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(BASIC_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [role, navigate]);
 

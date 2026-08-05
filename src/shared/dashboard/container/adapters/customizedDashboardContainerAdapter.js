@@ -7,9 +7,14 @@ import {
   buildDashboardWidgetOptions,
 } from './dashboardAdapterHelpers';
 
+import {
+  useCustomizedDashboardVisibility,
+} from '../hooks/useDashboardVisibility';
+
 export const customizedDashboardContainerAdapter = {
   variant: 'customized',
   layoutAdapter: CUSTOMIZED_DASHBOARD_LAYOUT_ADAPTER,
+  useVisibility: useCustomizedDashboardVisibility,
 
   resolveVisibilityOptions(runtime) {
     return buildCustomizedDashboardVisibilityOptions(runtime);

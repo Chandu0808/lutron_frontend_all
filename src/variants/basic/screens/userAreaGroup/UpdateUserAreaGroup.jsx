@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { BASIC_MANAGE_AREA_GROUPS_PATH } from '../../utils/basicSettingsPaths';
 import { RiDeleteBin6Fill } from "react-icons/ri";
 import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch, useSelector } from 'react-redux';
@@ -140,7 +141,7 @@ const UpdateUserAreaGroup = () => {
                 setShowSnackbar(true);
                 // Refresh the area groups list before navigating back
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1500);
+                setTimeout(() => navigate(BASIC_MANAGE_AREA_GROUPS_PATH), 1500);
             })
             .catch(() => {
                 setSnackbarMessage("Failed to delete area group. Please try again.");
@@ -202,7 +203,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate(BASIC_MANAGE_AREA_GROUPS_PATH), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to copy area group. Please try again.");
@@ -217,7 +218,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate(BASIC_MANAGE_AREA_GROUPS_PATH), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to update area group. Please try again.");
@@ -472,7 +473,7 @@ const UpdateUserAreaGroup = () => {
                         )}
                         <Button
                             variant="contained"
-                            onClick={() => navigate('/manage-area-groups')}
+                            onClick={() => navigate(BASIC_MANAGE_AREA_GROUPS_PATH)}
                             sx={{ backgroundColor: actionBlue, color: '#fff' }}
                         >
                             Close

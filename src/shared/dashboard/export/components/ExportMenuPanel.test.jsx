@@ -121,6 +121,36 @@ describe('dashboard export menu parity', () => {
     expect(screen.getByRole('button', { name: '⏳ Sending...' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Download To PC' })).toBeEnabled();
   });
+
+  it('EnergyExportMenu uses loadingPrefix when menu key differs from loading keys', () => {
+    const onEmail = jest.fn();
+    const onDownload = jest.fn();
+    const preset = resolveEnergyExportMenuPresetFromTheme(
+      {
+        dropdownBg: '#fff',
+        dropdownBorder: '1px solid #ccc',
+        dropdownText: '#111',
+        dropdownMuted: '#999',
+        dropdownSep: '#eee',
+      },
+      { useEmoji: true }
+    );
+
+    render(
+      <EnergyExportMenu
+        menuKey="Custom Consumption Title"
+        loadingPrefix="Consumption"
+        isOpen
+        exportLoading={{ Consumption_download: true }}
+        onEmail={onEmail}
+        onDownload={onDownload}
+        preset={preset}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '⏳ Downloading...' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send By Email' })).toBeEnabled();
+  });
 });
 
 describe('space export menu parity', () => {

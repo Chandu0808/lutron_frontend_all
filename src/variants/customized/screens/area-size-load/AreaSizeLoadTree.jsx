@@ -4,6 +4,7 @@ import { AddBoxOutlined, IndeterminateCheckBoxOutlined } from "@mui/icons-materi
 import { useDispatch, useSelector } from "react-redux";
 import { fetchAreaLoadData, getAreaSizeLoadData } from "../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
 import { UseAuth } from '../../customhooks/UseAuth';
+import { dispatchFetchAreaSizeLoadOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 
 const AreaSizeLoadTree = () => {
     const dispatch = useDispatch();
@@ -41,7 +42,7 @@ const AreaSizeLoadTree = () => {
     };
 
     useEffect(() => {
-        dispatch(getAreaSizeLoadData());
+        dispatchFetchAreaSizeLoadOnce(dispatch, getAreaSizeLoadData);
     }, [dispatch]);
 
     const toggleExpand = () => {

@@ -184,7 +184,7 @@ describe("preset module extraction (Phase 4.3B/4.3C)", () => {
     const vars = captureMockRootVars(root);
     expect(vars["--settings-panel-inner-bg"]).toBe("#ffffff");
     expect(vars["--heatmap-tab-pill-bg"]).toBe("#3d4a5c");
-    expect(Object.keys(vars).length).toMatchInlineSnapshot(`120`);
+    expect(Object.keys(vars).length).toMatchInlineSnapshot(`131`);
     expect(vars).toMatchSnapshot();
   });
 });

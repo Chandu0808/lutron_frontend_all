@@ -7,7 +7,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear'; // Add this import
 import { styled, darken } from '@mui/material/styles';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchFloors } from "../../redux/slice/floor/floorSlice";
+import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import {
   setSelectedFloorId,
   setDisplayMode,
@@ -20,6 +20,7 @@ import GroupOccupancyModel from '../heatmap/GroupOccupancymodel'
 import { UseAuth } from '../../customhooks/UseAuth'; // Add this import
 
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
+import { dispatchFetchFloorsOnce } from '../../../../shared/utils/bootstrapFetchGuards';
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -70,7 +71,8 @@ const HeatmapControls = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
   const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
-  const { floors, status: floorStatus } = useSelector(state => state.floor);
+  const floors = useSelector(selectFloors);
+  const floorStatus = useSelector((state) => state.floor.status);
 
   // const { selectedFloorId, displayMode = 'Light' } = useSelector(state => state.heatmap || {});
   const appTheme = useSelector(selectApplicationTheme);
@@ -176,14 +178,8 @@ const HeatmapControls = () => {
 
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch, currentUserRole]);
-
-  useEffect(() => {
-    // if (!floors || floors.length === 0) {
-    dispatch(fetchFloors());
-    // }
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   useEffect(() => {
     if (!displayMode) dispatch(setDisplayMode('Light'));
@@ -284,7 +280,8 @@ const HeatmapControls = () => {
       // Force refresh all heatmap data
       dispatch(refreshAllHeatmapData({
         floorId: selectedFloorId,
-        areaId: null
+        areaId: null,
+        displayMode,
       }));
     }
   };
@@ -516,7 +513,7 @@ const HeatmapControls = () => {
           display: 'flex',
           justifyContent: 'flex-end',
           flexShrink: 0,
-          ml: { xs: 0.3, sm: 0.5, md: 0.8 },
+          ml: 'auto',
         }}>
           {displayMode === 'Light' && canCreateAreaGroup() && (
             <Button

@@ -30,6 +30,7 @@ import {
   authFieldSx,
   authButtonSx,
   authIconSx,
+  authPasswordVisibilityIconSx,
 } from "./authFormStyles";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
 
@@ -218,7 +219,8 @@ const ChangePassword = () => {
           InputProps={buildPasswordVisibilityInputProps(
             showCurrentPassword,
             setShowCurrentPassword,
-            { color: "var(--auth-field-text, rgba(0, 0, 0, 0.54))" }
+            authPasswordVisibilityIconSx,
+            "auth-password-visibility-btn"
           )}
           sx={{ mb: 1, ...authFieldSx }}
         />
@@ -252,7 +254,8 @@ const ChangePassword = () => {
           InputProps={buildPasswordVisibilityInputProps(
             showNewPassword,
             setShowNewPassword,
-            { color: "var(--auth-field-text, rgba(0, 0, 0, 0.54))" }
+            authPasswordVisibilityIconSx,
+            "auth-password-visibility-btn"
           )}
           sx={{ mb: 1, ...authFieldSx }}
         />
@@ -281,7 +284,8 @@ const ChangePassword = () => {
           InputProps={buildPasswordVisibilityInputProps(
             showConfirmPassword,
             setShowConfirmPassword,
-            { color: "var(--auth-field-text, rgba(0, 0, 0, 0.54))" }
+            authPasswordVisibilityIconSx,
+            "auth-password-visibility-btn"
           )}
           sx={{ mb: 1, ...authFieldSx }}
         />

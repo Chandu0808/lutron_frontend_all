@@ -10,6 +10,7 @@ import {
     Alert
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { ADVANCED_MANAGE_AREA_GROUPS_PATH } from '../../utils/advancedSettingsPaths';
 import { useDispatch, useSelector } from 'react-redux';
 import { createEmail, fetchEmailConfigs, getEmailData, testEmail } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import {  selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
@@ -114,7 +115,7 @@ const EmailServer = () => {
     // Redirect unauthorized users
     useEffect(() => {
         if (!canAccessEmailServer()) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(ADVANCED_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [role, navigate]);
     

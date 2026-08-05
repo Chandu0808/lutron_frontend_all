@@ -11,6 +11,12 @@ import * as themeSlice from '../../redux/slice/theme/themeSlice';
 import * as fixedActionBarStyles from '../../../../utils/fixedActionBarStyles';
 import * as scheduleActionPriority from '../../../../utils/scheduleActionPriority';
 import { bindScheduleSettingsModule } from '../../../../shared/settings/schedule/bindScheduleSettingsModule';
+import * as scheduleTableLayout from '../../utils/quickControlTableLayout';
+import {
+  schedulePrimaryButtonStyle,
+  scheduleSmallActionButtonStyle,
+} from '../../utils/scheduleCreateStyles';
+import { detailsRowActionControlsStyle } from '../../../../utils/detailsRowActionControlsStyle';
 
 bindScheduleSettingsModule({
   scheduleSlice,
@@ -23,6 +29,12 @@ bindScheduleSettingsModule({
   themeSlice,
   fixedActionBarStyles,
   scheduleActionPriority,
+  scheduleAdvancedLocationsPanel: {
+    ...scheduleTableLayout,
+    schedulePrimaryButtonStyle,
+    scheduleSmallActionButtonStyle,
+    detailsRowActionControlsStyle,
+  },
 });
 
 export { default } from "../../../../shared/settings/schedule/ScheduleDetails";

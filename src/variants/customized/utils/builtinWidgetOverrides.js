@@ -4,6 +4,23 @@
  */
 export const BUILTIN_WIDGET_OVERRIDES_KEY = "builtinWidgetOverrides";
 
+/** Built-in keys that always use dedicated dashboard widgets (not EnergyCustomGraphCard). */
+export const BUILTIN_WIDGET_KEYS_WITH_DEDICATED_RENDERER = new Set([
+  "light_power_density",
+  "peak_and_minimum_consumption",
+  "consumption_saving",
+  // Object-map pie API — Energy tab never fetches builtin_* overrides into customGraphData,
+  // so an accidental line/bar override would show "No data / Type: LINE".
+  "savings_by_strategy",
+]);
+
+export function shouldRenderBuiltinWidgetAsCustomGraph(widgetKey, override) {
+  const key = String(widgetKey ?? "").trim();
+  if (BUILTIN_WIDGET_KEYS_WITH_DEDICATED_RENDERER.has(key)) return false;
+  if (!override?.api_path?.trim() || !override?.graph_type) return false;
+  return true;
+}
+
 export function normalizeBuiltinApiPath(path) {
   const p = String(path ?? "").trim();
   if (!p) return "";

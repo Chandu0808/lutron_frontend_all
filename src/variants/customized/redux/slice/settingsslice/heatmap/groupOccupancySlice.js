@@ -6,6 +6,7 @@ import { BaseUrl } from '../../../../BaseUrl';
 import { pickCustomGraphScopeForStorage } from "../../../../utils/mergeCustomGraphScopeIntoApiParams";
 import { isCustomGraphGroupScope } from "../../../../utils/filterGroupIdsByAreaGroupScope";
 import qs from "qs";
+import { normalizeWidgetTitlesResponse, getWidgetVisibilityPersistenceKey, normalizeDashboardWidgetKey, filterWidgetConfigurationByUiVariant, findWidgetConfigurationItemIndex, normalizeWidgetConfigurationUiVariant } from '../../../../../../shared/dashboard/utils/dashboardWidgetVisibilityCore';
 // Thunk to fetch area groups
 export const fetchAreaGroups = createAsyncThunk(
   'groupOccupancy/fetchAreaGroups',
@@ -271,23 +272,6 @@ export const sendActivityReportEmail = createAsyncThunk(
     }
   }
 );
-/**
- * GET /widgets/widget_titles may return:
- * - { titles: [...] }
- * - [...] (array)
- * - { widget_titles: [...] }
- * Dashboard + getWidgetTitle expect widgetList.titles — always normalize.
- */
-function normalizeWidgetTitlesResponse(data) {
-  if (data == null) return { titles: [] };
-  if (Array.isArray(data)) return { titles: data };
-  if (typeof data !== 'object') return { titles: [] };
-  if (Array.isArray(data.titles)) return { titles: data.titles };
-  if (Array.isArray(data.widget_titles)) return { titles: data.widget_titles };
-  if (Array.isArray(data.data)) return { titles: data.data };
-  if (data.data && Array.isArray(data.data.titles)) return { titles: data.data.titles };
-  return { titles: [] };
-}
 
 function normalizeRenameError(err) {
   const d = err?.response?.data;
@@ -537,8 +521,12 @@ export const Widget = createAsyncThunk(
   'Widget/Widget',
   async (data, { rejectWithValue }) => {
     const trimmed = String(data.new_name ?? '').trim();
+    // Frontend canonical keys (e.g. total_consumption_by_group) must match
+    // backend WidgetKey (e.g. consumption_by_area_groups). Combined widgets
+    // are unchanged (not in the API enum).
+    const apiWidgetKey = getWidgetVisibilityPersistenceKey(data.widget_key);
     const minimalBody = {
-      widget_key: data.widget_key,
+      widget_key: apiWidgetKey,
       new_name: trimmed,
     };
     const fullBody = {
@@ -570,6 +558,67 @@ export const Widget = createAsyncThunk(
     }
   }
 );
+
+/** GET/POST customized dashboard widget slot order (variant-scoped). */
+export const fetchDashboardChartOrder = createAsyncThunk(
+  'groupOccupancy/fetchDashboardChartOrder',
+  async () => {
+    try {
+      const res = await BaseUrl.get('/widgets/dashboard_chart_order', {
+        params: { variant: 'customized' },
+      });
+      return res.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+);
+
+export const saveDashboardChartOrder = createAsyncThunk(
+  'groupOccupancy/saveDashboardChartOrder',
+  async (payload) => {
+    try {
+      const res = await BaseUrl.post('/widgets/dashboard_chart_order', payload, {
+        params: { variant: 'customized' },
+      });
+      return res.data ?? payload;
+    } catch {
+      return payload;
+    }
+  }
+);
+
+/** GET widget visibility configuration for the customized UI variant. */
+export const fetchWidgetConfiguration = createAsyncThunk(
+  'groupOccupancy/fetchWidgetConfiguration',
+  async () => {
+    try {
+      const res = await BaseUrl.get('/widgets/configuration', {
+        params: { variant: 'customized' },
+      });
+      const items = res.data?.items ?? [];
+      return filterWidgetConfigurationByUiVariant(items, 'customized');
+    } catch {
+      return [];
+    }
+  }
+);
+
+/** POST single widget visibility (Superadmin only). */
+export const saveWidgetVisibility = createAsyncThunk(
+  'groupOccupancy/saveWidgetVisibility',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await BaseUrl.post('/widgets/configuration', payload, {
+        params: { variant: 'customized' },
+      });
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data || 'Error');
+    }
+  }
+);
+
 const groupOccupancySlice = createSlice({
   name: 'groupOccupancy',
   initialState: {
@@ -609,6 +658,10 @@ const groupOccupancySlice = createSlice({
     customGraphs: [],
     customGraphsLoading: false,
     customGraphsError: null,
+    widgetConfiguration: [],
+    widgetConfigurationStatus: 'idle',
+    dashboardChartOrder: null,
+    dashboardChartOrderStatus: 'idle',
   },
   reducers: {
     clearRenameWidgetError: (state) => {
@@ -840,19 +893,21 @@ const groupOccupancySlice = createSlice({
         ) {
           return;
         }
+        const canonical = normalizeDashboardWidgetKey(key);
         const idx = state.widgets.titles.findIndex(
-          (t) => t && String(t.key) === key
+          (t) => t && normalizeDashboardWidgetKey(String(t.key)) === canonical
         );
         if (idx !== -1) {
           const row = state.widgets.titles[idx];
           state.widgets.titles[idx] = {
             ...row,
+            key: canonical || row.key,
             title: name,
             dropdown_name: name,
           };
         } else {
           state.widgets.titles.push({
-            key,
+            key: canonical || key,
             title: name,
             dropdown_name: name,
           });
@@ -921,6 +976,60 @@ const groupOccupancySlice = createSlice({
         state.emailLoading = false;
         state.emailError = action.payload || 'Failed to send activity report email';
         state.emailSuccess = null;
+      })
+      .addCase(fetchDashboardChartOrder.pending, (state) => {
+        state.dashboardChartOrderStatus = 'loading';
+      })
+      .addCase(fetchDashboardChartOrder.fulfilled, (state, action) => {
+        state.dashboardChartOrderStatus = 'succeeded';
+        state.dashboardChartOrder = action.payload;
+      })
+      .addCase(fetchDashboardChartOrder.rejected, (state) => {
+        state.dashboardChartOrderStatus = 'succeeded';
+        state.dashboardChartOrder = state.dashboardChartOrder ?? null;
+      })
+      .addCase(saveDashboardChartOrder.fulfilled, (state, action) => {
+        const fromArg =
+          action.meta?.arg && typeof action.meta.arg === 'object' ? action.meta.arg : {};
+        const fromRes =
+          action.payload && typeof action.payload === 'object' ? action.payload : {};
+        state.dashboardChartOrder = {
+          ...(state.dashboardChartOrder || {}),
+          ...fromRes,
+          ...fromArg,
+        };
+      })
+      .addCase(fetchWidgetConfiguration.pending, (state) => {
+        state.widgetConfigurationStatus = 'loading';
+      })
+      .addCase(fetchWidgetConfiguration.fulfilled, (state, action) => {
+        state.widgetConfigurationStatus = 'succeeded';
+        state.widgetConfiguration = Array.isArray(action.payload) ? action.payload : [];
+      })
+      .addCase(fetchWidgetConfiguration.rejected, (state) => {
+        state.widgetConfigurationStatus = 'succeeded';
+        state.widgetConfiguration = [];
+      })
+      .addCase(saveWidgetVisibility.fulfilled, (state, action) => {
+        const row = action.payload;
+        if (!row || typeof row.widget_key !== 'string') return;
+        if (!Array.isArray(state.widgetConfiguration)) {
+          state.widgetConfiguration = [];
+        }
+        const uiVariant = normalizeWidgetConfigurationUiVariant(
+          row.ui_variant ?? action.meta?.arg?.ui_variant ?? 'customized'
+        );
+        const merged = { ...row, ui_variant: uiVariant };
+        const idx = findWidgetConfigurationItemIndex(
+          state.widgetConfiguration,
+          merged.widget_key,
+          uiVariant
+        );
+        if (idx >= 0) {
+          state.widgetConfiguration[idx] = merged;
+        } else {
+          state.widgetConfiguration.push(merged);
+        }
       });
   }
 });
@@ -961,6 +1070,7 @@ export const BUILTIN_WIDGET_DEFAULT_API_PATHS = {
   consumption_by_area_groups: "/dashboard/total_consumption/by_group",
   light_power_density: "/dashboard/light_power_density",
   peak_and_minimum_consumption: "/dashboard/peak_min_consumption",
+  consumption_saving: "/dashboard/unified_energy_consumption_savings_data",
   // Space tab built-ins
   instant_occupancy_count: "/dashboard/instant_occupancy_count",
   utilization_by_area_group: "/dashboard/occupancy_by_group",
@@ -1080,6 +1190,12 @@ export const selectRenameWidgetError = (state) =>
 export const selectCustomGraphs = (state) => state.groupOccupancy.customGraphs;
 export const selectCustomGraphsLoading = (state) => state.groupOccupancy.customGraphsLoading;
 export const selectCustomGraphsError = (state) => state.groupOccupancy.customGraphsError;
+export const selectDashboardChartOrder = (state) => state.groupOccupancy.dashboardChartOrder;
+export const selectDashboardChartOrderStatus = (state) =>
+  state.groupOccupancy.dashboardChartOrderStatus;
+export const selectWidgetConfiguration = (state) => state.groupOccupancy.widgetConfiguration ?? [];
+export const selectWidgetConfigurationStatus = (state) =>
+  state.groupOccupancy.widgetConfigurationStatus ?? 'idle';
 // Activity report export selectors
 export const selectActivityReportExportLoading = (state) => state.groupOccupancy.exportLoading;
 export const selectActivityReportExportError = (state) => state.groupOccupancy.exportError;

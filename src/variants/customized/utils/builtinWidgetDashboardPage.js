@@ -10,6 +10,7 @@ const ENERGY_BUILTIN_KEYS = new Set([
     "consumption_by_area_groups",
     "consumption",
     "savings",
+    "consumption_saving",
     "light_power_density",
     "peak_and_minimum_consumption",
 ]);
@@ -17,6 +18,7 @@ const ENERGY_BUILTIN_KEYS = new Set([
 const SPACE_BUILTIN_KEYS = new Set([
     "utilization",
     "instant_occupancy_count",
+    "instant_utilization_combined",
     "utilization_by_area_group",
     "peak_and_minimum_utilization",
     "utilization_by_area",
@@ -65,6 +67,9 @@ export function setBuiltinWidgetDashboardPage(widgetKey, page) {
 export function getEffectiveBuiltinDashboardPage(widgetKey) {
     const key = String(widgetKey ?? "").trim();
     if (!key) return "energy";
+    // Combined widgets always belong on their canonical tab (ignore stale localStorage overrides).
+    if (key === "instant_utilization_combined") return "space";
+    if (key === "consumption_saving") return "energy";
     const cur = readBuiltinWidgetDashboardPage();
     const o = cur[key];
     if (o === "energy" || o === "space") return o;

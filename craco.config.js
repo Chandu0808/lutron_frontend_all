@@ -6,8 +6,10 @@ module.exports = {
       'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist'),
     },
     configure: (webpackConfig, { env }) => {
-      // Disable source maps in development to avoid react-datepicker warnings
-      if (env === 'development') {
+      // No source maps: avoids react-datepicker warnings in dev, and keeps
+      // production DevTools from mapping back to original src/ files.
+      // App runtime behavior is unchanged; also set GENERATE_SOURCEMAP=false.
+      if (env === 'development' || env === 'production') {
         webpackConfig.devtool = false;
       }
 
@@ -18,7 +20,7 @@ module.exports = {
         /react-datepicker/,
         /ENOENT: no such file or directory/,
       ];
-      
+
       return webpackConfig;
     },
   },

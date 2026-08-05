@@ -133,12 +133,12 @@ const HexColorPicker = ({
     };
 
     return (
-        <Box sx={{ width, backgroundColor: 'white', borderRadius: 3, p: 2, boxShadow: 3, mx: 'auto' }}>
+        <Box sx={{ width, backgroundColor: 'white', borderRadius: 3, p: 2, pb: 1.5, boxShadow: 3, mx: 'auto' }}>
             <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
                 {renderHexGrid()}
             </svg>
 
-            <Box className="gray-row" mt={-0.5} display="flex" justifyContent="center" flexWrap="wrap">
+            <Box className="gray-row" mt={1} display="flex" justifyContent="center" flexWrap="wrap">
                 {HEX_PICKER_PRESET_SWATCHES.map((color, i) => (
                     <svg
                         key={`preset-${i}-${color}`}

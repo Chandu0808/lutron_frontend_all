@@ -15,7 +15,7 @@
  * - Project data includes all areas the user has permission to access
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -144,7 +144,7 @@ import {
 import { DASHBOARD_ALERTS_SHELL_CLASS } from '../../utils/scheduleFormLayout'
 import { useSyncPanelToTopbar } from '../../utils/useSyncPanelToTopbar'
 import EnergyCustomGraphCard from '../../components/dashboard/EnergyCustomGraphCard'
-import { readBuiltinWidgetOverrides, normalizeBuiltinApiPath } from '../../utils/builtinWidgetOverrides'
+import { readBuiltinWidgetOverrides, normalizeBuiltinApiPath, shouldRenderBuiltinWidgetAsCustomGraph } from '../../utils/builtinWidgetOverrides'
 import {
   BUILTIN_CHART_CARD,
   BUILTIN_CHART_HEADER_ROW,
@@ -167,6 +167,113 @@ import {
   normalizeDashboardFloorIds,
   orderPerFloorIdsByGraphFloorIds,
 } from '../../utils/intersectDashboardGraphFloors'
+import { resolveDashboardThunkForCustomGraphPath } from '../../utils/dashboardCustomGraphThunkResolver'
+import { sumAbsoluteWhFromTotalConsumptionByGroupPayload } from '../../utils/normalizeTotalConsumptionByGroupPayload'
+import { getEffectiveBuiltinDashboardPage } from '../../utils/builtinWidgetDashboardPage'
+import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert, Typography, Button } from '@mui/material'
+import { AddBoxOutlined, IndeterminateCheckBoxOutlined, FileUpload as FileUploadIcon } from '@mui/icons-material'
+import Alerts from './Alerts'
+import {
+  fetchAlertTypes,
+  fetchActiveAlerts,
+  selectAlertTypes,
+  selectSelectedAlertType,
+  setSelectedAlertType,
+} from '../../redux/slice/dashboard/alertsSlice'
+import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice'
+import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
+import {
+  fetchRenameWidgets,
+  getWidgetList,
+  fetchEmailConfigs,
+  fetchCustomGraphs,
+  selectCustomGraphs,
+  fetchDashboardChartOrder,
+  saveDashboardChartOrder,
+  selectDashboardChartOrder,
+  selectDashboardChartOrderStatus,
+  fetchWidgetConfiguration,
+  selectWidgetConfiguration,
+  selectWidgetConfigurationStatus,
+} from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { BaseUrl } from '../../BaseUrl'
+import { meanOccupancyFromChartPayload } from '../../utils/meanOccupancyFromChartPayload'
+import { getFloorDisplayLabel } from '../../utils/floorDisplayLabel'
+import { sumEnergySavingsPayload } from '../../utils/sumEnergySavingsPayload'
+import {
+  buildFloorBucketsFromSelectedAreaIds,
+  buildMixedWidgetEnergyFloorBuckets,
+} from '../../utils/aggregateEnergyConsumptionByFloorScope'
+import { mergeLeafPayloadIntoAreaFloorMap } from '../../utils/mergeLeafPayloadIntoAreaFloorMap'
+import {
+  buildCustomWidgetFilterFloorBuckets,
+  perFloorBucketAxisAndTooltipTitle,
+} from '../../utils/customWidgetFloorBuckets'
+import {
+  formatDateForState,
+  parseDateFromState,
+} from '../../../../shared/dashboard/utils/dashboardDateState'
+import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
+import {
+  dispatchFetchAreaGroupsOnce,
+  dispatchFetchAlertTypesOnce,
+  dispatchFetchCustomGraphsOnce,
+  dispatchFetchFloorsOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchWidgetTitlesOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards'
+import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
+import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
+import { consumptionSavingMergedData as sharedConsumptionSavingMergedData } from '../../../../shared/dashboard/charts/transforms/consumptionSavingMergedData'
+import ConsumptionSavingsCombinedChart from '../../../basic/screens/dashboard/ConsumptionSavingsCombinedChart'
+import DashboardDurationFilterBar from '../../../basic/screens/dashboard/DashboardDurationFilterBar'
+import SavingsByStrategyWidget from '../../../../shared/dashboard/widgets/SavingsByStrategyWidget'
+import { CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS } from '../../../../shared/dashboard/widgets/energy/consumptionSavingsCombinedChrome'
+import { useAreaTreeSelection } from '../../../../shared/dashboard/hooks/useAreaTreeSelection'
+import {
+  flattenAreaTree as flattenAreaTreeShared,
+  getAllAreaIdsFromFloor,
+  getAllAreasFromGroup as resolveAreasFromGroup,
+  shouldSkipLoadAllAreas,
+  processFloorPayloadForAreaLoad,
+  resolveAreaToggleSelection,
+  resolveGroupToggleSelection,
+  resolveIntermediateParentToggle,
+  resolveFloorDeselectAreas,
+} from '../../../../shared/dashboard/filters'
+import {
+  DashboardWidgetRenderer,
+  DashboardContainer,
+  useDashboardContainer,
+  useDashboardAreaTreeOrchestration,
+  customizedDashboardContainerAdapter,
+  buildEnergyWidgetRenderContext,
+} from '../../../../shared/dashboard/container'
+import {
+  EnergyLayoutRenderer,
+  CUSTOMIZED_LAYOUT_MODE,
+  resolveCustomizedSortableGridSx,
+} from '../../../../shared/dashboard/container/layout'
+import {
+  applyAlertTypeToggle,
+  createCustomizedTransformDataForCharts,
+  buildCustomizedTransformChartOptions,
+} from '../../../../shared/dashboard/container/helpers'
+import { bindDashboardChartLoader } from '../../../../shared/dashboard/components'
+import {
+  DashboardAreaTreeInlineStatus,
+  DashboardErrorBanner,
+  DashboardOperatorNoFloorsPanel,
+} from '../../../../shared/dashboard/components/status'
+import {
+  EnergyChartExportMenuControl,
+  resolveCustomizedEnergyExportMenuPreset,
+} from '../../../../shared/dashboard/export/components'
+import {
+  DEFAULT_CONSUMPTION_EXPORT_KEYS,
+  DEFAULT_SAVINGS_EXPORT_KEYS,
+  createAdvancedGroupExportKeys,
+} from '../../../../shared/dashboard/container/hooks/exportMenuState'
 
 function isPerFloorEnergyConsumptionApiPath(pathLower) {
   if (!pathLower) return false
@@ -303,91 +410,6 @@ function resolveAreaIdsForCustomEnergyPieTable(effectiveQp, areaIdToFloorIdMap, 
   })
   return out.sort((x, y) => x - y)
 }
-
-import { resolveDashboardThunkForCustomGraphPath } from '../../utils/dashboardCustomGraphThunkResolver'
-import { sumAbsoluteWhFromTotalConsumptionByGroupPayload } from '../../utils/normalizeTotalConsumptionByGroupPayload'
-import { getEffectiveBuiltinDashboardPage } from '../../utils/builtinWidgetDashboardPage'
-
-import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert, Typography, Button } from '@mui/material'; // Add useTheme and useMediaQuery
-import { AddBoxOutlined, IndeterminateCheckBoxOutlined, FileUpload as FileUploadIcon } from '@mui/icons-material';
-import Alerts from './Alerts'
-import {
-  fetchAlertTypes,
-  fetchActiveAlerts,
-  selectAlertTypes,
-  selectSelectedAlertType,
-  setSelectedAlertType,
-} from '../../redux/slice/dashboard/alertsSlice'
-import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice'
-import { UseAuth } from '../../customhooks/UseAuth'
-import {
-  fetchRenameWidgets,
-  getWidgetList,
-  fetchEmailConfigs,
-  fetchCustomGraphs,
-  selectCustomGraphs,
-} from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
-import { BaseUrl } from '../../BaseUrl'
-import { meanOccupancyFromChartPayload } from '../../utils/meanOccupancyFromChartPayload'
-import { getFloorDisplayLabel } from '../../utils/floorDisplayLabel'
-import { sumEnergySavingsPayload } from '../../utils/sumEnergySavingsPayload'
-import {
-  buildFloorBucketsFromSelectedAreaIds,
-  buildMixedWidgetEnergyFloorBuckets,
-} from '../../utils/aggregateEnergyConsumptionByFloorScope'
-import { mergeLeafPayloadIntoAreaFloorMap } from '../../utils/mergeLeafPayloadIntoAreaFloorMap'
-import {
-  buildCustomWidgetFilterFloorBuckets,
-  perFloorBucketAxisAndTooltipTitle,
-} from '../../utils/customWidgetFloorBuckets'
-
-import {
-  formatDateForState,
-  parseDateFromState,
-} from '../../../../shared/dashboard/utils/dashboardDateState'
-import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
-import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
-import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
-import { useAreaTreeSelection } from '../../../../shared/dashboard/hooks/useAreaTreeSelection'
-import {
-  flattenAreaTree as flattenAreaTreeShared,
-  getAllAreaIdsFromFloor,
-  getAllAreasFromGroup as resolveAreasFromGroup,
-  shouldSkipLoadAllAreas,
-  processFloorPayloadForAreaLoad,
-  resolveAreaToggleSelection,
-  resolveGroupToggleSelection,
-  resolveIntermediateParentToggle,
-  resolveFloorDeselectAreas,
-} from '../../../../shared/dashboard/filters'
-import {
-  DashboardWidgetRenderer,
-  DashboardContainer,
-  useDashboardContainer,
-  useDashboardAreaTreeOrchestration,
-  customizedDashboardContainerAdapter,
-  buildEnergyWidgetRenderContext,
-} from '../../../../shared/dashboard/container'
-import {
-  EnergyLayoutRenderer,
-  CUSTOMIZED_LAYOUT_MODE,
-  resolveCustomizedSortableGridSx,
-} from '../../../../shared/dashboard/container/layout'
-import {
-  applyAlertTypeToggle,
-  createCustomizedTransformDataForCharts,
-  buildCustomizedTransformChartOptions,
-} from '../../../../shared/dashboard/container/helpers'
-import { bindDashboardChartLoader } from '../../../../shared/dashboard/components'
-import {
-  DashboardAreaTreeInlineStatus,
-  DashboardErrorBanner,
-  DashboardOperatorNoFloorsPanel,
-} from '../../../../shared/dashboard/components/status'
-import {
-  EnergyExportMenu,
-  resolveCustomizedEnergyExportMenuPreset,
-} from '../../../../shared/dashboard/export/components'
 
 const ChartLoader = bindDashboardChartLoader('customized')
 
@@ -728,6 +750,7 @@ function Dashboard() {
   const theme = useTheme()
   const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
+  const isTabletViewport = useMediaQuery(theme.breakpoints.between('sm', 'lg'))
   const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'))
   const is2XLargeScreen = useMediaQuery('(min-width: 1600px)')
 
@@ -740,12 +763,19 @@ function Dashboard() {
   }), [isLargeScreen])
 
   // User authentication
-  const { user } = UseAuth()
+  const { user, role: currentUserRole } = UseAuth()
+  const isOperator = currentUserRole === 'Operator'
+  /** Superadmin may rearrange/resize Energy cards; Admin/Operator see shared layout only. */
+  const energyLayoutLocked = !isSuperadminRole(currentUserRole)
+  const dashboardChartOrder = useSelector(selectDashboardChartOrder)
+  const dashboardChartOrderStatus = useSelector(selectDashboardChartOrderStatus)
 
   const alertTypes = useSelector(selectAlertTypes)
   const selectedAlertType = useSelector(selectSelectedAlertType)
   const widgetList = useSelector(getWidgetList)
   const customGraphs = useSelector(selectCustomGraphs)
+  const widgetConfiguration = useSelector(selectWidgetConfiguration)
+  const widgetConfigurationStatus = useSelector(selectWidgetConfigurationStatus)
   const [customGraphData, setCustomGraphData] = useState({})
   const [customGraphLoading, setCustomGraphLoading] = useState({})
   const [customGraphError, setCustomGraphError] = useState({})
@@ -1943,14 +1973,14 @@ function Dashboard() {
   const [expandedFloorIds, setExpandedFloorIds] = useState(new Set());
   const [visibleWidgets, setVisibleWidgets] = useState([]);
 
-  // Fetch user profile on component mount
+  // Fetch user profile on component mount (Topbar may already own this)
   useEffect(() => {
-    dispatch(fetchProfile());
+    dispatchFetchProfileOnce(dispatch, fetchProfile);
   }, [dispatch]);
 
   useEffect(() => {
     const handler = () => {
-      dispatch(fetchRenameWidgets());
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets, { force: true });
     };
 
     window.addEventListener("widgetTitlesUpdated", handler);
@@ -1958,7 +1988,7 @@ function Dashboard() {
     return () => {
       window.removeEventListener("widgetTitlesUpdated", handler);
     };
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     const onBuiltinOv = () => setBuiltinOverridesTick((t) => t + 1);
@@ -2067,41 +2097,28 @@ function Dashboard() {
   })
   const [showDurationDropdown, setShowDurationDropdown] = useState(false)
 
-  // Close area tree when clicking outside (including tabs and anywhere else)
+  // Close area dropdown / floor tree when clicking outside (capture phase — dashboard shell uses stopPropagation on click).
   useEffect(() => {
+    if (!showAreaDropdown) return;
+
     const handleClickOutside = (event) => {
-      // If area tree is open, check if click is outside
+      if (areaDropdownRef.current?.contains(event.target)) return;
+
+      setShowAreaDropdown(false);
       if (expandedFloorId !== null) {
-        // Check if click is inside the entire area dropdown
-        const isInsideDropdown = areaDropdownRef.current && areaDropdownRef.current.contains(event.target);
-
-        // If click is completely outside the dropdown, close everything immediately
-        if (!isInsideDropdown) {
-          setExpandedFloorId(null);
-          setExpandedNodes(new Set());
-          if (showAreaDropdown) {
-            setShowAreaDropdown(false);
-          }
-          return;
-        }
-
-        // If click is inside dropdown, don't close - let the user interact with the tree
-        // Only close when clicking outside the dropdown
+        setExpandedFloorId(null);
+        setExpandedNodes(new Set());
       }
     };
 
-    // Add event listener when area tree is open
-    if (expandedFloorId !== null) {
-      // Use setTimeout to avoid immediate closure when opening the tree
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-      }, 100);
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside, true);
+    }, 0);
 
-      return () => {
-        clearTimeout(timeoutId);
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside, true);
+    };
   }, [expandedFloorId, showAreaDropdown]);
 
   const [lightingUnit, setLightingUnit] = useState('Watt / Sq ft') // Add this for lighting power density unit
@@ -2139,6 +2156,11 @@ function Dashboard() {
     dispatch,
     fetchRenameWidgets,
     fetchCustomGraphs,
+    fetchWidgetConfiguration,
+    widgetConfiguration,
+    widgetConfigurationStatus,
+    saveDashboardChartOrder,
+    energyLayoutLocked,
     widgetList,
     energyConsumption,
     energySavings,
@@ -2188,6 +2210,7 @@ function Dashboard() {
   const {
     visibility: {
       shouldShowEnergyWidget,
+      isSpaceCombinedVisible,
       energyCardOrder,
       setEnergyCardOrder,
       energyCardSpan,
@@ -2196,7 +2219,9 @@ function Dashboard() {
       resolveEnergyCardLayout,
       writeEnergyCardOrder,
       writeEnergyCardSpan,
+      hydrateEnergyLayoutFromApi,
       energyGridColumnTemplate,
+      widgetVisibility,
     },
     widgets: {
       chartLoading,
@@ -2213,6 +2238,8 @@ function Dashboard() {
       savingsColors,
       consumptionIsLoading,
       savingsIsLoading,
+      embeddedSavingsByStrategyLoading,
+      energyCustomNeedsDates,
       startEnergyTabLoading,
       completeEnergyTabLoading,
       planEnergyTabApiCalls,
@@ -2251,6 +2278,7 @@ function Dashboard() {
 
   const toggleEnergyCardSpan = useCallback(
     (key) => {
+      if (energyLayoutLocked) return;
       setEnergyCardSpan((prev) => {
         const next = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {};
         const cur = next?.[key];
@@ -2260,15 +2288,27 @@ function Dashboard() {
         return next;
       });
     },
-    [setEnergyCardSpan, writeEnergyCardSpan]
+    [energyLayoutLocked, setEnergyCardSpan, writeEnergyCardSpan]
   )
+
+  useEffect(() => {
+    dispatch(fetchDashboardChartOrder())
+  }, [dispatch])
+
+  useEffect(() => {
+    if (dashboardChartOrderStatus !== 'succeeded') return
+    const blob = dashboardChartOrder?.customized_dashboard_order
+    if (blob && typeof hydrateEnergyLayoutFromApi === 'function') {
+      hydrateEnergyLayoutFromApi(blob)
+    }
+  }, [dashboardChartOrder, dashboardChartOrderStatus, hydrateEnergyLayoutFromApi])
 
   // Email dialog handlers - removed as emails are now sent directly to logged-in user
 
   // Fetch alert options/data when Alerts tab is active
   useEffect(() => {
     if (activeTab === 'alerts') {
-      dispatch(fetchAlertTypes())
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes)
       // Note: fetchActiveAlerts is handled by the Alerts component itself
     }
   }, [activeTab, dispatch])
@@ -2286,12 +2326,12 @@ function Dashboard() {
   // Fetch rename widgets when Dashboard mounts (only if not already loaded)
   useEffect(() => {
     if (!widgetList || (Array.isArray(widgetList) && widgetList.length === 0) || (widgetList && !widgetList.titles)) {
-      dispatch(fetchRenameWidgets())
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets)
     }
   }, [dispatch, widgetList])
 
   useEffect(() => {
-    dispatch(fetchCustomGraphs())
+    dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs)
   }, [dispatch])
 
   // Close dropdown when clicking outside
@@ -2306,24 +2346,6 @@ function Dashboard() {
     return () => document.removeEventListener('click', handleClickOutside, true)
   }, [])
 
-  // Close area dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Only handle if dropdown is open
-      if (showAreaDropdown && areaDropdownRef.current && !areaDropdownRef.current.contains(event.target)) {
-        // Close dropdown and expanded tree when clicking outside
-        setShowAreaDropdown(false);
-        if (expandedFloorId !== null) {
-          setExpandedFloorId(null);
-          setExpandedNodes(new Set());
-        }
-      }
-    }
-    // Use passive listener to prevent flickering
-    document.addEventListener('click', handleClickOutside, { passive: true })
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [expandedFloorId, showAreaDropdown])
-
   const handleTypeToggle = (type) => {
     applyAlertTypeToggle({
       type,
@@ -2336,10 +2358,8 @@ function Dashboard() {
   // Note: The backend automatically filters floors based on user permissions
   // Operators will only receive floors they have access to
   useEffect(() => {
-    // if (floors.length === 0 && floorStatus !== 'loading') {
-    dispatch(fetchFloors())
-    // }
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length))
+  }, [dispatch, floors?.length])
 
   // Clear dashboard data and set default duration when component mounts
   // This ensures each user starts with a clean state
@@ -2352,8 +2372,7 @@ function Dashboard() {
   }, [dispatch]) // Remove selectedDuration from dependencies to prevent infinite loop
 
   // Get current user role for floor filtering
-  const { role: currentUserRole } = UseAuth()
-  const isOperator = currentUserRole === 'Operator'
+  // (role / isOperator / energyLayoutLocked declared with UseAuth above)
 
   // Function to get available floors based on user permissions
   const getAvailableFloors = () => {
@@ -2417,6 +2436,7 @@ function Dashboard() {
 
   // Track if we've done the initial reload on login
   const hasInitialReloadRef = useRef(false);
+  const loadAllAreasInFlightRef = useRef(false);
 
   // Load all areas from all floors when floors are loaded
   useEffect(() => {
@@ -2463,6 +2483,9 @@ function Dashboard() {
   // Function to load all areas from all floors (only accessible floors for operators)
   const loadAllAreasFromAllFloors = async () => {
     try {
+      if (loadAllAreasInFlightRef.current) {
+        return;
+      }
       if (
         shouldSkipLoadAllAreas({
           allAreasLoaded,
@@ -2475,6 +2498,7 @@ function Dashboard() {
         return;
       }
 
+      loadAllAreasInFlightRef.current = true;
       const allAreaIds = [];
       const availableFloors = getAvailableFloors();
 
@@ -2514,6 +2538,8 @@ function Dashboard() {
       setAllAreasLoaded(true);
     } catch (error) {
       setAllAreasLoaded(true);
+    } finally {
+      loadAllAreasInFlightRef.current = false;
     }
   };
 
@@ -2603,7 +2629,7 @@ function Dashboard() {
   // object (empty arrays), so the previous `if (!areaGroups)` guard never ran and groups
   // never loaded until another screen called fetchAreaGroups.
   useEffect(() => {
-    dispatch(fetchAreaGroups());
+    dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups);
   }, [dispatch])
 
   // Handle area selection
@@ -3089,7 +3115,10 @@ function Dashboard() {
           }
 
           apiCalls.push(
-            { name: 'totalConsumptionByGroup', promise: dispatch(fetchTotalConsumptionByGroup(apiParams)) },
+            {
+              name: 'totalConsumptionByGroup',
+              promise: dispatch(fetchTotalConsumptionByGroup(apiParams)),
+            },
             { name: 'lightPowerDensity', promise: dispatch(fetchLightPowerDensity(apiParams)) },
             { name: 'savingsByStrategy', promise: dispatch(fetchSavingsByStrategy(apiParams)) }
           );
@@ -3477,86 +3506,65 @@ function Dashboard() {
     [savingsTitle]
   );
 
+  const customizedExportButtonStyle = {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '14px',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+  };
+
   const consumptionExportControl = useMemo(
-    () => (
-      <>
-        <button
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [consumptionTitle]: !prev[consumptionTitle],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadIcon fontSize="small" /> Export
-        </button>
-        {showExportDropdown[consumptionTitle] && (
-          <EnergyExportMenu
-            menuKey={consumptionTitle}
-            isOpen={showExportDropdown[consumptionTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionEmail}
-            onDownload={handleConsumptionDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[consumptionTitle] = el;
-            }}
-            preset={resolveCustomizedEnergyExportMenuPreset()}
-          />
-        )}
-      </>
-    ),
-    [consumptionTitle, showExportDropdown, exportLoading]
+    () => {
+      const exportMenuKey = DEFAULT_CONSUMPTION_EXPORT_KEYS.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={DEFAULT_CONSUMPTION_EXPORT_KEYS.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleConsumptionEmail}
+          onDownload={handleConsumptionDownload}
+          preset={resolveCustomizedEnergyExportMenuPreset()}
+          renderTrigger={({ onClick }) => (
+            <button type="button" data-export-menu="true" onClick={onClick} style={customizedExportButtonStyle}>
+              <FileUploadIcon fontSize="small" /> Export
+            </button>
+          )}
+        />
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionEmail, handleConsumptionDownload]
   );
 
   const savingsExportControl = useMemo(
-    () => (
-      <>
-        <button
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [savingsTitle]: !prev[savingsTitle],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadIcon fontSize="small" /> Export
-        </button>
-        {showExportDropdown[savingsTitle] && (
-          <EnergyExportMenu
-            menuKey={savingsTitle}
-            isOpen={showExportDropdown[savingsTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleSavingsEmail}
-            onDownload={handleSavingsDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[savingsTitle] = el;
-            }}
-            preset={resolveCustomizedEnergyExportMenuPreset()}
-          />
-        )}
-      </>
-    ),
-    [savingsTitle, showExportDropdown, exportLoading]
+    () => {
+      const exportMenuKey = DEFAULT_SAVINGS_EXPORT_KEYS.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={DEFAULT_SAVINGS_EXPORT_KEYS.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleSavingsEmail}
+          onDownload={handleSavingsDownload}
+          preset={resolveCustomizedEnergyExportMenuPreset()}
+          renderTrigger={({ onClick }) => (
+            <button type="button" data-export-menu="true" onClick={onClick} style={customizedExportButtonStyle}>
+              <FileUploadIcon fontSize="small" /> Export
+            </button>
+          )}
+        />
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleSavingsEmail, handleSavingsDownload]
   );
 
   const savingsByStrategyCustomizedSurface = useMemo(
@@ -3579,46 +3587,108 @@ function Dashboard() {
   );
 
   const totalConsumptionByGroupExportControl = useMemo(
+    () => {
+      const groupExportKeys = createAdvancedGroupExportKeys();
+      const exportMenuKey = groupExportKeys.menuCloseKey;
+      return (
+        <EnergyChartExportMenuControl
+          exportMenuKey={exportMenuKey}
+          loadingPrefix={groupExportKeys.loadingPrefix}
+          showExportDropdown={showExportDropdown}
+          setShowExportDropdown={setShowExportDropdown}
+          exportLoading={exportLoading}
+          exportDropdownRefs={exportDropdownRefs}
+          onEmail={handleConsumptionByGroupEmail}
+          onDownload={handleConsumptionByGroupDownload}
+          preset={resolveCustomizedEnergyExportMenuPreset()}
+          emailLabel=" Send By Email"
+          downloadLabel=" Download To PC"
+          renderTrigger={({ onClick }) => (
+            <button type="button" data-export-menu="true" onClick={onClick} style={customizedExportButtonStyle}>
+              <FileUploadIcon fontSize="small" /> Export
+            </button>
+          )}
+        />
+      );
+    },
+    [showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionByGroupEmail, handleConsumptionByGroupDownload]
+  );
+
+  const combinedConsumptionSavingUnit = useMemo(
+    () => energyConsumption?.unit || energySavings?.unit || '',
+    [energyConsumption, energySavings]
+  );
+
+  const consumptionSavingMergedData = useMemo(() => {
+    const consumptionSeries = memoizedEnergyConsumption
+      ? transformDataForCharts(memoizedEnergyConsumption, 'consumption')
+      : [];
+    const savingsSeries = memoizedEnergySavings
+      ? transformDataForCharts(memoizedEnergySavings, 'other')
+      : [];
+    return sharedConsumptionSavingMergedData(consumptionSeries, savingsSeries);
+  }, [memoizedEnergyConsumption, memoizedEnergySavings, transformDataForCharts]);
+
+  const ENERGY_LIGHT_FULL_CARD_HEIGHT_PX = 648;
+
+  const hideCustomizedHeaderDuration =
+    (activeTab === 'energy' && shouldShowEnergyWidget('consumption_saving')) ||
+    (activeTab === 'space-utilization' && isSpaceCombinedVisible);
+
+  const customizedEnergyCombinedSurface = useMemo(
+    () => ({
+      cardBackground: contentColor,
+      cardBorder: '1px solid #ccc',
+      cardShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      cardClassName: 'chart-card-animated',
+    }),
+    [contentColor]
+  );
+
+  const energyCombinedDurationFilter = useMemo(
     () => (
-      <>
-        <button
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [totalConsumptionByGroupTitle]: !prev[totalConsumptionByGroupTitle],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadIcon fontSize="small" /> Export
-        </button>
-        {showExportDropdown[totalConsumptionByGroupTitle] && (
-          <EnergyExportMenu
-            menuKey={totalConsumptionByGroupTitle}
-            isOpen={showExportDropdown[totalConsumptionByGroupTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionByGroupEmail}
-            onDownload={handleConsumptionByGroupDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[totalConsumptionByGroupTitle] = el;
-            }}
-            preset={resolveCustomizedEnergyExportMenuPreset()}
-            emailLabel=" Send By Email"
-            downloadLabel=" Download To PC"
-          />
-        )}
-      </>
+      <DashboardDurationFilterBar
+        selectedDuration={selectedDuration}
+        onDurationChange={handleDurationChange}
+        customDateRange={customDateRange}
+        onCustomStartDateChange={(startDate) =>
+          dispatch(
+            setCustomDateRange({
+              startDate,
+              endDate: (customEndDate || '').split('T')[0],
+            })
+          )
+        }
+        onCustomEndDateChange={(endDate) =>
+          dispatch(
+            setCustomDateRange({
+              startDate: (customStartDate || '').split('T')[0],
+              endDate,
+            })
+          )
+        }
+        globalLoading={globalLoading}
+        periodLabel={getCurrentPeriodText()}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        isLargeScreen={isLargeScreen}
+        isMediumScreen={isMediumScreen}
+      />
     ),
-    [totalConsumptionByGroupTitle, showExportDropdown, exportLoading]
+    [
+      selectedDuration,
+      handleDurationChange,
+      customDateRange,
+      customStartDate,
+      customEndDate,
+      dispatch,
+      globalLoading,
+      getCurrentPeriodText,
+      handlePrevious,
+      handleNext,
+      isLargeScreen,
+      isMediumScreen,
+    ]
   );
 
   const energyWidgetRenderContext = useMemo(
@@ -3655,6 +3725,8 @@ function Dashboard() {
         isLargeScreen,
         areaGroups,
         areaIdToDisplayName,
+        widgetVisibility,
+        getEffectiveBuiltinDashboardPage,
         overrides: {
           consumption: {
             customizedSurface: consumptionCustomizedSurface,
@@ -3700,6 +3772,7 @@ function Dashboard() {
       isLargeScreen,
       areaGroups,
       areaIdToDisplayName,
+      widgetVisibility,
       consumptionCustomizedSurface,
       savingsCustomizedSurface,
       savingsByStrategyCustomizedSurface,
@@ -3715,6 +3788,7 @@ function Dashboard() {
       widgetKey="light_power_density"
       variant="customized"
       context={energyWidgetRenderContext}
+      visible
     />
   );
 
@@ -3724,7 +3798,7 @@ function Dashboard() {
       const buildEnergyBuiltinRender = (widgetKey, fallbackTitle, defaultRender) => {
         return () => {
           const o = builtinOv[widgetKey];
-          if (!o?.api_path?.trim() || !o?.graph_type) return defaultRender();
+          if (!shouldRenderBuiltinWidgetAsCustomGraph(widgetKey, o)) return defaultRender();
           const displayName =
             widgetKey === 'total_consumption_by_group'
               ? getWidgetTitleWithAliases(
@@ -3765,12 +3839,68 @@ function Dashboard() {
       };
       const energyCards = [
         {
+          key: 'consumption_saving',
+          render: () => (
+            <ConsumptionSavingsCombinedChart
+              title={getWidgetTitle('consumption_saving', 'Energy (Combined)')}
+              mergedData={energyCustomNeedsDates ? [] : consumptionSavingMergedData}
+              unit={combinedConsumptionSavingUnit}
+              isLoading={
+                energyCustomNeedsDates ? false : consumptionIsLoading || savingsIsLoading
+              }
+              selectedDuration={selectedDuration}
+              formatXAxisLabel={(v) => formatEnergyXAxisLabel(v, selectedDuration)}
+              onEmail={handleConsumptionEmail}
+              onDownloadReport={handleConsumptionDownload}
+              exportEmailLoading={!!exportLoading['Consumption_email']}
+              exportDownloadLoading={!!exportLoading['Consumption_download']}
+              emptyStateVariant={energyCustomNeedsDates ? 'blank' : 'message'}
+              shellVariant={CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS.customized}
+              advancedSurface={customizedEnergyCombinedSurface}
+              titleStyle={chartHeaderStyle}
+              topControls={
+                <Box
+                  sx={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    flexShrink: 0,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {energyCombinedDurationFilter}
+                </Box>
+              }
+              strategyContent={
+                <SavingsByStrategyWidget
+                  title={savingsByStrategyTitle}
+                  savingsByStrategy={savingsByStrategy}
+                  allEnergyChartsReady={allEnergyChartsReady}
+                  chartLoadingSavingsByStrategy={chartLoading.savingsByStrategy}
+                  globalLoading={globalLoading}
+                  shellVariant="basic"
+                  chartSurface="dark"
+                  chartHeaderStyle={chartHeaderStyle}
+                  embedded
+                  customDatesIncomplete={energyCustomNeedsDates}
+                  energyLightFullCardHeightPx={ENERGY_LIGHT_FULL_CARD_HEIGHT_PX}
+                  ChartLoader={ChartLoader}
+                />
+              }
+              strategyLoading={
+                energyCustomNeedsDates ? false : embeddedSavingsByStrategyLoading
+              }
+            />
+          ),
+        },
+        {
           key: 'savings_by_strategy',
           render: buildEnergyBuiltinRender('savings_by_strategy', 'Savings By Strategy', () => (
             <DashboardWidgetRenderer
               widgetKey="savings_by_strategy"
               variant="customized"
               context={energyWidgetRenderContext}
+              visible
             />
           )),
         },
@@ -3781,6 +3911,7 @@ function Dashboard() {
               widgetKey="total_consumption_by_group"
               variant="customized"
               context={energyWidgetRenderContext}
+              visible
             />
           ),
         },
@@ -3791,6 +3922,7 @@ function Dashboard() {
               widgetKey="consumption"
               variant="customized"
               context={energyWidgetRenderContext}
+              visible
             />
           )),
         },
@@ -3801,6 +3933,7 @@ function Dashboard() {
               widgetKey="savings"
               variant="customized"
               context={energyWidgetRenderContext}
+              visible
             />
           )),
         },
@@ -3853,6 +3986,7 @@ function Dashboard() {
                 widgetKey="peak_and_minimum_consumption"
                 variant="customized"
                 context={energyWidgetRenderContext}
+                visible
               />
             </div>
           )),
@@ -3904,6 +4038,7 @@ function Dashboard() {
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={(event) => {
+            if (energyLayoutLocked) return;
             const activeId = String(event?.active?.id ?? '');
             const overId = String(event?.over?.id ?? '');
             if (!activeId || !overId || activeId === overId) return;
@@ -3932,13 +4067,15 @@ function Dashboard() {
                   return (
                     <SortableDashboardItem
                       id={key}
-                      disabled={false}
-                      showSpanToggle={true}
+                      disabled={energyLayoutLocked}
+                      showSpanToggle={!energyLayoutLocked && key !== 'consumption_saving'}
                       span={col}
                       onToggleSpan={toggleEnergyCardSpan}
-                      showHeightToggle={true}
+                      showHeightToggle={!energyLayoutLocked}
                       isFullscreen={isFullscreen}
-                      onToggleFullscreen={toggleEnergyFullscreen}
+                      onToggleFullscreen={
+                        energyLayoutLocked ? undefined : toggleEnergyFullscreen
+                      }
                       rowSpan={1}
                     >
                       <Box
@@ -3964,26 +4101,43 @@ function Dashboard() {
       );
     },
     [
+      allEnergyChartsReady,
       areaGroups,
       areaIdToDisplayName,
       areaIdToFloorId,
       apiParams,
       chartHeaderStyle,
+      chartLoading,
+      combinedConsumptionSavingUnit,
+      consumptionIsLoading,
+      consumptionSavingMergedData,
+      customizedEnergyCombinedSurface,
       customGraphData,
       customGraphError,
       customGraphLoading,
       customGraphs,
+      embeddedSavingsByStrategyLoading,
+      energyCombinedDurationFilter,
+      energyCustomNeedsDates,
       energyFullscreenCardId,
       energyGridColumnTemplate,
       energyWidgetRenderContext,
+      exportLoading,
       floors,
       getEnergyCardCol,
       getWidgetTitle,
       getWidgetTitleWithAliases,
+      globalLoading,
+      handleConsumptionDownload,
+      handleConsumptionEmail,
       handleEnergyCustomGraphExport,
       lightingUnit,
       renderLightingPowerDensity,
       resolveEnergyCardLayout,
+      savingsByStrategy,
+      savingsByStrategyTitle,
+      savingsIsLoading,
+      selectedDuration,
       sensors,
       setEnergyCardOrder,
       shouldShowEnergyWidget,
@@ -3995,19 +4149,80 @@ function Dashboard() {
     ]
   );
 
+  const pinCustomizedDashboardScrollChrome =
+    !isTabletViewport &&
+    (activeTab === 'energy' || activeTab === 'space-utilization' || activeTab === 'alerts');
+  const CUSTOMIZED_DASHBOARD_CHROME_HEADER_FALLBACK_PX = 120;
+  const CUSTOMIZED_DASHBOARD_TOOLBAR_PX = 60;
+  const customizedDashboardChromeRef = useRef(null);
+  const [customizedDashboardChromeBottomPx, setCustomizedDashboardChromeBottomPx] = useState(0);
+
+  const syncCustomizedDashboardChromeHeight = useCallback(() => {
+    const el = customizedDashboardChromeRef.current;
+    if (!el) return;
+    setCustomizedDashboardChromeBottomPx(el.getBoundingClientRect().bottom);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!pinCustomizedDashboardScrollChrome) {
+      setCustomizedDashboardChromeBottomPx(0);
+      return undefined;
+    }
+
+    syncCustomizedDashboardChromeHeight();
+    const el = customizedDashboardChromeRef.current;
+    if (!el) return undefined;
+
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(syncCustomizedDashboardChromeHeight);
+      resizeObserver.observe(el);
+    }
+
+    window.addEventListener('resize', syncCustomizedDashboardChromeHeight);
+    window.addEventListener('orientationchange', syncCustomizedDashboardChromeHeight);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', syncCustomizedDashboardChromeHeight);
+      window.removeEventListener('orientationchange', syncCustomizedDashboardChromeHeight);
+    };
+  }, [
+    pinCustomizedDashboardScrollChrome,
+    syncCustomizedDashboardChromeHeight,
+    showAreaDropdown,
+    isLargeScreen,
+    isMediumScreen,
+    selectedDuration,
+  ]);
+
+  const customizedDashboardChromeBottomOffsetPx =
+    customizedDashboardChromeBottomPx > 0
+      ? customizedDashboardChromeBottomPx
+      : CUSTOMIZED_DASHBOARD_TOOLBAR_PX + CUSTOMIZED_DASHBOARD_CHROME_HEADER_FALLBACK_PX;
+
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div
+      className="customized-dashboard-root"
+      onClick={(e) => e.stopPropagation()}
+      style={pinCustomizedDashboardScrollChrome ? { overflow: 'hidden' } : undefined}
+    >
       {/* Fixed Header Section - Static Controls */}
       <Box
+        ref={customizedDashboardChromeRef}
         sx={{
           position: 'fixed',
           top: '60px',
           left: 0,
           right: 0,
-          backgroundColor: backgroundColor,
+          backgroundColor: pinCustomizedDashboardScrollChrome ? 'transparent' : backgroundColor,
           p: 0,
           zIndex: 999,
-
+          boxSizing: 'border-box',
+          ...(pinCustomizedDashboardScrollChrome
+            ? {
+                // borderBottom: `1px solid ${buttonColor}`,
+              }
+            : {}),
         }}
       >
         <Box
@@ -4086,7 +4301,6 @@ function Dashboard() {
                       position: 'absolute',
                       top: '100%',
                       left: 0,
-                      right: 0,
                       backgroundColor: 'white',
                       border: '1px solid #ccc',
                       borderRadius: '4px',
@@ -4095,8 +4309,9 @@ function Dashboard() {
                       marginTop: '2px',
                       maxHeight: '400px',
                       overflowY: 'auto',
-                      minWidth: isLargeScreen ? '600px' : '550px',
-                      width: isLargeScreen ? '600px' : '550px'
+                      width: 'max-content',
+                      minWidth: '100%',
+                      maxWidth: isLargeScreen ? '600px' : '550px',
                     }}>
                       {floorStatus === 'loading' ? (
                         <DashboardAreaTreeInlineStatus mode="loading" />
@@ -4160,10 +4375,7 @@ function Dashboard() {
                                       fontSize: '14px',
                                       fontWeight: 600,
                                       color: '#333',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      maxWidth: '200px'
+                                      whiteSpace: 'nowrap'
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -4178,10 +4390,10 @@ function Dashboard() {
                                 {/* Show area tree if this floor is expanded */}
                                 {expandedFloorId === floor.id && areaTree && (
                                   <div style={{
-                                    width: '100%',
+                                    width: 'max-content',
+                                    minWidth: '100%',
                                     paddingLeft: '20px',
                                     borderLeft: '2px solid #e0e0e0',
-                                    minWidth: '550px'
                                   }}>
                                     {floorLoading ? (
                                       <div style={{ padding: '5px 0', color: '#666', fontSize: '11px' }}>
@@ -4193,7 +4405,8 @@ function Dashboard() {
                                         overflowY: 'auto',
                                         overflowX: 'hidden',
                                         padding: '4px 0',
-                                        minWidth: '530px'
+                                        width: 'max-content',
+                                        minWidth: '100%',
                                       }}>
                                         {(areaTree.tree || areaTree.areas || []).map(node => renderTreeNode(node, 0, floor.floor_name || floor.name))}
                                       </div>
@@ -4270,7 +4483,7 @@ function Dashboard() {
             )}
 
             {/* Duration Dropdown with Date Navigation below */}
-            {activeTab !== 'alerts' && activeTab !== 'overview' && (
+            {activeTab !== 'alerts' && activeTab !== 'overview' && !hideCustomizedHeaderDuration && (
               <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
                 <div style={{ width: '100%' }}>
                   {/* Duration Dropdown */}
@@ -4532,7 +4745,16 @@ function Dashboard() {
             {/* Alerts Type dropdown – only on Alerts tab */}
             {activeTab === 'alerts' && (
               <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ minWidth: 220, position: 'relative' }} ref={dropdownRef}>
+                <div
+                  style={{
+                    width: '100%',
+                    minHeight: '67px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                  }}
+                  ref={dropdownRef}
+                >
+                  <div style={{ minWidth: 220, position: 'relative', width: '100%' }}>
                   <div
                     onClick={(e) => {
                       e.preventDefault();
@@ -4650,13 +4872,14 @@ function Dashboard() {
                     </div>
                   )}
                 </div>
+                </div>
               </Grid>
             )}
 
-            {/* Empty Grid container for alerts tab - same size as duration section */}
+            {/* Placeholder column on Alerts — matches duration column height on Energy/Space */}
             {activeTab === 'alerts' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ width: '100%', height: '40px' }}></div>
+              <Grid item xs={12} sm={6} md={3} lg={3} xl={2} sx={{ display: { xs: 'none', sm: 'block' } }}>
+                <div style={{ width: '100%', minHeight: '67px' }} aria-hidden="true" />
               </Grid>
             )}
 
@@ -4672,7 +4895,7 @@ function Dashboard() {
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: 12,
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
               }}
             >
               {/* Tabs - hidden on Overview so widget area fills space */}
@@ -4869,11 +5092,27 @@ function Dashboard() {
 
       {/* Scrollable Content Area */}
       <Box
+        className="customized-dashboard-scroll-pane"
         onClick={(e) => e.stopPropagation()}
         sx={{
-          // Reduce top/bottom gap for Overview so widgets fit in one viewport
-          mt: activeTab === 'overview' ? 2 : 12,
-          py: activeTab === 'overview' ? 2 : 3
+          ...(pinCustomizedDashboardScrollChrome
+            ? {
+                position: 'fixed',
+                top: `${customizedDashboardChromeBottomOffsetPx}px`,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                boxSizing: 'border-box',
+                py: activeTab === 'space-utilization' || activeTab === 'alerts' ? 1 : 3,
+                zIndex: 1,
+              }
+            : {
+                // Reduce top/bottom gap for Overview so widgets fit in one viewport
+                mt: activeTab === 'overview' ? 2 : 12,
+                py: activeTab === 'overview' ? 2 : 3,
+              }),
         }}
       >
         <Box
@@ -4900,7 +5139,7 @@ function Dashboard() {
             }}
           >
             {/* Data Container for your next section */}
-            <Box mt={activeTab === 'alerts' ? 0 : 3}>
+            <Box mt={(activeTab === 'alerts' || pinCustomizedDashboardScrollChrome) ? 0 : 3}>
               <DashboardContainer
                 variant="customized"
                 adapter={customizedDashboardContainerAdapter}

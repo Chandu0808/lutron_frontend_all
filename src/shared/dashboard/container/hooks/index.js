@@ -1,7 +1,11 @@
 export { useDashboardExports } from './useDashboardExports';
 export { useDashboardDates } from './useDashboardDates';
 export { useDashboardWidgets } from './useDashboardWidgets';
-export { useDashboardVisibility } from './useDashboardVisibility';
+export {
+  useBasicDashboardVisibility,
+  useAdvancedDashboardVisibility,
+  useCustomizedDashboardVisibility,
+} from './useDashboardVisibility';
 
 export {
   ENERGY_WIDGET_TITLE_DEFAULTS,
@@ -12,6 +16,8 @@ export {
   resolveEnergyWidgetVisibilityKeys,
   resolveBuiltinEnergyWidgetVisible,
   resolveCustomizedEnergyWidgetVisible,
+  resolveCustomizedSpaceCombinedVisible,
+  resolveCustomizedSpaceWidgetVisible,
   resolveEnergyWidgetVisible,
   resolveDashboardWidgetDisplayName,
 } from './widgetVisibilityResolvers';

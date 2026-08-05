@@ -7,14 +7,31 @@ import {
   isHeatmapRoute,
   isLutronWebsiteRoute,
 } from "../appLayoutPathUtils";
+import { ADVANCED_VIEWPORT_GUTTER_PX } from "../../../../variants/advanced/utils/advancedViewportGutters";
+import {
+  ADVANCED_SETTINGS_HOME_PATH,
+  isAdvancedSettingsAppRoute,
+} from "../../../../variants/advanced/utils/advancedSettingsPaths";
+
+const ZERO_GUTTER_PX = {
+  xs: 0,
+  sm: 0,
+  md: 0,
+  lg: 0,
+  xl: 0,
+  xxl: 0,
+  "3xl": 0,
+  "4xl": 0,
+};
 
 export const advancedMainLayoutAdapter = {
   variant: "advanced",
 
   getFrameSx(ctx) {
+    const useNaturalHeight = ctx.isDashboard || ctx.isSettingsLayout;
     return {
       width: "100%",
-      minHeight: "calc(100vh - 100px)",
+      minHeight: useNaturalHeight ? "auto" : "calc(100dvh - 100px)",
       background: `var(--app-page-background, ${ctx.pageBackground})`,
       backgroundImage: "var(--app-background-image, none)",
       backgroundSize: "cover",
@@ -24,17 +41,11 @@ export const advancedMainLayoutAdapter = {
     };
   },
 
-  getContainerPx() {
-    return {
-      xs: 2,
-      sm: 3,
-      md: 4,
-      lg: 5,
-      xl: 6,
-      xxl: 8,
-      "3xl": 10,
-      "4xl": 12,
-    };
+  getContainerPx(ctx) {
+    if (ctx?.isDashboard) {
+      return ZERO_GUTTER_PX;
+    }
+    return ADVANCED_VIEWPORT_GUTTER_PX;
   },
 
   buildContext({ location, appTheme, themeUtils }) {
@@ -43,9 +54,14 @@ export const advancedMainLayoutAdapter = {
     const pageBackground = buildAppPageBackground(bgColor);
     const isDashboard = isDashboardRoute(location.pathname);
     const isLutronWebsite = isLutronWebsiteRoute(location.pathname);
+    const isSettingsLayout = isAdvancedSettingsAppRoute(
+      location.pathname,
+      ADVANCED_SETTINGS_HOME_PATH
+    );
 
     return {
       isDashboard,
+      isSettingsLayout,
       pageBackground,
       contentColor: appTheme?.application_theme?.content || "#3d4a5c",
       isHeatmap: isHeatmapRoute(location.pathname),
@@ -84,6 +100,26 @@ export const advancedMainLayoutAdapter = {
   getContentPanelSx({ ctx, location, contentPanelRadius }) {
     const isLutronWebsite = ctx.isLutronWebsite;
     const pathname = location.pathname;
+
+    if (ctx.isSettingsLayout) {
+      return {
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        mx: "auto",
+        backgroundColor: ctx.mainContentPanelBg,
+        borderRadius: contentPanelRadius,
+        flexGrow: 0,
+        overflowY: "visible",
+        overflowX: "hidden",
+        height: "auto",
+        maxHeight: "none",
+        minHeight: "auto",
+        mb: 0,
+        p: 0,
+      };
+    }
+
     return {
       width: "100%",
       maxWidth: "100%",
@@ -93,26 +129,26 @@ export const advancedMainLayoutAdapter = {
       borderRadius: contentPanelRadius,
       flexGrow: 1,
       overflowY:
-        isLutronWebsite || pathname.includes("/settings") || pathname === "/heatmap"
+        isLutronWebsite || pathname === "/heatmap"
           ? "hidden"
           : "auto",
       overflowX: "hidden",
       height:
-        isLutronWebsite || pathname.includes("/settings") || pathname === "/heatmap"
-          ? { xs: "auto", md: "calc(100vh - 200px)" }
+        isLutronWebsite || pathname === "/heatmap"
+          ? { xs: "auto", md: "calc(100dvh - 200px)" }
           : "auto",
       maxHeight:
-        isLutronWebsite || pathname.includes("/settings") || pathname === "/heatmap"
-          ? { xs: "none", md: "calc(100vh - 200px)" }
+        isLutronWebsite || pathname === "/heatmap"
+          ? { xs: "none", md: "calc(100dvh - 200px)" }
           : "none",
       minHeight:
         pathname === "/dashboard"
-          ? { xs: "calc(100vh - 80px)", md: "calc(100vh - 50px)" }
+          ? { xs: "calc(100dvh - 80px)", md: "calc(100dvh - 50px)" }
           : isLutronWebsite
-            ? { xs: "auto", md: "calc(100vh - 200px)" }
+            ? { xs: "auto", md: "calc(100dvh - 200px)" }
             : pathname === "/heatmap"
-              ? { xs: "calc(100vh - 140px)", md: "calc(100vh - 180px)" }
-              : { xs: "auto", md: "calc(100vh - 120px)" },
+              ? { xs: "calc(100dvh - 167px)", sm: "calc(100dvh - 150px)", md: "calc(100dvh - 180px)" }
+              : { xs: "auto", md: "calc(100dvh - 120px)" },
       mb:
         pathname === "/dashboard" || pathname === "/lutron"
           ? { xs: 1, sm: 1, md: 2, lg: 2, xl: 3, xxl: 4, "3xl": 5, "4xl": 6 }

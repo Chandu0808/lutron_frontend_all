@@ -3,7 +3,7 @@
  * Performance: ref-based pan/zoom, ephemeral drag/resize, viewport culling.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -14,7 +14,8 @@ import {
   useTheme,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import { configurePdfJsWorker, buildPdfDocumentFile } from "../../../../../shared/pdf/floorPlanPdf";
 import {
   clampFofpMarkerConfigSize,
   FOFPMarkerShape,
@@ -45,47 +46,11 @@ import {
   getFofpViewerZoomBarSx,
   getFofpViewerZoomButtonSx,
 } from "./fofpSettingsUi";
+import { resolveFitBounds } from "./fofpViewportFit";
 
-if (pdfjs?.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
-  pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
-}
+configurePdfJsWorker();
 
 const DEFAULT_PAGE = { width: 800, height: 600 };
-
-const normalizeViewportBounds = (bounds, dims) => {
-  const raw = bounds || {};
-  const xLeft = Number(raw.x_left);
-  const xRight = Number(raw.x_right);
-  const yTop = Number(raw.y_top);
-  const yBottom = Number(raw.y_bottom);
-
-  if (
-    Number.isFinite(xLeft) &&
-    Number.isFinite(xRight) &&
-    Number.isFinite(yTop) &&
-    Number.isFinite(yBottom) &&
-    xRight > xLeft &&
-    yBottom > yTop
-  ) {
-    return {
-      xLeft,
-      xRight,
-      yTop,
-      yBottom,
-      width: xRight - xLeft,
-      height: yBottom - yTop,
-    };
-  }
-
-  return {
-    xLeft: 0,
-    xRight: dims.width,
-    yTop: 0,
-    yBottom: dims.height,
-    width: dims.width,
-    height: dims.height,
-  };
-};
 
 const FloorPlanPdfLayer = React.memo(function FloorPlanPdfLayer({
   pdfUrl,
@@ -93,9 +58,10 @@ const FloorPlanPdfLayer = React.memo(function FloorPlanPdfLayer({
   onLoadSuccess,
   onLoadError,
 }) {
+  const pdfFile = useMemo(() => buildPdfDocumentFile(pdfUrl), [pdfUrl]);
   return (
     <Document
-      file={pdfUrl}
+      file={pdfFile}
       key={pdfUrl}
       onLoadError={onLoadError}
       loading={
@@ -161,8 +127,9 @@ const FOFPLayoutViewer = ({
 
   const dims = pageDims || DEFAULT_PAGE;
   const calibratedBounds = useMemo(
-    () => normalizeViewportBounds(viewportBounds, dims),
-    [dims, viewportBounds]
+    // Wait for real PDF dims before applying backend boundary (avoids wrong fit on floor switch).
+    () => resolveFitBounds(pageDims ? viewportBounds : null, dims),
+    [dims, pageDims, viewportBounds]
   );
 
   const {
@@ -186,6 +153,14 @@ const FOFPLayoutViewer = ({
   const bumpCullRevision = useCallback(() => {
     setCullRevision((n) => n + 1);
   }, []);
+
+  // Keep imperative pan/zoom after React re-renders (do not let sx reset scale).
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const { x, y, scale } = transformRef.current;
+    content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
+  }, [cullRevision, dims.width, dims.height, pdfUrl, transformRef]);
 
   const clientPointToSvg = useCallback((clientX, clientY) => {
     const svg = svgRef.current;
@@ -402,32 +377,53 @@ const FOFPLayoutViewer = ({
   }, [applyCalibratedViewport, bumpCullRevision]);
 
   useEffect(() => {
+    setPageDims(null);
+    setPdfError(null);
     resetUserAdjusted();
   }, [pdfUrl, resetUserAdjusted]);
 
   useEffect(() => {
     if (!pdfUrl) return undefined;
     if (userAdjustedViewRef.current) return undefined;
-    const id = window.requestAnimationFrame(() =>
-      applyCalibratedViewport({ force: true })
-    );
-    return () => window.cancelAnimationFrame(id);
-  }, [applyCalibratedViewport, pdfUrl, pageDims, userAdjustedViewRef]);
+    // Double rAF: wait until flex layout has real viewport size after PDF dims load.
+    let innerId = 0;
+    const outerId = window.requestAnimationFrame(() => {
+      innerId = window.requestAnimationFrame(() => {
+        applyCalibratedViewport({ force: true });
+        bumpCullRevision();
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(outerId);
+      window.cancelAnimationFrame(innerId);
+    };
+  }, [applyCalibratedViewport, bumpCullRevision, pdfUrl, pageDims, userAdjustedViewRef]);
 
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp || !pdfUrl) return undefined;
-    const onResize = () => {
+    // Defer fit out of the ResizeObserver callback — sync layout work here causes
+    // "ResizeObserver loop completed with undelivered notifications" in CRA overlay.
+    let rafId = 0;
+    const runFit = () => {
+      rafId = 0;
       if (vp.clientWidth > 0 && vp.clientHeight > 0) {
-        applyCalibratedViewport();
+        applyCalibratedViewport({ force: !userAdjustedViewRef.current });
         bumpCullRevision();
       }
     };
-    onResize();
-    const ro = new ResizeObserver(onResize);
+    const scheduleFit = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(runFit);
+    };
+    scheduleFit();
+    const ro = new ResizeObserver(scheduleFit);
     ro.observe(vp);
-    return () => ro.disconnect();
-  }, [pdfUrl, pageDims, applyCalibratedViewport, bumpCullRevision]);
+    return () => {
+      ro.disconnect();
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [pdfUrl, pageDims, applyCalibratedViewport, bumpCullRevision, userAdjustedViewRef]);
 
   const handleWheel = useCallback(
     (e) => {
@@ -605,7 +601,6 @@ const FOFPLayoutViewer = ({
             height: dims.height,
             display: "inline-block",
             willChange: "transform",
-            transform: "translate3d(0, 0, 0) scale(1)",
             transformOrigin: "top left",
             boxShadow: "0 18px 45px rgba(0,0,0,0.32)",
             bgcolor: theme.palette.common.white,

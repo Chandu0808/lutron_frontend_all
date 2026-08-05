@@ -255,9 +255,10 @@ const createAppTheme = (uiColors = {}, bgImage = DEFAULT_BG) => {
       MuiFormHelperText: {
         styleOverrides: {
           root: {
-            color: "#FFFFFF",
+            /* White/light fields are the default surface — white helper text is invisible */
+            color: "rgba(0, 0, 0, 0.72)",
             "&.Mui-error": {
-              color: "#FFFFFF",
+              color: "#c62828",
             },
           },
         },

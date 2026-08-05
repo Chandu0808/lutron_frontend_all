@@ -1,6 +1,14 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { BaseUrl } from '../../../../BaseUrl';
 import qs from "qs";
+import { createVariantCustomGraphThunks } from '../../../../../../shared/dashboard/customGraphs/createCustomGraphThunks';
+import { CUSTOM_GRAPH_VARIANTS } from '../../../../../../shared/dashboard/customGraphs/customGraphConstants';
+import { normalizeWidgetTitlesResponse, filterWidgetConfigurationByUiVariant, findWidgetConfigurationItemIndex, normalizeWidgetConfigurationUiVariant, getWidgetVisibilityPersistenceKey, normalizeDashboardWidgetKey } from '../../../../../../shared/dashboard/utils/dashboardWidgetVisibilityCore';
+
+const advancedCustomGraphThunks = createVariantCustomGraphThunks(CUSTOM_GRAPH_VARIANTS.advanced);
+export const fetchCustomGraphs = advancedCustomGraphThunks.fetchCustomGraphs;
+export const createCustomGraph = advancedCustomGraphThunks.createCustomGraph;
+export const deleteCustomGraph = advancedCustomGraphThunks.deleteCustomGraph;
 // Thunk to fetch area groups
 export const fetchAreaGroups = createAsyncThunk(
   'groupOccupancy/fetchAreaGroups',
@@ -272,7 +280,7 @@ export const fetchRenameWidgets = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const res = await BaseUrl.get('/widgets/widget_titles');
-      return res.data;
+      return normalizeWidgetTitlesResponse(res.data);
     } catch (err) {
       return rejectWithValue(err.response?.data || "Error");
     }
@@ -283,15 +291,76 @@ export const renameWidget = createAsyncThunk(
   'renameWidget/renameWidget',
   async (data, { rejectWithValue }) => {
     try {
-      const res = await BaseUrl.post('/widgets/rename_widget',
-        data
-      );
+      // Frontend canonical keys (e.g. total_consumption_by_group) must match
+      // backend WidgetKey (e.g. consumption_by_area_groups).
+      const payload = {
+        ...data,
+        widget_key: getWidgetVisibilityPersistenceKey(data?.widget_key),
+      };
+      const res = await BaseUrl.post('/widgets/rename_widget', payload);
       return res.data;
     } catch (err) {
       return rejectWithValue(err.response?.data || "Error");
     }
   }
 );
+
+/** GET widget visibility configuration for the advanced UI variant. */
+export const fetchWidgetConfiguration = createAsyncThunk(
+  'groupOccupancy/fetchWidgetConfiguration',
+  async () => {
+    try {
+      const res = await BaseUrl.get('/widgets/configuration', {
+        params: { variant: 'advanced' },
+      });
+      const items = res.data?.items ?? [];
+      return filterWidgetConfigurationByUiVariant(items, 'advanced');
+    } catch {
+      return [];
+    }
+  }
+);
+
+/** POST single widget visibility (Superadmin only). Merges into Redux list on success. */
+export const saveWidgetVisibility = createAsyncThunk(
+  'groupOccupancy/saveWidgetVisibility',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await BaseUrl.post('/widgets/configuration', payload, {
+        params: { variant: 'advanced' },
+      });
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data || 'Error');
+    }
+  }
+);
+
+/** GET/POST shared Energy + Space dashboard layout (order + span). Superadmin saves; all roles read. */
+export const fetchDashboardChartOrder = createAsyncThunk(
+  'groupOccupancy/fetchDashboardChartOrder',
+  async () => {
+    try {
+      const res = await BaseUrl.get('/widgets/dashboard_chart_order');
+      return res.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+);
+
+export const saveDashboardChartOrder = createAsyncThunk(
+  'groupOccupancy/saveDashboardChartOrder',
+  async (payload) => {
+    try {
+      const res = await BaseUrl.post('/widgets/dashboard_chart_order', payload);
+      return res.data ?? payload;
+    } catch {
+      return payload;
+    }
+  }
+);
+
 const groupOccupancySlice = createSlice({
   name: 'groupOccupancy',
   initialState: {
@@ -323,6 +392,13 @@ const groupOccupancySlice = createSlice({
     emailError: null,
     emailSuccess: null,
     emailSuccessTimestamp: null,
+    widgetConfiguration: [],
+    widgetConfigurationStatus: 'idle',
+    customGraphs: [],
+    customGraphsLoading: false,
+    customGraphsError: null,
+    dashboardChartOrder: null,
+    dashboardChartOrderStatus: 'idle',
   },
   reducers: {
     clearExportSuccess: (state) => {
@@ -504,13 +580,99 @@ const groupOccupancySlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(renameWidget.fulfilled, (state) => {
+      .addCase(renameWidget.fulfilled, (state, action) => {
         state.loading = false;
         state.error = null;
+        // Optimistically sync titles so dashboard/settings show the new name
+        // even before fetchRenameWidgets completes (and for stale dropdown_name rows).
+        const arg = action.meta?.arg;
+        const key = arg?.widget_key != null ? String(arg.widget_key) : '';
+        const name = arg?.new_name != null ? String(arg.new_name).trim() : '';
+        if (!key || !name) return;
+        if (!state.widgets || typeof state.widgets !== 'object' || !Array.isArray(state.widgets.titles)) {
+          return;
+        }
+        const canonical = normalizeDashboardWidgetKey(key);
+        const idx = state.widgets.titles.findIndex(
+          (t) => t && normalizeDashboardWidgetKey(String(t.key)) === canonical
+        );
+        if (idx !== -1) {
+          const row = state.widgets.titles[idx];
+          state.widgets.titles[idx] = {
+            ...row,
+            key: canonical || row.key,
+            title: name,
+            dropdown_name: name,
+          };
+        } else {
+          state.widgets.titles.push({
+            key: canonical || key,
+            title: name,
+            dropdown_name: name,
+          });
+        }
       })
       .addCase(renameWidget.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || 'Failed to rename widget';
+      })
+      .addCase(fetchWidgetConfiguration.pending, (state) => {
+        state.widgetConfigurationStatus = 'loading';
+      })
+      .addCase(fetchWidgetConfiguration.fulfilled, (state, action) => {
+        state.widgetConfigurationStatus = 'succeeded';
+        state.widgetConfiguration = Array.isArray(action.payload) ? action.payload : [];
+      })
+      .addCase(fetchWidgetConfiguration.rejected, (state) => {
+        state.widgetConfigurationStatus = 'succeeded';
+        state.widgetConfiguration = [];
+      })
+      .addCase(saveWidgetVisibility.fulfilled, (state, action) => {
+        const row = action.payload;
+        if (!row || typeof row.widget_key !== 'string') return;
+        if (!Array.isArray(state.widgetConfiguration)) {
+          state.widgetConfiguration = [];
+        }
+        const uiVariant = normalizeWidgetConfigurationUiVariant(
+          row.ui_variant ?? action.meta?.arg?.ui_variant
+        );
+        const merged = { ...row, ui_variant: uiVariant };
+        const idx = findWidgetConfigurationItemIndex(
+          state.widgetConfiguration,
+          merged.widget_key,
+          uiVariant
+        );
+        if (idx >= 0) {
+          state.widgetConfiguration[idx] = merged;
+        } else {
+          state.widgetConfiguration.push(merged);
+        }
+      })
+      .addCase(fetchCustomGraphs.pending, (state) => {
+        state.customGraphsLoading = true;
+        state.customGraphsError = null;
+      })
+      .addCase(fetchCustomGraphs.fulfilled, (state, action) => {
+        state.customGraphsLoading = false;
+        state.customGraphs = Array.isArray(action.payload) ? action.payload : [];
+      })
+      .addCase(fetchCustomGraphs.rejected, (state, action) => {
+        state.customGraphsLoading = false;
+        state.customGraphsError = action.payload || 'Failed to load custom graphs';
+      })
+      .addCase(createCustomGraph.pending, (state) => {
+        state.customGraphsLoading = true;
+        state.customGraphsError = null;
+      })
+      .addCase(createCustomGraph.fulfilled, (state) => {
+        state.customGraphsLoading = false;
+      })
+      .addCase(createCustomGraph.rejected, (state, action) => {
+        state.customGraphsLoading = false;
+        state.customGraphsError = action.payload || 'Failed to add graph';
+      })
+      .addCase(deleteCustomGraph.fulfilled, (state) => {
+        state.customGraphsLoading = false;
       })
       // Handle activity report download states
       .addCase(downloadActivityReport.pending, (state) => {
@@ -545,6 +707,28 @@ const groupOccupancySlice = createSlice({
         state.emailLoading = false;
         state.emailError = action.payload || 'Failed to send activity report email';
         state.emailSuccess = null;
+      })
+      .addCase(fetchDashboardChartOrder.pending, (state) => {
+        state.dashboardChartOrderStatus = 'loading';
+      })
+      .addCase(fetchDashboardChartOrder.fulfilled, (state, action) => {
+        state.dashboardChartOrderStatus = 'succeeded';
+        state.dashboardChartOrder = action.payload;
+      })
+      .addCase(fetchDashboardChartOrder.rejected, (state) => {
+        state.dashboardChartOrderStatus = 'succeeded';
+        state.dashboardChartOrder = state.dashboardChartOrder ?? null;
+      })
+      .addCase(saveDashboardChartOrder.fulfilled, (state, action) => {
+        const fromArg =
+          action.meta?.arg && typeof action.meta.arg === 'object' ? action.meta.arg : {};
+        const fromRes =
+          action.payload && typeof action.payload === 'object' ? action.payload : {};
+        state.dashboardChartOrder = {
+          ...(state.dashboardChartOrder || {}),
+          ...fromRes,
+          ...fromArg,
+        };
       });
   }
 });
@@ -573,6 +757,11 @@ export const getActivityReportLoading = (s) => s.groupOccupancy.loading;
 export const getActivityReportError = (s) => s.groupOccupancy.error;
 export const selectRenameWidgetLoading = (state) => state.groupOccupancy.loading;
 export const selectRenameWidgetError = (state) => state.groupOccupancy.error;
+export const selectWidgetConfiguration = (state) => state.groupOccupancy.widgetConfiguration ?? [];
+export const selectWidgetConfigurationStatus = (state) => state.groupOccupancy.widgetConfigurationStatus ?? 'idle';
+export const selectCustomGraphs = (state) => state.groupOccupancy.customGraphs ?? [];
+export const selectCustomGraphsLoading = (state) => state.groupOccupancy.customGraphsLoading ?? false;
+export const selectCustomGraphsError = (state) => state.groupOccupancy.customGraphsError ?? null;
 // Activity report export selectors
 export const selectActivityReportExportLoading = (state) => state.groupOccupancy.exportLoading;
 export const selectActivityReportExportError = (state) => state.groupOccupancy.exportError;
@@ -582,3 +771,5 @@ export const selectActivityReportEmailLoading = (state) => state.groupOccupancy.
 export const selectActivityReportEmailError = (state) => state.groupOccupancy.emailError;                                                                   
 export const selectActivityReportEmailSuccess = (state) => state.groupOccupancy.emailSuccess;
 export const selectActivityReportEmailSuccessTimestamp = (state) => state.groupOccupancy.emailSuccessTimestamp;
+export const selectDashboardChartOrder = (state) => state.groupOccupancy.dashboardChartOrder;
+export const selectDashboardChartOrderStatus = (state) => state.groupOccupancy.dashboardChartOrderStatus;

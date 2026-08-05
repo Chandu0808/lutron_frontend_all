@@ -159,6 +159,7 @@ const QuickControls = () => {
     if (status === 'idle' || shouldRefresh) {
       dispatch(fetchQuickControls());
       if (shouldRefresh) dispatch(setShouldRefresh(false));
+      setLastRefreshTime(Date.now());
     }
   }, [status, shouldRefresh, dispatch]);
 
@@ -181,12 +182,6 @@ const QuickControls = () => {
 
     return () => clearInterval(interval);
   }, [dispatch, lastRefreshTime]);
-
-  // Force refresh when component mounts or when navigating to this page
-  useEffect(() => {
-    dispatch(fetchQuickControls());
-    setLastRefreshTime(Date.now());
-  }, [dispatch]);
 
   // Check if all areas have the same action type
   const checkSameActionType = () => {
@@ -765,9 +760,9 @@ const QuickControls = () => {
                       maxWidth: '200px'
                     }}>
                       {editMode ? (
-                        <span>{area.floor_name} &gt; {area.area_name}</span>
+                        <span>{area.floor_name} / {area.area_name}</span>
                       ) : (
-                        `${area.floor_name} &gt; ${area.area_name}`
+                        `${area.floor_name} / ${area.area_name}`
                       )}
                     </td>
                     <td style={{ padding: '8px 0' }}>

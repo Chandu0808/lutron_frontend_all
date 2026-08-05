@@ -4,7 +4,6 @@ import { jwtDecode } from 'jwt-decode';
 import {
   Box,
   FormControl,
-  InputLabel,
   MenuItem,
   Select,
   Typography,
@@ -12,10 +11,12 @@ import {
 import {
   getUiVariant,
   setUiVariant,
+  syncUiVariantToBackend,
   UI_VARIANT_LABELS,
   UI_VARIANTS,
   isSuperAdminRole,
 } from '../utils/uiVariant';
+import { remapPathnameForVariant } from '../utils/variantRouteMap';
 
 function resolveUserRole(profileRole) {
   if (profileRole != null && String(profileRole).trim() !== '') {
@@ -47,26 +48,31 @@ const lightChromeSelectSx = {
   '& .MuiSvgIcon-root': { color: '#000' },
 };
 
-const lightChromeLabelSx = {
-  color: 'rgba(0, 0, 0, 0.6)',
-  '&.Mui-focused': { color: '#000' },
-};
-
 /**
- * @param {{ lightChrome?: boolean }} props When true, label/select/menu use dark text (white panel).
+ * @param {{ lightChrome?: boolean, compact?: boolean }} props
+ * When lightChrome is true, label/select/menu use dark text (white panel).
+ * When compact is true, vertical spacing is reduced (basic theme page).
  */
-export default function UiVariantSelector({ lightChrome = false }) {
+export default function UiVariantSelector({ lightChrome = false, compact = false }) {
   const profileRole = useSelector((state) => state.user?.profile?.role);
   const role = useMemo(() => resolveUserRole(profileRole), [profileRole]);
   const canSwitchVariant = isSuperAdminRole(role);
 
   const [uiVariant, setUiVariantState] = useState(() => getUiVariant());
 
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const next = e.target.value;
     if (next === uiVariant) return;
     setUiVariant(next);
     setUiVariantState(next);
+    const { pathname, search, hash } = window.location;
+    const remapped = remapPathnameForVariant(pathname, next);
+    if (remapped !== pathname) {
+      window.history.replaceState(null, '', `${remapped}${search}${hash}`);
+    }
+    // Align backend active variant; theme thunks also pass ?variant= from localStorage.
+    // Reload even if sync fails so the selected UI still comes up.
+    await syncUiVariantToBackend(next);
     window.location.reload();
   };
 
@@ -75,17 +81,13 @@ export default function UiVariantSelector({ lightChrome = false }) {
   }
 
   return (
-    <Box sx={{ mb: 2, maxWidth: 360 }}>
+    <Box sx={{ mb: compact ? 0.5 : 2, maxWidth: 360 }}>
       <FormControl fullWidth size="small">
-        <InputLabel id="lutron-ui-variant-label" sx={lightChrome ? lightChromeLabelSx : undefined}>
-          CC UI
-        </InputLabel>
         <Select
-          labelId="lutron-ui-variant-label"
           id="lutron-ui-variant-select"
-          label="CC UI"
           value={uiVariant}
           onChange={handleChange}
+          inputProps={{ 'aria-label': 'Application variant' }}
           sx={lightChrome ? lightChromeSelectSx : undefined}
           MenuProps={
             lightChrome
@@ -110,7 +112,11 @@ export default function UiVariantSelector({ lightChrome = false }) {
       <Typography
         variant="caption"
         color={lightChrome ? 'text.primary' : 'text.secondary'}
-        sx={{ mt: 0.5, display: 'block', ...(lightChrome ? { color: 'rgba(0, 0, 0, 0.6)' } : {}) }}
+        sx={{
+          mt: compact ? 0.25 : 0.5,
+          display: 'block',
+          ...(lightChrome ? { color: 'rgba(0, 0, 0, 0.6)' } : {}),
+        }}
       >
         Changing this reloads the application with the selected interface.
       </Typography>

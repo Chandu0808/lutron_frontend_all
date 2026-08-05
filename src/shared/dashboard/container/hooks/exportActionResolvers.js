@@ -40,14 +40,10 @@ export function buildStandardEnergyExportApiParams(selection = {}) {
 
 export function buildGroupEnergyExportApiParams(selection = {}, calculateDateParameters) {
   const { startDate, endDate, timeRange } = calculateDateParameters();
-  return buildChartApiParams({
-    selectedAreas: selection.selectedAreas,
-    selectedFloorIds: selection.selectedFloorIds,
-    timeRange,
-    startDate,
-    endDate,
-    includeNavigating: false,
-  });
+  // Total Consumption by Area Group is project-scoped. The backend derives
+  // configured Area Groups, so dashboard area/floor selections are intentionally
+  // excluded from both download and email payloads.
+  return { timeRange, startDate, endDate };
 }
 
 export function resolveBuiltInEnergyExportActions(widgetKey, thunks) {

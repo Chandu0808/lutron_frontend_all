@@ -47,6 +47,8 @@ export default function UsersComponent() {
     settingsSidebarTabStyles: { settingsSidebarColumnDividerSx },
     SettingsSidebarNav,
     settingsUsersBreadcrumbParams: { SETTINGS_USERS_ACTION_QUERY },
+    SettingsPageShell = null,
+    usersListScrollEnabled = false,
   } = getUsersSettingsBindings();
 
   const theme = useTheme();
@@ -196,61 +198,8 @@ export default function UsersComponent() {
     return null;
   }
 
-  return (
-
-    <Grid
-      container
-      sx={{
-        maxWidth: '100%',
-        borderRadius: '10px',
-        alignItems: 'flex-start',
-        p: '18px',
-        ml: '18px',
-      }}
-    >
-      <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
-        <Typography
-          variant="h6"
-          sx={{
-            color: theme.palette.text.secondary,
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: 0.5,
-            mb: 1,
-          }}
-        >
-          Settings
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
-          <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
-        </Box>
-      </Grid>
-
-      <Grid
-        item
-        xs={12}
-        md={2}
-        sx={{
-          p: 0,
-          ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp && !isTablet),
-        }}
-      >
-        <SettingsSidebarNav items={visibleSidebarItemsWithPaths} />
-      </Grid>
-
-      {/* Main Content */}
-      <Grid
-        item
-        xs={12}
-        md={10}
-        sx={{
-          backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
-          p: 3,
-          borderTopRightRadius: '10px',
-          borderBottomRightRadius: '10px',
-        }}
-      >
+  const usersMainContent = (
+      <>
         {/* Search bar + "Create User" button */}
         <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
           <TextField
@@ -338,13 +287,32 @@ export default function UsersComponent() {
                 mx: '1',                // Center horizontally
                 mt: 2,
                 borderRadius: 1,
-                overflow: "hidden",
                 backgroundColor: isDefaultWhiteTheme ? '#fff' : backgroundColor,
+                ...(usersListScrollEnabled
+                  ? {
+                      maxHeight: { xs: 'min(70vh, 520px)', md: 'calc(100vh - 220px)' },
+                      overflowY: 'auto',
+                      overflowX: 'auto',
+                    }
+                  : { overflow: 'hidden' }),
               }}
             >
-            <Table>
+            <Table stickyHeader={Boolean(usersListScrollEnabled)}>
               <TableHead>
-                <TableRow sx={tableHeaderRowSx}>
+                <TableRow
+                  sx={{
+                    ...tableHeaderRowSx,
+                    ...(usersListScrollEnabled
+                      ? {
+                          '& .MuiTableCell-head': {
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 2,
+                          },
+                        }
+                      : {}),
+                  }}
+                >
                   <TableCell sx={tableHeaderCellSx}>User</TableCell>
                   <TableCell sx={tableHeaderCellSx}>Role</TableCell>
                   <TableCell sx={tableHeaderCellSx}>Assigned Floors</TableCell>
@@ -513,8 +481,76 @@ export default function UsersComponent() {
             </Alert>
           </Box>
         )}
+      </>
+  );
+
+  if (SettingsPageShell) {
+    return (
+      <SettingsPageShell
+        sidebarItems={visibleSidebarItemsWithPaths}
+        NavigationComponent={SettingsSidebarNav}
+        contentColor={contentColor}
+      >
+        {usersMainContent}
+      </SettingsPageShell>
+    );
+  }
+
+  return (
+    <Grid
+      container
+      sx={{
+        maxWidth: '100%',
+        borderRadius: '10px',
+        alignItems: 'flex-start',
+        p: '18px',
+        ml: '18px',
+      }}
+    >
+      <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
+        <Typography
+          variant="h6"
+          sx={{
+            color: theme.palette.text.secondary,
+            fontSize: 24,
+            fontWeight: 600,
+            letterSpacing: 0.5,
+            mb: 1,
+          }}
+        >
+          Settings
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
+          <Box sx={{ height: '1px', width: '100%', backgroundColor: '#e5e7eb' }} />
+        </Box>
+      </Grid>
+
+      <Grid
+        item
+        xs={12}
+        md={2}
+        sx={{
+          p: 0,
+          ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp && !isTablet),
+        }}
+      >
+        <SettingsSidebarNav items={visibleSidebarItemsWithPaths} />
+      </Grid>
+
+      <Grid
+        item
+        xs={12}
+        md={10}
+        sx={{
+          backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
+          p: 3,
+          borderTopRightRadius: '10px',
+          borderBottomRightRadius: '10px',
+        }}
+      >
+        {usersMainContent}
       </Grid>
     </Grid>
-
   );
 }

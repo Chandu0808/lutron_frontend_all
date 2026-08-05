@@ -60,6 +60,20 @@ export function resolveSpaceExportThunks({ showChartsTab, dropdownKey, chartTitl
         };
   }
 
+  // Route by dropdown key so renamed widget titles still export correctly
+  // (mirrors pie / instant key routing used by all three variants).
+  if (dropdownKey === 'table') {
+    return showChartsTab
+      ? {
+          emailThunk: thunks.sendSpaceUtilizationPerFromLogsEmail,
+          downloadThunk: thunks.downloadSpaceUtilizationPerFromLogs,
+        }
+      : {
+          emailThunk: thunks.sendSpaceUtilizationPerEmail,
+          downloadThunk: thunks.downloadSpaceUtilizationPer,
+        };
+  }
+
   if (isOccupancyByGroupChart(chartTitle)) {
     return showChartsTab
       ? {

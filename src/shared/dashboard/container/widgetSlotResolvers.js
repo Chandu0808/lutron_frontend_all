@@ -151,6 +151,7 @@ export function resolveWidgetProps(widgetKey, context = {}) {
         selectedAreas,
         customDatesIncomplete: energyCustomNeedsDates,
         shellVariant: variant,
+        chartHeaderStyle,
         overrides,
       });
     }
@@ -268,6 +269,9 @@ export function buildEnergyWidgetRenderContext({
   areaIdToDisplayName,
   metricPanelBorder,
   overrides = {},
+  widgetVisibility,
+  visibilityMap,
+  getEffectiveBuiltinDashboardPage
 }) {
   return {
     variant,
@@ -293,5 +297,8 @@ export function buildEnergyWidgetRenderContext({
     areaIdToDisplayName,
     metricPanelBorder,
     overrides,
+    widgetVisibility,
+    visibilityMap,
+    getEffectiveBuiltinDashboardPage
   };
 }

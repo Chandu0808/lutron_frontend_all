@@ -6,6 +6,7 @@ import { fetchAreaLoadData, getAreaSizeLoadData } from "../../redux/slice/settin
 import { UseAuth } from '../../customhooks/UseAuth';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { isLightSurface } from '../../utils/themeOnSurface';
+import { dispatchFetchAreaSizeLoadOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 
 const SECTION_HEADER_BLUE = '#1E74C5';
 
@@ -48,7 +49,7 @@ const AreaSizeLoadTree = () => {
     };
 
     useEffect(() => {
-        dispatch(getAreaSizeLoadData());
+        dispatchFetchAreaSizeLoadOnce(dispatch, getAreaSizeLoadData);
     }, [dispatch]);
 
     const toggleExpand = () => {

@@ -22,6 +22,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { CARD_BACKGROUND } from "../../../config/themeConstants";
 import { getThemeButtonColor, usesGoldPageTheme } from '../../../utils/themePageBackground';
+import { downloadHelpFile } from "../../../../../shared/help/downloadHelpFile";
 
 const GetHelp = () => {
     const dispatch = useDispatch();
@@ -106,10 +107,9 @@ const GetHelp = () => {
         return map;
     }, [helpFiles]);
 
-    const handleDownload = (filePath) => {
+    const handleDownload = (filePath, fileName) => {
         if (!filePath) return;
-        const url = `${process.env.REACT_APP_API_URL}${filePath}`;
-        window.open(url, "_blank");
+        void downloadHelpFile(filePath, { fileName });
     };
 
     const toggle = (id) =>
@@ -127,7 +127,11 @@ const GetHelp = () => {
             actions: [
                 {
                     label: "Download PDF",
-                    onClick: () => handleDownload(byName["Troubleshooting Guide"]?.file_path),
+                    onClick: () =>
+                        handleDownload(
+                            byName["Troubleshooting Guide"]?.file_path,
+                            "Troubleshooting Guide"
+                        ),
                     disabled: !byName["Troubleshooting Guide"],
                 },
             ],
@@ -143,7 +147,7 @@ const GetHelp = () => {
             actions: [
                 {
                     label: "Download PDF",
-                    onClick: () => handleDownload(byName["User Manual"]?.file_path),
+                    onClick: () => handleDownload(byName["User Manual"]?.file_path, "User Manual"),
                     disabled: !byName["User Manual"],
                 },
             ],
@@ -155,13 +159,17 @@ const GetHelp = () => {
             summary: "Essential project details and information.",
             details: "Project scope, technical specifications and contact information.",
             actions: [
-                { label: "Download Scope", onClick: () => handleDownload(byName["Scope"]?.file_path), disabled: !byName["Scope"] },
-                { label: "Download BOQ", onClick: () => handleDownload(byName["BOQ"]?.file_path), disabled: !byName["BOQ"] },
-                { label: "Download Floor Layout", onClick: () => handleDownload(byName["Floor Layout"]?.file_path), disabled: !byName["Floor Layout"] },
-                { label: "Escalation Matrix", onClick: () => handleDownload(byName["Escalation Matrix"]?.file_path), disabled: !byName["Escalation Matrix"] },
+                { label: "Download Scope", onClick: () => handleDownload(byName["Scope"]?.file_path, "Scope"), disabled: !byName["Scope"] },
+                { label: "Download BOQ", onClick: () => handleDownload(byName["BOQ"]?.file_path, "BOQ"), disabled: !byName["BOQ"] },
+                { label: "Download Floor Layout", onClick: () => handleDownload(byName["Floor Layout"]?.file_path, "Floor Layout"), disabled: !byName["Floor Layout"] },
+                { label: "Escalation Matrix", onClick: () => handleDownload(byName["Escalation Matrix"]?.file_path, "Escalation Matrix"), disabled: !byName["Escalation Matrix"] },
                 {
                     label: "Fixture Details",
-                    onClick: () => handleDownload((byName["Fixture Details"] || byName["Fixture Make model"])?.file_path),
+                    onClick: () =>
+                        handleDownload(
+                            (byName["Fixture Details"] || byName["Fixture Make model"])?.file_path,
+                            "Fixture Details"
+                        ),
                     disabled: !(byName["Fixture Details"] || byName["Fixture Make model"]),
                 },
             ],
@@ -276,7 +284,11 @@ const GetHelp = () => {
                                                     ? 'help-download-btn help-download-btn--unavailable'
                                                     : 'help-download-btn help-download-btn--available'
                                             }
-                                            onClick={btn.onClick}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                btn.onClick?.(e);
+                                            }}
                                             disabled={btn.disabled}
                                             sx={helpDownloadButtonSx(!btn.disabled)}
                                         >

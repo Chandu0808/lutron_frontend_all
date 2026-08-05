@@ -1,5 +1,9 @@
 import axios from "axios";
-import { getToken, getValidToken } from "./redux/slice/auth/userlogin";
+import { getToken, getValidToken } from "../../shared/auth/authToken";
+import {
+  getApiErrorMessage,
+  isAuthTokenError,
+} from "../../shared/utils/authErrorDetection";
 import {
   AUTH_REDIRECT_FLAG_KEY,
   clearAuthRedirectFlag,
@@ -226,17 +230,13 @@ BaseUrl.interceptors.response.use(
     const isOnLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
     const isOnChangePasswordPage = window.location.pathname === '/auth/change_password';
     
-    // Check for token expiration or authentication errors
-    const isTokenError = 
-      error.response?.status === 401 || 
-      error.response?.status === 403 ||
-      error.message?.includes('No valid authentication token') ||
-      error.message?.includes('authentication token') ||
-      error.response?.data?.message?.toLowerCase().includes('token') ||
-      error.response?.data?.message?.toLowerCase().includes('expired') ||
-      error.response?.data?.message?.toLowerCase().includes('unauthorized') ||
-      error.response?.data?.message?.toLowerCase().includes('forbidden');
-    
+    // 401 / missing token → login. 403 is floor permission denied — stay on page.
+    const isTokenError = isAuthTokenError({
+      message: error.message,
+      status: error.response?.status,
+      apiMessage: getApiErrorMessage(error),
+    });
+
     // For Token-specific errors on protected endpoints, redirect IMMEDIATELY to login
     if (isTokenError && !isPublicEndpoint && !isLoginEndpoint && !isChangePasswordEndpoint && !isFofpEndpoint && !isOnLoginPage && !isOnChangePasswordPage) {
       // Redirect IMMEDIATELY on token failure

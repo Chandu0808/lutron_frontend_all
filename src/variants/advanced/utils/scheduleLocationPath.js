@@ -1,6 +1,6 @@
 /**
  * Location labels for schedules and quick controls.
- * Format: "Floor Name > Area Name" (e.g. "2nd Floor > ELECTRICAL ROOM 1").
+ * Format: "Floor Name / Area Name" (e.g. "2nd Floor / ELECTRICAL ROOM 1").
  */
 
 import { tagLoadedActions } from './scheduleActionPriority';
@@ -45,7 +45,7 @@ export function getFloorsList(floors) {
   return [];
 }
 
-export function formatFloorAreaPath(floorName, areaName, separator = ' > ') {
+export function formatFloorAreaPath(floorName, areaName, separator = ' / ') {
   const floor = (floorName || '').trim();
   const area = (areaName || '').trim();
   if (floor && area) return `${floor}${separator}${area}`;
@@ -90,6 +90,42 @@ function getFloorNameFromList(floors, floorId) {
   if (floorId == null) return '';
   const floor = getFloorsList(floors).find((f) => String(f.id) === String(floorId));
   return (floor?.floor_name || floor?.name || '').trim();
+}
+
+/** Map area_id → owning floor from floors.processors.areas (same as basic Quick Control). */
+function buildAreaIdToFloorMap(floors) {
+  return new Map(
+    getFloorsList(floors)
+      .flatMap((f) => {
+        const fid = f?.id ?? f?.floor_id ?? f?.floorId;
+        const fname = f?.floor_name ?? f?.floorName ?? f?.name;
+        const processors = Array.isArray(f?.processors) ? f.processors : [];
+        return processors.flatMap((p) => {
+          const areas = Array.isArray(p?.areas) ? p.areas : [];
+          return areas
+            .map((a) => {
+              const aid = a?.area_id ?? a?.id ?? a?.areaId;
+              return aid != null && fid != null
+                ? [String(aid), { floorId: fid, floorName: fname || '' }]
+                : null;
+            })
+            .filter(Boolean);
+        });
+      })
+      .filter(Boolean)
+  );
+}
+
+function buildFloorNameById(floors) {
+  return new Map(
+    getFloorsList(floors)
+      .map((f) => {
+        const fid = f?.id ?? f?.floor_id ?? f?.floorId;
+        const name = f?.floor_name ?? f?.floorName ?? f?.name;
+        return fid != null && name ? [String(fid), String(name)] : null;
+      })
+      .filter(Boolean)
+  );
 }
 
 function findFloorByName(floors, floorName) {
@@ -259,7 +295,7 @@ function findEntryByAreaCode(areaTreeIndex, areaCode) {
 
 /**
  * Resolve floor + area names.
- * Priority: saved floor_name (user pick) > unique tree match > floor_id from list.
+ * Priority: API/saved floor_name > API floor_id > unique tree match > first tree match.
  */
 export function resolveFloorAreaNames(fields, floors, areaTreeIndex) {
   const { floorId, areaId, areaCode, floorName, areaName } = pickAreaRecordFields(fields);
@@ -268,7 +304,7 @@ export function resolveFloorAreaNames(fields, floors, areaTreeIndex) {
   let resolvedFloor = '';
   let resolvedFloorId = floorId;
 
-  // Saved floor_name from create/update — never override
+  // Saved floor_name from create/update / API — never override
   if (floorName) {
     const floorFromName = findFloorByName(floors, floorName);
     resolvedFloor = floorName;
@@ -280,6 +316,17 @@ export function resolveFloorAreaNames(fields, floors, areaTreeIndex) {
     }
 
     return { floorId: resolvedFloorId, areaId, floorName: resolvedFloor, areaName: resolvedArea };
+  }
+
+  // Prefer authoritative floor_id from API (Area.floor_id) before ambiguous tree matches
+  if (floorId != null) {
+    resolvedFloor = getFloorNameFromList(floors, floorId);
+    resolvedFloorId = floorId;
+    const onFloor = getEntryOnFloor(areaTreeIndex, floorId, areaId);
+    if (onFloor?.areaName) resolvedArea = onFloor.areaName;
+    if (resolvedFloor) {
+      return { floorId: resolvedFloorId, areaId, floorName: resolvedFloor, areaName: resolvedArea };
+    }
   }
 
   // If we have area_code, it's typically unique and can disambiguate floors
@@ -315,16 +362,6 @@ export function resolveFloorAreaNames(fields, floors, areaTreeIndex) {
         floorName: entry.floorName || getFloorNameFromList(floors, entry.floorId),
         areaName: entry.areaName || areaName,
       };
-    }
-  }
-
-  if (floorId != null) {
-    resolvedFloor = getFloorNameFromList(floors, floorId);
-    resolvedFloorId = floorId;
-    const onFloor = getEntryOnFloor(areaTreeIndex, floorId, areaId);
-    if (onFloor?.areaName && !resolvedArea) resolvedArea = onFloor.areaName;
-    if (resolvedFloor) {
-      return { floorId: resolvedFloorId, areaId, floorName: resolvedFloor, areaName: resolvedArea };
     }
   }
 
@@ -369,15 +406,90 @@ export function formatScheduleLocationLabel(loc, floors, areaTreeIndex, entityTy
   return formatFloorAreaPath(floorName, areaName);
 }
 
+/**
+ * Quick Control details Location column — same resolution as basic:
+ * floor_name → areaId→floor (processors.areas) → floor_id → unique tree match.
+ * Does not use ambiguous treeMatches[0] (that always preferred 1st Floor).
+ */
 export function formatQuickControlAreaLocationLabel(area, floors, areaTreeIndex, entityType, entityId) {
   if (!area) return '';
+
+  const floorNameById = buildFloorNameById(floors);
+  const areaIdToFloor = buildAreaIdToFloorMap(floors);
+  const { areaId, floorId, areaName: rawAreaName } = pickAreaRecordFields(area);
+  const resolvedFromFloors =
+    areaId != null ? areaIdToFloor.get(String(areaId)) : null;
+
+  // Apply saved UI meta only when it agrees with processors.areas (or no mapping exists).
+  let source = area;
   const merged = mergeAreaWithLocationMeta(area, entityType, entityId);
-  if ((merged.floorName || merged.floor_name) && (merged.areaName || merged.area_name)) {
-    const savedFloor = (merged.floorName || merged.floor_name || '').trim();
-    const savedArea = (merged.areaName || merged.area_name || '').trim();
-    if (savedFloor && savedArea) return formatFloorAreaPath(savedFloor, savedArea);
+  if (merged !== area) {
+    const metaFloor = (merged.floor_name || merged.floorName || '').trim();
+    if (
+      !resolvedFromFloors?.floorName ||
+      normalizeName(metaFloor) === normalizeName(resolvedFromFloors.floorName)
+    ) {
+      source = merged;
+    }
   }
-  const { floorName, areaName } = resolveFloorAreaNames(merged, floors, areaTreeIndex);
-  return formatFloorAreaPath(floorName, areaName);
+
+  const sourceFields = pickAreaRecordFields(source);
+  const areaName = (sourceFields.areaName || rawAreaName || '').trim();
+
+  // Prefer processors.areas ownership when present; API floor_id/floor_name are often wrong
+  // for areas that share the same name across floors.
+  const namedFloor = (sourceFields.floorName || '').trim();
+  let floorLabel = '';
+  if (resolvedFromFloors?.floorName) {
+    floorLabel =
+      namedFloor && normalizeName(namedFloor) === normalizeName(resolvedFromFloors.floorName)
+        ? namedFloor
+        : resolvedFromFloors.floorName;
+  } else {
+    floorLabel =
+      namedFloor ||
+      (sourceFields.floorId != null
+        ? floorNameById.get(String(sourceFields.floorId)) ||
+          getFloorNameFromList(floors, sourceFields.floorId)
+        : '') ||
+      (floorId != null
+        ? floorNameById.get(String(floorId)) || getFloorNameFromList(floors, floorId)
+        : '') ||
+      '';
+  }
+
+  if (floorLabel && areaName) {
+    return formatFloorAreaPath(floorLabel, areaName);
+  }
+
+  // Last resort: unique tree match only (never first-of-many → 1st Floor).
+  if (areaTreeIndex && areaId != null) {
+    const treeMatches = findEntriesForAreaOnFloors(
+      areaTreeIndex,
+      floors,
+      areaId,
+      areaName || undefined
+    );
+    if (treeMatches.length === 1) {
+      const entry = treeMatches[0];
+      return formatFloorAreaPath(
+        entry.floorName || getFloorNameFromList(floors, entry.floorId) || floorLabel,
+        entry.areaName || areaName
+      );
+    }
+    if (treeMatches.length > 1 && resolvedFromFloors?.floorId != null) {
+      const entry = treeMatches.find(
+        (e) => String(e.floorId) === String(resolvedFromFloors.floorId)
+      );
+      if (entry) {
+        return formatFloorAreaPath(
+          entry.floorName || resolvedFromFloors.floorName || floorLabel,
+          entry.areaName || areaName
+        );
+      }
+    }
+  }
+
+  return formatFloorAreaPath(floorLabel, areaName);
 }
 

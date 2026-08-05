@@ -138,7 +138,7 @@ const UpdateUserAreaGroup = () => {
                 setShowSnackbar(true);
                 // Refresh the area groups list before navigating back
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1500);
+                setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
             })
             .catch(() => {
                 setSnackbarMessage("Failed to delete area group. Please try again.");
@@ -200,7 +200,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to copy area group. Please try again.");
@@ -215,7 +215,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to update area group. Please try again.");
@@ -314,10 +314,11 @@ const UpdateUserAreaGroup = () => {
                             onChange={(e) => setGroupName(e.target.value)}
                             variant="outlined"
                             fullWidth
-                            sx={{ mb: 2 }}
+                            sx={{ mb: 2, mt: 1.5 }}
                             InputProps={{
                                 sx: {
                                     backgroundColor: 'white',
+                                    overflow: 'visible',
                                     '& .MuiOutlinedInput-notchedOutline': {
                                         borderColor: '#ccc',
                                     },
@@ -332,6 +333,7 @@ const UpdateUserAreaGroup = () => {
                             InputLabelProps={{
                                 sx: {
                                     color: '#666',
+                                    overflow: 'visible',
                                     '&.Mui-focused': {
                                         color: buttonColor,
                                     },
@@ -473,7 +475,7 @@ const UpdateUserAreaGroup = () => {
                         )}
                         <Button
                             variant="contained"
-                            onClick={() => navigate('/manage-area-groups')}
+                            onClick={() => navigate('/setting/manage-area-groups')}
                             sx={{ backgroundColor: 'buttonColor', color: '#fff' }}
                         >
                             Close

@@ -112,3 +112,32 @@
     justify-content: center;
     margin-top: -3em;
 }
+
+/* Customized theme page — keep cards clear of the settings panel scrollbar. */
+.settings-main-inner-panel:has(.customized-theme-page) {
+  scrollbar-gutter: stable;
+}
+
+.customized-theme-page {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.customized-theme-page .theme-picker-cards-grid {
+  box-sizing: border-box;
+}
+
+/* Slightly taller picker area — hex grid + swatch row (customized theme only). */
+.customized-theme-page .color-picker-card {
+  min-height: 392px;
+  overflow: visible;
+}
+
+.customized-theme-page .hex-picker-surface {
+  padding-bottom: 10px;
+}
+
+.customized-theme-page .gray-row {
+  margin-top: -2.7em;
+  padding-bottom: 6px;
+}

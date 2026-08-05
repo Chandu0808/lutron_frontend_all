@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { getProcessorId } from '../../../../../utils/processorId';
+import { validateAreaCoordinatesCsvFile } from '../../../../../utils/areaCoordinatesCsv';
 import { useNavigate, Navigate } from 'react-router-dom';
 import {
   Box, Grid, Typography, TextField, Button, Dialog,
@@ -75,8 +77,6 @@ export default function CreateFloor() {
   const navigate = useNavigate();
 
   const role = localStorage.getItem('role');
-  if (role !== 'Superadmin') return <Navigate to="/main" replace />;
-
 
   const [floorName, setFloorName] = useState('');
   const [floorDocument, setFloorDocument] = useState(null);
@@ -206,8 +206,15 @@ export default function CreateFloor() {
   };
 
   const handleConfirmAddProcessors = () => {
+    const existingIds = new Set(
+      selectedProcessors.map((p) => getProcessorId(p)).filter((id) => id != null)
+    );
     dialogSelectedProcessors.forEach((processor) => {
-      dispatch(addSelectedProcessor(processor));
+      const pid = getProcessorId(processor);
+      if (pid != null && !existingIds.has(pid)) {
+        dispatch(addSelectedProcessor(processor));
+        existingIds.add(pid);
+      }
     });
     setDialogSelectedProcessors([]);
     setOpenDialog(false);
@@ -266,51 +273,68 @@ export default function CreateFloor() {
 
   const handleAreaCoordinatesUpload = async (e, processorId) => {
     const file = e.target.files[0];
-    if (file) {
-      setUploadStatuses(prev => ({ ...prev, [processorId]: 'uploading' }));
+    const resolvedProcessorId = getProcessorId(processorId);
+    if (!file || resolvedProcessorId == null) {
+      e.target.value = '';
+      return;
+    }
 
-      try {
-        const result = await dispatch(uploadAreaCoordinates({ processorId, file })).unwrap();
+    const validation = await validateAreaCoordinatesCsvFile(file, resolvedProcessorId);
+    if (!validation.valid) {
+      setUploadStatuses(prev => ({ ...prev, [resolvedProcessorId]: 'failure' }));
+      setAreaUploadSuccess(prev => ({ ...prev, [resolvedProcessorId]: false }));
+      setAreaUploadMsg(prev => ({
+        ...prev,
+        [resolvedProcessorId]: validation.error,
+      }));
+      setShowUploadFailure(true);
+      e.target.value = '';
+      return;
+    }
 
-        const areaIds = result?.area_id;
+    setUploadStatuses(prev => ({ ...prev, [resolvedProcessorId]: 'uploading' }));
 
-        // IMPORTANT FIX: validate response before success
-        if (!Array.isArray(areaIds) || areaIds.length === 0) {
-          throw new Error("No valid area IDs returned");
-        }
+    try {
+      const result = await dispatch(
+        uploadAreaCoordinates({ processorId: resolvedProcessorId, file })
+      ).unwrap();
 
-        setUploadStatuses(prev => ({ ...prev, [processorId]: 'success' }));
+      const areaIds = result?.area_id;
 
-        setProcessorAreaMap(prev => ({
-          ...prev,
-          [processorId]: areaIds
-        }));
-
-        setAreaUploadSuccess(prev => ({ ...prev, [processorId]: true }));
-
-        setAreaUploadMsg(prev => ({
-          ...prev,
-          [processorId]: `Area coordinates uploaded! Area IDs: ${areaIds.join(', ')}`
-        }));
-
-        setShowUploadSuccess(true);
-
-        dispatch(fetchProcessors());
-
-      } catch (error) {
-        console.error("Upload error:", error);
-
-        setUploadStatuses(prev => ({ ...prev, [processorId]: 'failure' }));
-
-        setAreaUploadSuccess(prev => ({ ...prev, [processorId]: false }));
-
-        setAreaUploadMsg(prev => ({
-          ...prev,
-          [processorId]: 'Failed to upload area coordinates.'
-        }));
-
-        setShowUploadFailure(true); // optional but useful
+      if (!Array.isArray(areaIds) || areaIds.length === 0) {
+        throw new Error('No valid area IDs returned');
       }
+
+      setUploadStatuses(prev => ({ ...prev, [resolvedProcessorId]: 'success' }));
+
+      setProcessorAreaMap(prev => ({
+        ...prev,
+        [resolvedProcessorId]: areaIds,
+      }));
+
+      setAreaUploadSuccess(prev => ({ ...prev, [resolvedProcessorId]: true }));
+
+      setAreaUploadMsg(prev => ({
+        ...prev,
+        [resolvedProcessorId]: `Area coordinates uploaded! Area IDs: ${areaIds.join(', ')}`,
+      }));
+
+      setShowUploadSuccess(true);
+
+      dispatch(fetchProcessors());
+    } catch (error) {
+      console.error('Upload error:', error);
+
+      setUploadStatuses(prev => ({ ...prev, [resolvedProcessorId]: 'failure' }));
+      setAreaUploadSuccess(prev => ({ ...prev, [resolvedProcessorId]: false }));
+      setAreaUploadMsg(prev => ({
+        ...prev,
+        [resolvedProcessorId]:
+          typeof error === 'string'
+            ? error
+            : error?.message || 'Failed to upload area coordinates.',
+      }));
+      setShowUploadFailure(true);
     }
 
     e.target.value = '';
@@ -373,7 +397,7 @@ export default function CreateFloor() {
   //     setProcessorAreaMap({}); // <-- FLUSH the global variable here!
   //     dispatch(fetchFloors());
   //     setTimeout(() => {
-  //       navigate('/floor');
+  //       navigate('/setting/floor');
   //     }, 1500);
   //   } catch (error) {
   //     setErrorMessage(renderErrorMessage(error));
@@ -448,7 +472,7 @@ export default function CreateFloor() {
   //     dispatch(fetchFloors());
 
   //     setTimeout(() => {
-  //       navigate('/floor');
+  //       navigate('/setting/floor');
   //     }, 1500);
 
   //   } catch (error) {
@@ -484,9 +508,10 @@ export default function CreateFloor() {
       return;
     }
 
-    const missingCsv = selectedProcessors.some(
-      proc => !processorAreaMap[proc.id] || processorAreaMap[proc.id].length === 0
-    );
+    const missingCsv = selectedProcessors.some((proc) => {
+      const pid = getProcessorId(proc);
+      return pid == null || !processorAreaMap[pid] || processorAreaMap[pid].length === 0;
+    });
 
     if (missingCsv) {
       setErrorMessage('Please upload an area CSV for each processor.');
@@ -494,11 +519,18 @@ export default function CreateFloor() {
       return;
     }
 
-    // PAYLOAD
-    const processorsPayload = selectedProcessors.map(proc => ({
-      processor_id: proc.id,
-      area_ids: processorAreaMap[proc.id] || []
-    }));
+    // PAYLOAD — one entry per unique processor; area map keyed by getProcessorId
+    const seen = new Set();
+    const processorsPayload = [];
+    selectedProcessors.forEach((proc) => {
+      const pid = getProcessorId(proc);
+      if (pid == null || seen.has(pid)) return;
+      seen.add(pid);
+      processorsPayload.push({
+        processor_id: pid,
+        area_ids: processorAreaMap[pid] || [],
+      });
+    });
 
     const sendData = {
       floor_name: floorName.trim(),
@@ -531,7 +563,7 @@ export default function CreateFloor() {
       dispatch(fetchFloors());
 
       setTimeout(() => {
-        navigate('/floor');
+        navigate('/setting/floor');
       }, 1500);
 
     } catch (error) {
@@ -557,8 +589,12 @@ export default function CreateFloor() {
     setAreaUploadSuccess({});
     setAreaUploadMsg({});
     setProcessorAreaMap({}); // <-- FLUSH the global variable here!
-    navigate('/floor');
+    navigate('/setting/floor');
   };
+
+  if (role !== 'Superadmin') {
+    return <Navigate to="/setting/main" replace />;
+  }
 
   return (
     <>
@@ -700,7 +736,7 @@ export default function CreateFloor() {
             >
               <List>
                 {selectedProcessors.map((processor, idx) => (
-                  <ListItem key={processor.id} sx={{
+                  <ListItem key={`${getProcessorId(processor) ?? processor.id}-${idx}`} sx={{
                     backgroundColor: 'var(--settings-form-section-bg, #3d4a5c)',
                     border: '1px solid #4a586c',
                     borderRadius: 1,
@@ -709,8 +745,11 @@ export default function CreateFloor() {
                     mb: 1,
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <IconButton onClick={() => handleRemoveProcessor(processor.id)}>
-                        <DeleteIcon sx={{ color: '#fff' }} />
+                      <IconButton
+                        onClick={() => handleRemoveProcessor(processor.id)}
+                        sx={{ color: 'var(--settings-form-label-color, #fff)' }}
+                      >
+                        <DeleteIcon />
                       </IconButton>
                       <Typography sx={{ color: 'var(--settings-form-label-color, #fff)', ml: 1 }}>{processor.server || processor.name}</Typography>
                     </Box>
@@ -753,11 +792,11 @@ export default function CreateFloor() {
                         <VisuallyHiddenInput
                           type="file"
                           accept=".csv"
-                          onChange={e => handleAreaCoordinatesUpload(e, processor.id)}
+                          onChange={e => handleAreaCoordinatesUpload(e, getProcessorId(processor) ?? processor.id)}
                         />
                       </Button>
 
-                      {uploadStatuses[processor.id] === 'success' && (
+                      {uploadStatuses[getProcessorId(processor) ?? processor.id] === 'success' && (
                         <Box
                           sx={{
                             backgroundColor: 'var(--users-chip-bg, #d6dde8)',
@@ -900,7 +939,7 @@ export default function CreateFloor() {
             </Box>
           ) : processorStatus === 'failed' ? (
             <Box sx={{ p: 2 }}>
-              <Typography color="error">Failed to load processors. Please check the connection and retry.</Typography>
+              <Typography sx={{ color: '#c62828' }}>Failed to load processors. Please check the connection and retry.</Typography>
             </Box>
           ) : processors.length === 0 ? (
             <Box sx={{ p: 2 }}>

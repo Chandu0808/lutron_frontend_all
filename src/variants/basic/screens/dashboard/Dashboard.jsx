@@ -15,11 +15,11 @@
  * - Project data includes all areas the user has permission to access
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { handleRovingTablistKeyDown } from '../../../../utils/keyboard/rovingTablistKeyboard'
 import { registerPageSubNavHandler, requestTopbarNavFocus } from '../../../../utils/keyboard/pageSubNavBridge'
 import { isKeyboardNavBlockedTarget } from '../../../../utils/keyboard/keyboardNavUtils'
-import { useDispatch, useSelector, shallowEqual } from 'react-redux'
+import { useDispatch, useSelector, shallowEqual, useStore } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LineChart,
@@ -125,7 +125,7 @@ import ConsumptionSavingsCombinedChart from './ConsumptionSavingsCombinedChart'
 import DashboardDurationFilterBar from './DashboardDurationFilterBar'
 
 import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert, Typography, Button } from '@mui/material'; // Add useTheme and useMediaQuery
-import { AddBoxOutlined, IndeterminateCheckBoxOutlined, FileUploadOutlined } from '@mui/icons-material';
+import { AddBoxOutlined, IndeterminateCheckBoxOutlined } from '@mui/icons-material';
 import Alerts from './Alerts'
 import {
   fetchAlertTypes,
@@ -146,12 +146,28 @@ import {
   selectDashboardChartOrder,
   selectDashboardChartOrderStatus,
   selectWidgetConfigurationStatus,
+  fetchCustomGraphs,
+  selectCustomGraphs,
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import { ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS } from '../../config/featureFlags'
+import { useCustomGraphDashboardData } from '../../../../shared/dashboard/customGraphs/useCustomGraphDashboardData'
+import { isCustomGraphVisible } from '../../../../shared/dashboard/customGraphs/customGraphVisibility'
+import { CUSTOM_GRAPH_VARIANTS, CUSTOM_GRAPHS_UPDATED_EVENT } from '../../../../shared/dashboard/customGraphs/customGraphConstants'
+import { buildCustomGraphWidgetKey } from '../../../../shared/dashboard/customGraphs/customGraphStorage'
+import EnergyCustomGraphCard from '../../../customized/components/dashboard/EnergyCustomGraphCard'
+import { BaseUrl } from '../../BaseUrl'
 import {
   useDashboardWidgetVisibility,
 } from '../../utils/dashboardWidgetVisibility'
 import { ENERGY_CHART_ORDER_STORAGE_KEY } from '../../../../shared/dashboard/container/dashboardLayoutResolvers'
-import LongPressDraggable from '../../utils/LongPressDraggable'
+import BasicDashboardCardChrome from '../../components/dashboard/BasicDashboardCardChrome'
+import SortableDashboardItem from '../../components/dashboard/SortableDashboardItem'
+import BasicDashboardSortableProvider from '../../components/dashboard/BasicDashboardSortableProvider'
+import { useBasicDashboardSortableSensors } from '../../hooks/useBasicDashboardSortableSensors'
+import {
+  isBasicEnergyForceFullWidth,
+  resolveBasicDashboardSlotColumnSx,
+} from '../../utils/basicDashboardLayout'
 import { liftedFullOrderFromVisibleReorder } from '../../utils/draggableReflowOrder'
 import { isLightSurface } from '../../utils/themeOnSurface'
 import {
@@ -159,6 +175,15 @@ import {
   parseDateFromState,
 } from '../../../../shared/dashboard/utils/dashboardDateState'
 import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
+import {
+  dispatchFetchAreaGroupsOnce,
+  dispatchFetchAlertTypesOnce,
+  dispatchFetchCustomGraphsOnce,
+  dispatchFetchFloorsOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchWidgetConfigurationOnce,
+  dispatchFetchWidgetTitlesOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards'
 import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
 import { consumptionSavingMergedData as sharedConsumptionSavingMergedData } from '../../../../shared/dashboard/charts/transforms/consumptionSavingMergedData'
 import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
@@ -199,7 +224,6 @@ import {
   BASIC_ENERGY_SLOT_REGISTRY,
   getBasicEnergySlotMeta,
   resolveBasicRowSx,
-  resolveBasicSlotColumnSx,
 } from '../../../../shared/dashboard/container/layout'
 import {
   applyAlertTypeToggle,
@@ -212,10 +236,12 @@ import {
   DashboardErrorBanner,
   DashboardOperatorNoFloorsPanel,
 } from '../../../../shared/dashboard/components/status'
+import { resolveEnergyExportMenuPresetFromTheme } from '../../../../shared/dashboard/export/components'
+import { BasicEnergyExportControl } from './basicEnergyExportControl'
 import {
-  EnergyExportMenu,
-  resolveEnergyExportMenuPresetFromTheme,
-} from '../../../../shared/dashboard/export/components'
+  DEFAULT_CONSUMPTION_EXPORT_KEYS,
+  DEFAULT_SAVINGS_EXPORT_KEYS,
+} from '../../../../shared/dashboard/container/hooks/exportMenuState'
 
 const ChartLoader = bindDashboardChartLoader('basic')
 
@@ -245,6 +271,10 @@ const dashboardOverviewFixedHeaderBg = `linear-gradient(180deg, ${DASHBOARD_RIBB
 const DASHBOARD_RIBBON_TOOLBAR_PX = 50
 /** Overview, Energy, Space Utilization: fixed sub-header abuts the 50px ribbon (avoids the hairline). */
 const DASHBOARD_SUBHEADER_RIBBON_TOP = ['overview', 'energy', 'charts', 'alerts']
+/** Compact Energy/Charts sub-header row below the 50px topbar (fixed ribbon height). */
+const BASIC_ENERGY_COMPACT_SUBHEADER_PX = 48
+/** Standalone duration filter (DashboardDurationFilterBar 80px + vertical padding). */
+const BASIC_ENERGY_DURATION_FILTER_BAR_PX = 96
 
 const AREA_SELECTION_RIBBON_MAX_CHARS = 20
 const truncateAreaSelectionLabel = (s) => {
@@ -273,6 +303,7 @@ function Dashboard() {
   // to filter floors based on user permissions
 
   const dispatch = useDispatch()
+  const store = useStore()
   const theme = useTheme()
   const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
@@ -284,13 +315,32 @@ function Dashboard() {
     color: '#fff',
     fontWeight: 600,
     fontFamily: 'inherit',
-    fontSize: isLargeScreen ? '18px' : '16px'
+    fontSize: isLargeScreen ? '16px' : '14px'
   }), [isLargeScreen])
 
   // User authentication
   const { user, role: dashboardUserRole } = UseAuth()
   /** Superadmin may long-press reorder; Admin/Operator see the same layout (shared localStorage / API order) without reordering */
   const energyReflowLocked = !isSuperadminRole(dashboardUserRole)
+  const [energyFullscreenCardId, setEnergyFullscreenCardId] = useState(null)
+
+  const toggleEnergyFullscreen = useCallback((slotId) => {
+    setEnergyFullscreenCardId((prev) => (String(prev) === String(slotId) ? null : String(slotId)))
+  }, [])
+
+  useEffect(() => {
+    if (!energyFullscreenCardId) return undefined
+    const onKeyDown = (e) => {
+      if (e?.key === 'Escape') setEnergyFullscreenCardId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    const prevOverflow = document?.body?.style?.overflow
+    if (document?.body?.style) document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      if (document?.body?.style) document.body.style.overflow = prevOverflow || ''
+    }
+  }, [energyFullscreenCardId])
 
   const alertTypes = useSelector(selectAlertTypes)
   const selectedAlertType = useSelector(selectSelectedAlertType)
@@ -382,9 +432,9 @@ function Dashboard() {
     setShowAreaDropdown,
   });
 
-  // Fetch user profile on component mount
+  // Fetch user profile on component mount (Topbar may already own this)
   useEffect(() => {
-    dispatch(fetchProfile());
+    dispatchFetchProfileOnce(dispatch, fetchProfile);
   }, [dispatch]);
 
   // Set default behavior to show data for all areas
@@ -484,6 +534,12 @@ function Dashboard() {
       setActiveTab(tabFromPath)
     }
   }, [location.pathname, activeTab, getTabFromPath])
+
+  // Overview has no chart APIs — never leave the global loader stuck from other tabs.
+  useEffect(() => {
+    if (activeTab !== 'overview') return
+    dispatch(setGlobalLoading(false))
+  }, [activeTab, dispatch])
 
   // Fetch and auto-refresh dashboard overview when Overview tab is active
   useEffect(() => {
@@ -681,6 +737,9 @@ function Dashboard() {
       showEnergyStandaloneDurationFilter,
       energyDashboardRows,
       setEnergyChartOrder,
+      getEnergySlotSpan,
+      setEnergyCardSpan,
+      writeEnergyCardSpan,
     },
     widgets: {
       chartLoading,
@@ -725,6 +784,20 @@ function Dashboard() {
     },
   } = orchestration
 
+  const toggleEnergyCardSpan = useCallback(
+    (slotId) => {
+      setEnergyCardSpan((prev) => {
+        const next = prev && typeof prev === 'object' && !Array.isArray(prev) ? { ...prev } : {};
+        const cur = next?.[slotId];
+        const curSpan = cur === 12 || cur === '12' ? 12 : 6;
+        next[slotId] = curSpan === 12 ? 6 : 12;
+        writeEnergyCardSpan(next);
+        return next;
+      });
+    },
+    [setEnergyCardSpan, writeEnergyCardSpan]
+  )
+
   const onReorderEnergySlots = useCallback((nextVisible) => {
     if (energyReflowLocked) return
     setEnergyChartOrder((prev) => {
@@ -751,7 +824,7 @@ function Dashboard() {
   // Fetch alert options/data when Alerts tab is active
   useEffect(() => {
     if (activeTab === 'alerts') {
-      dispatch(fetchAlertTypes())
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes)
       // Note: fetchActiveAlerts is handled by the Alerts component itself
     }
   }, [activeTab, dispatch])
@@ -759,7 +832,7 @@ function Dashboard() {
   // Fetch rename widgets when Dashboard mounts (only if not already loaded)
   useEffect(() => {
     if (!widgetList || (Array.isArray(widgetList) && widgetList.length === 0) || (widgetList && !widgetList.titles)) {
-      dispatch(fetchRenameWidgets())
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets)
     }
   }, [dispatch, widgetList])
 
@@ -770,7 +843,7 @@ function Dashboard() {
   const widgetConfigurationStatus = useSelector(selectWidgetConfigurationStatus)
   useEffect(() => {
     if (widgetConfigurationStatus === 'idle') {
-      dispatch(fetchWidgetConfiguration())
+      dispatchFetchWidgetConfigurationOnce(dispatch, fetchWidgetConfiguration)
     }
   }, [dispatch, widgetConfigurationStatus])
 
@@ -828,10 +901,8 @@ function Dashboard() {
   // Note: The backend automatically filters floors based on user permissions
   // Operators will only receive floors they have access to
   useEffect(() => {
-    // if (floors.length === 0 && floorStatus !== 'loading') {
-    dispatch(fetchFloors())
-    // }
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length))
+  }, [dispatch, floors?.length])
 
   // Clear dashboard data and set default duration when component mounts
   // This ensures each user starts with a clean state
@@ -879,6 +950,7 @@ function Dashboard() {
 
   // Track if we've done the initial reload on login
   const hasInitialReloadRef = useRef(false);
+  const loadAllAreasInFlightRef = useRef(false);
 
   // Load all areas from all floors when floors are loaded
   useEffect(() => {
@@ -928,6 +1000,9 @@ function Dashboard() {
   // Function to load all areas from all floors (only accessible floors for operators)
   const loadAllAreasFromAllFloors = async () => {
     try {
+      if (loadAllAreasInFlightRef.current) {
+        return;
+      }
       if (
         shouldSkipLoadAllAreas({
           allAreasLoaded,
@@ -941,6 +1016,7 @@ function Dashboard() {
         return;
       }
 
+      loadAllAreasInFlightRef.current = true;
       let allAreaIds = [];
 
       for (const floor of getAvailableFloors()) {
@@ -960,6 +1036,8 @@ function Dashboard() {
       setAllAreasLoaded(true);
     } catch (error) {
       // Error loading all areas
+    } finally {
+      loadAllAreasInFlightRef.current = false;
     }
   }
 
@@ -1093,7 +1171,7 @@ function Dashboard() {
   // Fetch area groups on component mount
   useEffect(() => {
     if (!areaGroups) {
-      dispatch(fetchAreaGroups());
+      dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups);
     }
   }, [dispatch, areaGroups])
 
@@ -1400,6 +1478,38 @@ function Dashboard() {
     isNavigating,
   });
 
+  const customGraphs = useSelector(selectCustomGraphs);
+
+  useEffect(() => {
+    if (!ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS || activeTab !== 'energy') return undefined;
+    dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs);
+    const onUpdate = () => dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs, { force: true });
+    window.addEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(CUSTOM_GRAPHS_UPDATED_EVENT, onUpdate);
+  }, [activeTab, dispatch]);
+
+  const energyCustomGraphs = useMemo(
+    () =>
+      ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS && activeTab === 'energy'
+        ? (Array.isArray(customGraphs) ? customGraphs : []).filter(
+            (g) =>
+              String(g?.page || '').toLowerCase() === 'energy' &&
+              isCustomGraphVisible(CUSTOM_GRAPH_VARIANTS.basic, 'energy', g?.id, true)
+          )
+        : [],
+    [customGraphs, activeTab]
+  );
+
+  const { customGraphData, customGraphLoading, customGraphError } = useCustomGraphDashboardData({
+    customGraphs: energyCustomGraphs,
+    apiParams: activeTab === 'energy' ? apiParams : null,
+    apiParamsKey: activeTab === 'energy' ? apiParamsString : '',
+    dispatch,
+    store,
+    baseUrlClient: BaseUrl,
+    dispatchThunks: false,
+  });
+
   /* Phase 6.1A — date/api param logic in shared/dashboard/hooks */
 
   // Add request cancellation to prevent race conditions
@@ -1407,6 +1517,32 @@ function Dashboard() {
   const debounceTimeoutRef = useRef(null);
   const isApiCallInProgressRef = useRef(false);
   const apiCallTimeoutRef = useRef(null);
+
+  // Leaving Dashboard (e.g. Activity Report): clear loader + scroll lock so the next route can render.
+  useEffect(() => {
+    return () => {
+      dispatch(setGlobalLoading(false));
+      isApiCallInProgressRef.current = false;
+      if (abortControllerRef.current) {
+        try {
+          abortControllerRef.current.abort();
+        } catch {
+          /* ignore */
+        }
+        abortControllerRef.current = null;
+      }
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
+      if (apiCallTimeoutRef.current) {
+        clearTimeout(apiCallTimeoutRef.current);
+        apiCallTimeoutRef.current = null;
+      }
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    };
+  }, [dispatch]);
 
   useEffect(() => {
     if (!apiParams) {
@@ -1507,15 +1643,6 @@ function Dashboard() {
     lastApiParamsStringRef.current = apiParamsString;
     lastActiveTabRef.current = activeTab;
 
-    // Prevent duplicate API calls by checking if we're already in the middle of a request
-    // But allow reload if reloadTrigger has changed (automatic reload on login)
-    if (isApiCallInProgressRef.current && reloadTrigger === 0) {
-      return;
-    }
-
-    // Set flag to prevent duplicate calls
-    isApiCallInProgressRef.current = true;
-
     // CRITICAL FIX: Only show global loader when we have valid API parameters
     // Don't show loader when apiParams is null (no selection made yet)
     // Allow API calls with no parameters (full project data) but don't show loader for initial load
@@ -1560,7 +1687,10 @@ function Dashboard() {
           }
 
           apiCalls.push(
-            { name: 'totalConsumptionByGroup', promise: dispatch(fetchTotalConsumptionByGroup(apiParams)) },
+            {
+              name: 'totalConsumptionByGroup',
+              promise: dispatch(fetchTotalConsumptionByGroup(apiParams)),
+            },
             { name: 'lightPowerDensity', promise: dispatch(fetchLightPowerDensity(apiParams)) },
             { name: 'savingsByStrategy', promise: dispatch(fetchSavingsByStrategy(apiParams)) }
           );
@@ -1572,6 +1702,7 @@ function Dashboard() {
           const checkAllReady = () => {
             if (completedApis.size === totalApis) {
               completeEnergyTabLoading(shouldCallUnified);
+              dispatch(setGlobalLoading(false));
             }
           };
 
@@ -1589,8 +1720,10 @@ function Dashboard() {
 
           Promise.allSettled(apiCalls.map((apiCall) => apiCall.promise))
             .then(() => {
-              isApiCallInProgressRef.current = false;
+              dispatch(setGlobalLoading(false));
             });
+        } else if (activeTab === 'alerts') {
+          dispatch(setGlobalLoading(false));
         } else if (activeTab === 'space-utilization') {
           // Space Utilization APIs - PARALLEL EXECUTION FOR MAXIMUM SPEED
           const spaceUtilizationApis = [
@@ -1628,7 +1761,6 @@ function Dashboard() {
             .then(() => {
               // Reset global states when all calls complete
               setGlobalLoading(false);
-              isApiCallInProgressRef.current = false;
             });
         } else if (activeTab === 'charts') {
           // Charts tab - Instant Occupancy Count, Occupancy By Group from logs, and Space Utilization Per Area from logs APIs
@@ -1664,11 +1796,12 @@ function Dashboard() {
             .then(() => {
               // Reset global states when all calls complete
               setGlobalLoading(false);
-              isApiCallInProgressRef.current = false;
             });
+        } else {
+          dispatch(setGlobalLoading(false));
         }
       } catch (error) {
-        // Handle errors silently
+        dispatch(setGlobalLoading(false));
       }
     };
 
@@ -1948,13 +2081,49 @@ function Dashboard() {
     return sharedConsumptionSavingMergedData(consumptionSeries, savingsSeries)
   }, [energyConsumption, energySavings, transformDataForCharts])
 
+  const extraBasicEnergyGraphCards = useMemo(
+    () =>
+      energyCustomGraphs.map((g, idx) => {
+        const id = String(g?.id ?? '');
+        return (
+          <Box
+            key={buildCustomGraphWidgetKey(id || `idx_${idx}`)}
+            sx={{ width: '100%', mb: 2 }}
+          >
+            <EnergyCustomGraphCard
+              g={g}
+              shellVariant="basic"
+              chartSurface={energyLineChartSurface}
+              chartHeaderStyle={chartHeaderStyle}
+              customGraphData={customGraphData}
+              customGraphLoading={customGraphLoading}
+              customGraphError={customGraphError}
+              transformDataForCharts={transformDataForCharts}
+              areaGroups={areaGroups}
+              dashboardApiParams={apiParams}
+            />
+          </Box>
+        );
+      }),
+    [
+      energyCustomGraphs,
+      energyLineChartSurface,
+      chartHeaderStyle,
+      customGraphData,
+      customGraphLoading,
+      customGraphError,
+      transformDataForCharts,
+      areaGroups,
+      apiParams,
+    ]
+  );
 
   /** Energy tab only (slots under `renderEnergyDraggableSlot`): uniform card footprint per chart. */
-  const ENERGY_CHART_SLOT_HEIGHT_PX = 540
-  /** Matches `ConsumptionSavingsCombinedChart` inner plot box height. */
-  const ENERGY_LIGHT_PLOT_AREA_HEIGHT_PX = 420
-  /** Total card height for white-theme standalone slots — combined Energy chrome (~228px) + same 420px plot as `ConsumptionSavingsCombinedChart`. */
-  const ENERGY_LIGHT_FULL_CARD_HEIGHT_PX = ENERGY_LIGHT_PLOT_AREA_HEIGHT_PX + 228
+  const ENERGY_CHART_SLOT_HEIGHT_PX = 300
+  /** Matches Basic `ConsumptionSavingsCombinedChart` inner plot box height. */
+  const ENERGY_LIGHT_PLOT_AREA_HEIGHT_PX = 220
+  /** Total card height for white-theme standalone slots — combined Energy chrome + same plot as Basic combined chart. */
+  const ENERGY_LIGHT_FULL_CARD_HEIGHT_PX = ENERGY_LIGHT_PLOT_AREA_HEIGHT_PX + 180
   const energyChartSlotOuterStyle = {
     width: '100%',
     minHeight: ENERGY_CHART_SLOT_HEIGHT_PX,
@@ -1964,7 +2133,7 @@ function Dashboard() {
     flexDirection: 'column',
     backgroundColor: 'rgba(128, 120, 100, 0.6)',
     borderRadius: '8px',
-    padding: '20px',
+    padding: '14px',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     marginBottom: 0,
     border: '1px solid #ccc',
@@ -1973,7 +2142,7 @@ function Dashboard() {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
+    marginBottom: '12px',
     flexShrink: 0,
   }
   const energyChartPlotFlexStyle = {
@@ -2290,91 +2459,43 @@ function Dashboard() {
 
   const consumptionExportControl = useMemo(() => {
     const ec = resolveEnergyChartTheme({ chartSurface: energyLineChartSurface });
+    const exportMenuKey = DEFAULT_CONSUMPTION_EXPORT_KEYS.menuCloseKey;
     return (
-      <div style={{ position: 'relative' }}>
-        <button
-          type="button"
-          data-export-menu="true"
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [consumptionTitle]: !prev[consumptionTitle],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: ec.exportBtn,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadOutlined sx={{ fontSize: 18, color: 'inherit', flexShrink: 0 }} aria-hidden />
-          Export
-        </button>
-        {showExportDropdown[consumptionTitle] && (
-          <EnergyExportMenu
-            menuKey={consumptionTitle}
-            isOpen={showExportDropdown[consumptionTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionEmail}
-            onDownload={handleConsumptionDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[consumptionTitle] = el;
-            }}
-            preset={resolveEnergyExportMenuPresetFromTheme(ec, { useEmoji: true })}
-          />
-        )}
-      </div>
+      <BasicEnergyExportControl
+        exportMenuKey={exportMenuKey}
+        loadingPrefix={DEFAULT_CONSUMPTION_EXPORT_KEYS.loadingPrefix}
+        showExportDropdown={showExportDropdown}
+        setShowExportDropdown={setShowExportDropdown}
+        exportLoading={exportLoading}
+        exportDropdownRefs={exportDropdownRefs}
+        onEmail={handleConsumptionEmail}
+        onDownload={handleConsumptionDownload}
+        preset={resolveEnergyExportMenuPresetFromTheme(ec, { useEmoji: true })}
+        exportBtnColor={ec.exportBtn}
+        isLargeScreen={isLargeScreen}
+      />
     );
-  }, [energyLineChartSurface, showExportDropdown, exportLoading, consumptionTitle]);
+  }, [energyLineChartSurface, showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionEmail, handleConsumptionDownload, isLargeScreen]);
 
   const savingsExportControl = useMemo(() => {
     const ec = resolveEnergyChartTheme({ chartSurface: energyLineChartSurface });
+    const exportMenuKey = DEFAULT_SAVINGS_EXPORT_KEYS.menuCloseKey;
     return (
-      <div style={{ position: 'relative' }}>
-        <button
-          type="button"
-          data-export-menu="true"
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [savingsTitle]: !prev[savingsTitle],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: ec.exportBtn,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadOutlined sx={{ fontSize: 18, color: 'inherit', flexShrink: 0 }} aria-hidden />
-          Export
-        </button>
-        {showExportDropdown[savingsTitle] && (
-          <EnergyExportMenu
-            menuKey={savingsTitle}
-            isOpen={showExportDropdown[savingsTitle]}
-            exportLoading={exportLoading}
-            onEmail={handleSavingsEmail}
-            onDownload={handleSavingsDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[savingsTitle] = el;
-            }}
-            preset={resolveEnergyExportMenuPresetFromTheme(ec, { useEmoji: true })}
-          />
-        )}
-      </div>
+      <BasicEnergyExportControl
+        exportMenuKey={exportMenuKey}
+        loadingPrefix={DEFAULT_SAVINGS_EXPORT_KEYS.loadingPrefix}
+        showExportDropdown={showExportDropdown}
+        setShowExportDropdown={setShowExportDropdown}
+        exportLoading={exportLoading}
+        exportDropdownRefs={exportDropdownRefs}
+        onEmail={handleSavingsEmail}
+        onDownload={handleSavingsDownload}
+        preset={resolveEnergyExportMenuPresetFromTheme(ec, { useEmoji: true })}
+        exportBtnColor={ec.exportBtn}
+        isLargeScreen={isLargeScreen}
+      />
     );
-  }, [energyLineChartSurface, showExportDropdown, exportLoading, savingsTitle]);
+  }, [energyLineChartSurface, showExportDropdown, exportLoading, setShowExportDropdown, handleSavingsEmail, handleSavingsDownload, isLargeScreen]);
 
   const consumptionBlankPreview = useMemo(() => {
     if (!energyCustomNeedsDates) return null;
@@ -2387,46 +2508,21 @@ function Dashboard() {
     const exportMenuKey = TOTAL_CONSUMPTION_BY_GROUP_EXPORT_KEY;
 
     return (
-      <div style={{ position: 'relative' }}>
-        <button
-          type="button"
-          data-export-menu="true"
-          onClick={() =>
-            setShowExportDropdown((prev) => ({
-              ...prev,
-              [exportMenuKey]: !prev[exportMenuKey],
-            }))
-          }
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            color: dc.exportBtn,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-          }}
-        >
-          <FileUploadOutlined sx={{ fontSize: 18, color: 'inherit', flexShrink: 0 }} aria-hidden />
-          Export
-        </button>
-        {showExportDropdown[exportMenuKey] && (
-          <EnergyExportMenu
-            menuKey={exportMenuKey}
-            isOpen={showExportDropdown[exportMenuKey]}
-            exportLoading={exportLoading}
-            onEmail={handleConsumptionByGroupEmail}
-            onDownload={handleConsumptionByGroupDownload}
-            innerRef={(el) => {
-              exportDropdownRefs.current[exportMenuKey] = el;
-            }}
-            preset={resolveEnergyExportMenuPresetFromTheme(dc, { useEmoji: true })}
-          />
-        )}
-      </div>
+      <BasicEnergyExportControl
+        exportMenuKey={exportMenuKey}
+        loadingPrefix={exportMenuKey}
+        showExportDropdown={showExportDropdown}
+        setShowExportDropdown={setShowExportDropdown}
+        exportLoading={exportLoading}
+        exportDropdownRefs={exportDropdownRefs}
+        onEmail={handleConsumptionByGroupEmail}
+        onDownload={handleConsumptionByGroupDownload}
+        preset={resolveEnergyExportMenuPresetFromTheme(dc, { useEmoji: true })}
+        exportBtnColor={dc.exportBtn}
+        isLargeScreen={isLargeScreen}
+      />
     );
-  }, [energyLineChartSurface, showExportDropdown, exportLoading]);
+  }, [energyLineChartSurface, showExportDropdown, exportLoading, setShowExportDropdown, handleConsumptionByGroupEmail, handleConsumptionByGroupDownload, isLargeScreen]);
 
   const energyWidgetRenderContext = useMemo(
     () =>
@@ -2499,10 +2595,17 @@ function Dashboard() {
     () => ({
       SLOT_REGISTRY: BASIC_ENERGY_SLOT_REGISTRY,
       resolveRowSx: resolveBasicRowSx,
-      resolveSlotColumnSx: resolveBasicSlotColumnSx,
+      resolveSlotColumnSx: (slotId, pair, theme) =>
+        resolveBasicDashboardSlotColumnSx(
+          slotId,
+          pair,
+          theme,
+          getEnergySlotSpan,
+          isBasicEnergyForceFullWidth
+        ),
       getSlotMeta: getBasicEnergySlotMeta,
     }),
-    []
+    [getEnergySlotSpan]
   );
 
   const energyDurationFilterElement = (
@@ -2535,30 +2638,56 @@ function Dashboard() {
     />
   );
 
-  const energyDraggableReflow = useMemo(
-    () => ({
-      groupKey: 'dashboard-energy',
-      orderedSlotIds: energyVisibleSlotOrder,
-      onReorder: onReorderEnergySlots,
-      translateStorageKeys: ENERGY_DRAG_TRANSLATE_KEYS,
-    }),
-    [energyVisibleSlotOrder, onReorderEnergySlots]
+  const energySortableSensors = useBasicDashboardSortableSensors();
+
+  const wrapEnergyLayout = useCallback(
+    (layout) => (
+      <BasicDashboardSortableProvider
+        items={energyVisibleSlotOrder}
+        sensors={energySortableSensors}
+        locked={energyReflowLocked}
+        onReorder={onReorderEnergySlots}
+      >
+        {layout}
+      </BasicDashboardSortableProvider>
+    ),
+    [
+      energyVisibleSlotOrder,
+      energySortableSensors,
+      energyReflowLocked,
+      onReorderEnergySlots,
+    ]
   );
 
   const basicEnergyLayoutRuntime = useMemo(
     () => ({
       wrapSlot: (slotId, content) => {
         const meta = getBasicEnergySlotMeta(slotId);
-        if (!meta?.storageKey) return content;
-        const reflow = { ...energyDraggableReflow, slotId };
-        return (
-          <LongPressDraggable
-            disabled={energyReflowLocked}
-            storageKey={meta.storageKey}
-            reflow={reflow}
+        const card = (
+          <BasicDashboardCardChrome
+            span={getEnergySlotSpan(slotId)}
+            showSpanToggle={
+              !energyReflowLocked && !isBasicEnergyForceFullWidth(slotId)
+            }
+            onToggleSpan={() => {
+              if (energyReflowLocked) return
+              toggleEnergyCardSpan(slotId)
+            }}
+            showHeightToggle={!energyReflowLocked}
+            isFullscreen={String(energyFullscreenCardId || '') === String(slotId)}
+            onToggleFullscreen={() => {
+              if (energyReflowLocked) return
+              toggleEnergyFullscreen(slotId)
+            }}
           >
             {content}
-          </LongPressDraggable>
+          </BasicDashboardCardChrome>
+        );
+        if (!meta) return card;
+        return (
+          <SortableDashboardItem id={String(slotId)} disabled={energyReflowLocked}>
+            {card}
+          </SortableDashboardItem>
         );
       },
       renderCustomSlot: (slotId) => {
@@ -2703,8 +2832,11 @@ function Dashboard() {
       },
     }),
     [
-      energyDraggableReflow,
       energyReflowLocked,
+      getEnergySlotSpan,
+      toggleEnergyCardSpan,
+      toggleEnergyFullscreen,
+      energyFullscreenCardId,
       getWidgetTitle,
       energyCustomNeedsDates,
       consumptionSavingMergedData,
@@ -2737,14 +2869,95 @@ function Dashboard() {
   /** Energy, Space Utilization + Alerts: ~1/3 vertical size of the fixed blue sub-header strip */
   const compactEnergyChartsChrome = activeTab === 'energy' || activeTab === 'charts' || activeTab === 'alerts'
 
+  const [spaceChartsFilterPinned, setSpaceChartsFilterPinned] = useState(false)
+  const handleChartsDurationFilterPinnedChange = useCallback((pinned) => {
+    setSpaceChartsFilterPinned(Boolean(pinned))
+  }, [])
+
+  const pinBasicDashboardScrollChrome =
+    (activeTab === 'energy' && showEnergyStandaloneDurationFilter) ||
+    (activeTab === 'charts' && spaceChartsFilterPinned)
+
+  const basicPinnedFilterRef = useRef(null)
+  const [basicPinnedFilterBottomPx, setBasicPinnedFilterBottomPx] = useState(0)
+
+  const syncBasicPinnedFilterChrome = useCallback(() => {
+    const el = basicPinnedFilterRef.current
+    if (!el) return
+    setBasicPinnedFilterBottomPx(el.getBoundingClientRect().bottom)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!pinBasicDashboardScrollChrome) {
+      setBasicPinnedFilterBottomPx(0)
+      return undefined
+    }
+
+    syncBasicPinnedFilterChrome()
+    const el = basicPinnedFilterRef.current
+    if (!el) return undefined
+
+    let resizeObserver
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(syncBasicPinnedFilterChrome)
+      resizeObserver.observe(el)
+    }
+
+    window.addEventListener('resize', syncBasicPinnedFilterChrome)
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', syncBasicPinnedFilterChrome)
+    }
+  }, [
+    pinBasicDashboardScrollChrome,
+    syncBasicPinnedFilterChrome,
+    selectedDuration,
+    customDateRange,
+    showAreaDropdown,
+    spaceChartsFilterPinned,
+    showEnergyStandaloneDurationFilter,
+    activeTab,
+  ])
+
+  const basicPinnedFilterBottomOffsetPx =
+    basicPinnedFilterBottomPx > 0
+      ? basicPinnedFilterBottomPx
+      : DASHBOARD_RIBBON_TOOLBAR_PX +
+        BASIC_ENERGY_COMPACT_SUBHEADER_PX +
+        BASIC_ENERGY_DURATION_FILTER_BAR_PX
+
+  const pinnedDurationFilterTop = `${DASHBOARD_RIBBON_TOOLBAR_PX + BASIC_ENERGY_COMPACT_SUBHEADER_PX}px`
+  const pinnedDurationFilterScrollOffset = `${BASIC_ENERGY_COMPACT_SUBHEADER_PX + BASIC_ENERGY_DURATION_FILTER_BAR_PX}px`
+  const pinnedDurationFilterBarSx = {
+    position: 'fixed',
+    top: pinnedDurationFilterTop,
+    left: 0,
+    right: 0,
+    zIndex: 998,
+    backgroundColor: backgroundColor,
+    py: 1,
+    display: 'flex',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+    ...(pinBasicDashboardScrollChrome
+      ? {
+          borderBottom: '1px solid #ccc',
+        }
+      : {}),
+  }
+
   return (
     <div
       style={
         activeTab === 'overview'
           ? { overflowY: 'auto', overflowX: 'hidden', minHeight: 0, maxHeight: '100dvh' }
-          : activeTab === 'charts'
-            ? { minHeight: 0, height: 'auto' }
-            : undefined
+          : pinBasicDashboardScrollChrome
+            /* Do not use overflow:hidden here — it clips position:fixed breadcrumb chrome
+               (Energy/Charts pinned filter mode). Scroll locking stays on the content Box. */
+            ? { overflowX: 'hidden', overflowY: 'visible' }
+            : activeTab === 'charts'
+              ? { minHeight: 0, height: 'auto' }
+              : undefined
       }
     >
       {/* Fixed Header Section - Static Controls */}
@@ -2757,10 +2970,11 @@ function Dashboard() {
           left: 0,
           right: 0,
           p: 0,
-          zIndex: 999,
+          zIndex: 10001,
           border: 'none',
           outline: 'none',
           boxShadow: 'none',
+          overflow: 'visible',
           ...(activeTab === 'overview'
             ? { background: dashboardOverviewFixedHeaderBg }
             : activeTab === 'energy' || activeTab === 'charts' || activeTab === 'alerts'
@@ -2774,21 +2988,31 @@ function Dashboard() {
             maxWidth: '100%',
             mx: 'auto',
             px: { xs: 1, sm: 2, md: 3, lg: 6, xl: 8, '2xl': 10 },
-            py: compactEnergyChartsChrome ? { xs: 0.25, md: 0.5 } : { xs: 1, md: 2 },
+            py: compactEnergyChartsChrome ? '10px' : { xs: 1, md: 2 },
+            minHeight: compactEnergyChartsChrome
+              ? `${BASIC_ENERGY_COMPACT_SUBHEADER_PX}px`
+              : undefined,
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            overflow: 'visible',
           }}
         >
           {/* Top row — floor/area (ribbon); alerts filter. Duration/date live below ribbon in content. */}
           <Grid
             container
+            /* spacing={0} on compact chrome — MUI Grid negative margins pull glyphs under the topbar */
             spacing={
               compactEnergyChartsChrome
-                ? { xs: 0.5, sm: 0.75, md: 1, lg: 1, xl: 1 }
+                ? 0
                 : { xs: 1, sm: 2, md: 2, lg: 3, xl: 4 }
             }
             alignItems="center"
             wrap="wrap"
-
-
+            sx={{
+              width: '100%',
+              ...(compactEnergyChartsChrome ? { margin: 0 } : {}),
+            }}
           >
             {/* Select Floor and Areas Dropdown */}
             {(activeTab === 'energy' || activeTab === 'charts' || (activeTab === 'alerts' && energyMetricLight)) && (
@@ -2821,7 +3045,10 @@ function Dashboard() {
                       fontFamily: 'inherit',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
-                      lineHeight: 1.2,
+                      lineHeight: '22px',
+                      display: 'inline-block',
+                      paddingTop: 2,
+                      paddingBottom: 2,
                     }}
                   >
                     {activeTab === 'energy' ? 'Energy' : activeTab === 'alerts' ? 'Alerts' : 'Space Utilization'}
@@ -2834,8 +3061,9 @@ function Dashboard() {
                       fontWeight: 500,
                       fontFamily: 'inherit',
                       flexShrink: 0,
-                      lineHeight: 1,
-                      padding: '0 2px',
+                      lineHeight: '22px',
+                      display: 'inline-block',
+                      padding: '2px 2px',
                     }}
                   >
                     ›
@@ -2879,6 +3107,8 @@ function Dashboard() {
                         justifyContent: 'flex-start',
                         alignItems: 'center',
                         gap: 8,
+                        lineHeight: '18px',
+                        overflow: 'visible',
                       }}
                     >
                       <span
@@ -2889,11 +3119,13 @@ function Dashboard() {
                           fontSize: 'inherit',
                           fontWeight: 500,
                           color: DASHBOARD_RIBBON_TEXT_MUTED,
-                          display: 'block',
+                          display: 'inline-block',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           textAlign: 'left',
                           maxWidth: 'min(72vw, 420px)',
+                          lineHeight: '18px',
+                          verticalAlign: 'middle',
                         }}
                         title={getAreaSelectionText()}
                       >
@@ -3304,17 +3536,55 @@ function Dashboard() {
         </Box>
       </Box>
 
+      {activeTab === 'energy' && showEnergyStandaloneDurationFilter && (
+        <Box ref={basicPinnedFilterRef} sx={pinnedDurationFilterBarSx}>
+          <Box sx={{ width: 'min(330px, 100%)', maxWidth: '100%' }}>
+            {energyDurationFilterElement}
+          </Box>
+        </Box>
+      )}
+
+      {activeTab === 'charts' && (
+        <Box
+          ref={spaceChartsFilterPinned ? basicPinnedFilterRef : null}
+          id="basic-space-charts-pinned-duration-filter"
+          sx={{
+            ...pinnedDurationFilterBarSx,
+            display: spaceChartsFilterPinned ? 'flex' : 'none',
+          }}
+        />
+      )}
+
       {/* Scrollable Content Area */}
       <Box
         sx={{
-          /* Default 12 clears the tall fixed strip; compact chrome shrinks the strip (~1/3) but body still needs ~7 units (~56px) so charts do not sit under the bar */
-          mt:
-            activeTab === 'overview'
-              ? 0
-              : compactEnergyChartsChrome
-                ? 5
-                : 12,
-          py: activeTab === 'overview' ? 0 : activeTab === 'charts' ? 1 : 3,
+          ...(pinBasicDashboardScrollChrome
+            ? {
+                position: 'fixed',
+                top: `${basicPinnedFilterBottomOffsetPx}px`,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                boxSizing: 'border-box',
+                // borderTop: `1px solid ${buttonColor}`,
+                py: activeTab === 'charts' ? 1 : 3,
+                zIndex: 1,
+              }
+            : {
+                /* Default 12 clears the tall fixed strip; compact chrome shrinks the strip (~1/3) but body still needs ~7 units (~56px) so charts do not sit under the bar */
+                mt:
+                  activeTab === 'overview'
+                    ? 0
+                    : (activeTab === 'energy' && showEnergyStandaloneDurationFilter) ||
+                        (activeTab === 'charts' && spaceChartsFilterPinned)
+                      ? pinnedDurationFilterScrollOffset
+                      : compactEnergyChartsChrome
+                        ? 6.5
+                        : 12,
+                py: activeTab === 'overview' ? 0 : activeTab === 'charts' ? 1 : 3,
+              }),
           ...(activeTab === 'overview'
             ? {
               overflow: 'hidden',
@@ -3329,7 +3599,7 @@ function Dashboard() {
               pt: { xs: 5, sm: 5.5, md: 6 },
             }
             : {}),
-          ...(activeTab === 'charts'
+          ...(activeTab === 'charts' && !pinBasicDashboardScrollChrome
             ? {
               flex: '0 0 auto',
               minHeight: 0,
@@ -3349,7 +3619,7 @@ function Dashboard() {
                 ? 0
                 : { xs: 1, sm: 2, md: 3, lg: 0.5, xl: 6, '2xl': 8 },
             ...(activeTab === 'overview' ? { flex: 1, minHeight: 0 } : {}),
-            ...(activeTab === 'charts'
+            ...(activeTab === 'charts' && !pinBasicDashboardScrollChrome
               ? { flex: '0 0 auto', minHeight: 0, height: 'auto', width: '100%' }
               : {}),
           }}
@@ -3371,8 +3641,8 @@ function Dashboard() {
                   borderRadius: 2,
                   ...(activeTab === 'energy' || activeTab === 'charts'
                     ? { minHeight: 0 }
-                    : { minHeight: 400 }),
-                  ...(activeTab === 'charts'
+                    : { minHeight: 320 }),
+                  ...(activeTab === 'charts' && !pinBasicDashboardScrollChrome
                     ? {
                       height: 'fit-content',
                       maxHeight: 'none',
@@ -3395,14 +3665,16 @@ function Dashboard() {
               mt={
                 activeTab === 'overview' || activeTab === 'alerts'
                   ? 0
-                  : activeTab === 'energy' || activeTab === 'charts'
-                    ? 1
-                    : 3
+                  : pinBasicDashboardScrollChrome
+                    ? 0
+                    : activeTab === 'energy' || activeTab === 'charts'
+                      ? 1
+                      : 3
               }
               sx={
                 activeTab === 'overview'
                   ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
-                  : activeTab === 'charts'
+                  : activeTab === 'charts' && !pinBasicDashboardScrollChrome
                     ? { flex: '0 0 auto', minHeight: 0, width: '100%' }
                     : undefined
               }
@@ -3430,6 +3702,7 @@ function Dashboard() {
                   focusAlertFromLocation,
                   energyLayoutAdapter: basicEnergyLayoutAdapter,
                   energyLayoutRuntime: basicEnergyLayoutRuntime,
+                  wrapEnergyLayout,
                   energyDurationFilterElement,
                   widgetList,
                   energyConsumption,
@@ -3460,9 +3733,16 @@ function Dashboard() {
                   showEnergyStandaloneDurationFilter,
                   renderEnergyLineChartEmptyExtras,
                   ENERGY_LIGHT_FULL_CARD_HEIGHT_PX,
+                  pinChartsDurationFilterInHeader: true,
+                  onChartsDurationFilterPinnedChange: handleChartsDurationFilterPinnedChange,
                 }}
               />
 
+              {activeTab === 'energy' &&
+              ENABLE_CUSTOM_ENERGY_SPACE_GRAPHS &&
+              extraBasicEnergyGraphCards.length > 0
+                ? extraBasicEnergyGraphCards
+                : null}
 
               {/* Show message when operator has no floors assigned */}
               {/* Only show this message after both floors and profile are loaded to prevent race condition */}

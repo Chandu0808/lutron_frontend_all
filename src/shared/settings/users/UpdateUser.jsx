@@ -1,5 +1,6 @@
 import { getUsersSettingsBindings } from './bindUsersSettingsModule';
 import React, { useState, useEffect } from "react";
+import { dispatchFetchFloorsOnce } from '../../utils/bootstrapFetchGuards';
 import {
   Dialog,
   DialogTitle,
@@ -68,13 +69,19 @@ function validateEmail(value) {
 
 export default function UpdateUser({ open, user, onClose }) {
   const {
-    usersSlice: { updateUser, selectUpdateLoading, selectUpdateError },
+    usersSlice: { updateUser, selectUpdateLoading, selectUpdateError, clearUpdateError },
     floorSlice: { fetchFloors, selectFloors },
     themeSlice: { selectApplicationTheme },
+    usersDialogChrome = null,
   } = getUsersSettingsBindings();
 
   const dispatch = useDispatch();
   const theme = useTheme();
+  const appTheme = useSelector(selectApplicationTheme);
+  const contentColor = appTheme?.application_theme?.content || '#ffffff';
+  const buttonColor = appTheme?.application_theme?.button || '#232323';
+  const isDefaultWhiteTheme = isLightSurface(contentColor);
+  const actionButtonColor = isDefaultWhiteTheme ? '#1565C0' : buttonColor;
   const updateLoading = useSelector(selectUpdateLoading);
   const floorList = useSelector(selectFloors);
 
@@ -94,9 +101,9 @@ export default function UpdateUser({ open, user, onClose }) {
 
   useEffect(() => {
     if (open && isOperator) {
-      dispatch(fetchFloors());
+      dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floorList?.length));
     }
-  }, [open, isOperator, dispatch]);
+  }, [open, isOperator, dispatch, fetchFloors, floorList?.length]);
 
   useEffect(() => {
     if (open && user) {
@@ -217,7 +224,10 @@ export default function UpdateUser({ open, user, onClose }) {
         onClose();
       }, 1200);
     } catch (err) {
-      const msg = String(err || "Update failed");
+      const msg =
+        typeof err === "string"
+          ? err
+          : String(err?.message || err || "Update failed");
       const lower = msg.toLowerCase();
       if (lower.includes("user already exists")) {
         setSnackbarMessage(
@@ -243,20 +253,19 @@ export default function UpdateUser({ open, user, onClose }) {
 
   if (!user) return null;
 
-  return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{
-        sx: {
-          backgroundColor: theme.palette.custom.containerBg,
-          borderRadius: 2,
-          maxHeight: "80vh",
-        },
-      }}
-    >
+  const defaultPaperProps = {
+    sx: {
+      backgroundColor: theme.palette.custom.containerBg,
+      borderRadius: 2,
+      maxHeight: "80vh",
+    },
+  };
+
+  const dialogPaperProps = usersDialogChrome?.dialogProps?.PaperProps ?? defaultPaperProps;
+  const dialogBackdropProps = usersDialogChrome?.dialogProps?.BackdropProps;
+
+  const dialogInner = (
+    <>
       <DialogTitle sx={{ color: theme.palette.text.primary, pb: 1 }}>
         <Typography component="span" variant="h6" sx={{ display: "block", fontWeight: 600 }}>
           Edit user
@@ -276,6 +285,12 @@ export default function UpdateUser({ open, user, onClose }) {
           padding: 2,
         }}
       >
+        <Box
+          component="form"
+          noValidate
+          autoComplete="off"
+          onSubmit={(e) => e.preventDefault()}
+        >
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <Typography sx={{ mb: 1, fontWeight: 500 }}>Name</Typography>
@@ -522,6 +537,7 @@ export default function UpdateUser({ open, user, onClose }) {
             </Grid>
           )}
         </Grid>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} sx={{ textTransform: "none" }}>
@@ -532,9 +548,20 @@ export default function UpdateUser({ open, user, onClose }) {
           onClick={handleSave}
           disabled={!canSave}
           sx={{
-            backgroundColor: theme.palette.custom.buttonBg,
-            color: theme.palette.text.secondary,
-            textTransform: "none",
+            backgroundColor: actionButtonColor,
+            color: '#FFFFFF',
+            textTransform: 'none',
+            borderRadius: '6px',
+            boxShadow: 'none',
+            '&:hover': {
+              backgroundColor: isDefaultWhiteTheme ? '#0d47a1' : actionButtonColor,
+              opacity: isDefaultWhiteTheme ? 1 : 0.92,
+              boxShadow: 'none',
+            },
+            '&.Mui-disabled': {
+              backgroundColor: isDefaultWhiteTheme ? 'rgba(21, 101, 192, 0.35)' : '#9aa3b0',
+              color: '#FFFFFF',
+            },
           }}
         >
           {updateLoading ? (
@@ -553,11 +580,47 @@ export default function UpdateUser({ open, user, onClose }) {
         <Alert
           onClose={() => setSnackbarOpen(false)}
           severity={snackbarSeverity}
-          sx={{ width: "100%" }}
+          variant="outlined"
+          sx={{
+            width: "100%",
+            backgroundColor: "#ffffff",
+            color: "#111111",
+            border: "1px solid rgba(0, 0, 0, 0.18)",
+            boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
+            "& .MuiAlert-icon": {
+              color: snackbarSeverity === "error" ? "#c62828" : "#2e7d32",
+            },
+            "& .MuiAlert-message": {
+              color: "#111111",
+            },
+          }}
         >
           {snackbarMessage}
         </Alert>
       </Snackbar>
+    </>
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth="md"
+      disableScrollLock={usersDialogChrome?.disableScrollLock}
+      BackdropProps={dialogBackdropProps}
+      PaperProps={dialogPaperProps}
+    >
+      {usersDialogChrome?.useModalShell ? (
+        <Box
+          className="users-modal-shell"
+          sx={usersDialogChrome.getModalShellSx?.(theme) ?? {}}
+        >
+          {dialogInner}
+        </Box>
+      ) : (
+        dialogInner
+      )}
     </Dialog>
   );
 }

@@ -27,16 +27,41 @@ export function consumptionSavingMergedData(consumptionSeries, savingsSeries) {
     return has ? sum : null;
   };
 
+  const areaKeysSet = new Set();
+
   for (const pt of consumptionSeries) {
     const row = upsert(pt);
     if (!row) continue;
     row.consumption = sumSeriesPoint(pt);
+    for (const [k, v] of Object.entries(pt)) {
+      if (k === 'date') continue;
+      areaKeysSet.add(k);
+      if (v != null && v !== '') {
+        const n = Number(v);
+        if (!Number.isNaN(n)) {
+          row[`${k}_consumption`] = n;
+        }
+      }
+    }
   }
+
   for (const pt of savingsSeries) {
     const row = upsert(pt);
     if (!row) continue;
     row.savings = sumSeriesPoint(pt);
+    for (const [k, v] of Object.entries(pt)) {
+      if (k === 'date') continue;
+      areaKeysSet.add(k);
+      if (v != null && v !== '') {
+        const n = Number(v);
+        if (!Number.isNaN(n)) {
+          row[`${k}_savings`] = n;
+        }
+      }
+    }
   }
+
+  const areaKeys = Array.from(areaKeysSet);
 
   for (const row of byDate.values()) {
     const c = row.consumption != null && row.consumption !== '' ? Number(row.consumption) : null;
@@ -48,7 +73,23 @@ export function consumptionSavingMergedData(consumptionSeries, savingsSeries) {
     } else {
       row.connectedLoad = (cOk ? c : 0) + (sOk ? s : 0);
     }
+
+    for (const key of areaKeys) {
+      const ac = row[`${key}_consumption`];
+      const as = row[`${key}_savings`];
+      const acOk = ac != null && !Number.isNaN(ac);
+      const asOk = as != null && !Number.isNaN(as);
+      if (acOk || asOk) {
+        row[`${key}_connectedLoad`] = (acOk ? ac : 0) + (asOk ? as : 0);
+      } else {
+        row[`${key}_connectedLoad`] = null;
+      }
+    }
   }
 
-  return Array.from(byDate.values());
+  const result = Array.from(byDate.values());
+  if (areaKeys.length > 0) {
+    result.areaKeys = areaKeys;
+  }
+  return result;
 }

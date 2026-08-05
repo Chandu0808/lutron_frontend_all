@@ -29,7 +29,7 @@ import {
   createVisibilityOrderSignature,
   hasVisibilityOrderSignatureChanged,
 } from './visibilityMemoCompare';
-import { resolveEnergyWidgetVisible } from './hooks/widgetVisibilityResolvers';
+import { resolveCustomizedSpaceCombinedVisible, resolveEnergyWidgetVisible } from './hooks/widgetVisibilityResolvers';
 
 const allVisibleMap = {
   consumption: true,
@@ -103,10 +103,19 @@ describe('dashboard visibility and layout parity', () => {
     it('applyEnergyStandaloneChartOrder moves hidden slots to the end', () => {
       const prev = [...ENERGY_CHART_SLOT_ORDER_DEFAULT];
       const next = applyEnergyStandaloneChartOrder(prev, combinedHiddenMap);
-      expect(next.slice(0, ENERGY_STANDALONE_CHART_ORDER.length)).toEqual(
-        ENERGY_STANDALONE_CHART_ORDER
-      );
+      // Preserves rearrange among still-visible slots; Combined goes to the end.
+      expect(next.filter((id) => id !== 'consumption_saving')).toEqual([
+        'consumption',
+        'savings',
+        'savings_by_strategy',
+        'total_consumption_by_group',
+        'light_power_density',
+        'peak_and_minimum_consumption',
+      ]);
       expect(next).toContain('consumption_saving');
+      expect(next.indexOf('consumption_saving')).toBeGreaterThan(
+        next.indexOf('peak_and_minimum_consumption')
+      );
     });
 
     it('applyEnergyCombinedChartOrder keeps combined first', () => {
@@ -118,9 +127,7 @@ describe('dashboard visibility and layout parity', () => {
     it('applyEnergyChartOrderForVisibility selects standalone vs combined strategy', () => {
       const prev = [...ENERGY_CHART_SLOT_ORDER_DEFAULT];
       expect(applyEnergyChartOrderForVisibility(prev, allVisibleMap)[0]).toBe('consumption_saving');
-      expect(applyEnergyChartOrderForVisibility(prev, combinedHiddenMap)[0]).toBe(
-        'savings_by_strategy'
-      );
+      expect(applyEnergyChartOrderForVisibility(prev, combinedHiddenMap)[0]).toBe('consumption');
     });
   });
 
@@ -208,8 +215,27 @@ describe('dashboard visibility and layout parity', () => {
     });
 
     it('parseCustomizedWidgetVisibilityFromStorage returns object', () => {
-      storage.widgetVisibility = JSON.stringify({ energy: { consumption: false } });
+      storage.widgetVisibility_customized = JSON.stringify({ energy: { consumption: false } });
       expect(parseCustomizedWidgetVisibilityFromStorage().energy.consumption).toBe(false);
+    });
+
+    it('resolveCustomizedSpaceCombinedVisible matches combined widget prefs', () => {
+      expect(resolveCustomizedSpaceCombinedVisible({})).toBe(false);
+      expect(
+        resolveCustomizedSpaceCombinedVisible({
+          energy: { consumption: true },
+        })
+      ).toBe(false);
+      expect(
+        resolveCustomizedSpaceCombinedVisible({
+          space: { instant_utilization_combined: true },
+        })
+      ).toBe(true);
+      expect(
+        resolveCustomizedSpaceCombinedVisible({
+          space: { instant_occupancy_count: true },
+        })
+      ).toBe(false);
     });
 
     it('read/write dashboard page order and span', () => {

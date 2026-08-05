@@ -1,6 +1,8 @@
 /**
  * Whether a main top-navbar item matches the current route (shared by desktop + drawer).
  */
+import { isAdvancedSettingsAppRoute } from "./advancedSettingsPaths";
+
 export function isTopbarNavItemActive(item, pathname, settingsPath) {
   if (pathname === item.path) return true;
 
@@ -47,35 +49,7 @@ export function isTopbarNavItemActive(item, pathname, settingsPath) {
     return true;
   }
 
-  if (
-    item.path === settingsPath &&
-    (pathname === "/main" ||
-      pathname === "/theme-change" ||
-      pathname === "/rename-widget/" ||
-      pathname.startsWith("/rename-widget/") ||
-      pathname === "/manage-area-groups" ||
-      pathname.startsWith("/manage-area-groups/") ||
-      pathname === "/area-size-load" ||
-      pathname.startsWith("/area-size-load/") ||
-      pathname === "/email-server/" ||
-      pathname.startsWith("/email-server/") ||
-      pathname === "/users" ||
-      pathname.startsWith("/users/") ||
-      pathname === "/floor" ||
-      pathname.startsWith("/floor/") ||
-      pathname === "/create-help/" ||
-      pathname.startsWith("/create-help/") ||
-      pathname === "/manage-sensors" ||
-      pathname.startsWith("/manage-sensors/") ||
-      pathname === "/manage-modules" ||
-      pathname.startsWith("/manage-modules/") ||
-      pathname === "/processors" ||
-      pathname.startsWith("/processors/") ||
-      pathname === "/alerts" ||
-      pathname.startsWith("/alerts/") ||
-      pathname === "/fofp" ||
-      pathname.startsWith("/fofp/"))
-  ) {
+  if (item.path === settingsPath && isAdvancedSettingsAppRoute(pathname, settingsPath)) {
     return true;
   }
 
@@ -83,6 +57,6 @@ export function isTopbarNavItemActive(item, pathname, settingsPath) {
 }
 
 /** True when pathname is any Settings section route (matches topbar Settings active state). */
-export function isSettingsAppRoute(pathname, settingsPath = "/main") {
+export function isSettingsAppRoute(pathname, settingsPath = "/setting/main") {
   return isTopbarNavItemActive({ path: settingsPath }, pathname, settingsPath);
 }

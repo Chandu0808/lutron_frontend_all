@@ -135,7 +135,7 @@ const UpdateAreaGroup = () => {
                 setShowSnackbar(true);
                 // Refresh the area groups list before navigating back
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1500);
+                setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
             })
             .catch(() => {
                 setSnackbarMessage("Failed to delete area group. Please try again.");
@@ -197,7 +197,7 @@ const UpdateAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to copy area group. Please try again.");
@@ -212,7 +212,7 @@ const UpdateAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to update area group. Please try again.");
@@ -235,7 +235,7 @@ const UpdateAreaGroup = () => {
     useEffect(() => {
         if (areaGroups && areaGroups.special && role !== 'Superadmin') {
             // Redirect Admin/Operator users away from special area groups
-            navigate('/manage-area-groups');
+            navigate('/setting/manage-area-groups');
         }
     }, [areaGroups, role, navigate]);
     // useEffect(() => {
@@ -477,7 +477,7 @@ const UpdateAreaGroup = () => {
                             )}
                             <Button
                                 variant="contained"
-                                onClick={() => navigate('/manage-area-groups')}
+                                onClick={() => navigate('/setting/manage-area-groups')}
                                 sx={{ backgroundColor: 'buttonColor', color: '#fff' }}
                             >
                                 Close

@@ -23,6 +23,7 @@ export function UnifiedEnergyCard({
       title={title}
       data={data}
       colors={colors}
+      energyMode={mode}
       isLoading={isLoading}
       chartSurface={theme?.chartSurface ?? 'dark'}
       emptyStateVariant={emptyStateVariant}

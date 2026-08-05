@@ -44,6 +44,7 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--app-button-text', accentText);
 
   root.style.setProperty('--dashboard-card-background', dashboardSurfaceGradient);
+  root.style.setProperty('--dashboard-chart-header-text', onContentColors(dashboardSurfaceSolid).primary);
   root.style.setProperty('--app-page-text', pageOn.primary);
   root.style.setProperty('--app-page-muted-text', pageOn.secondary);
   root.style.setProperty('--app-page-background', pageBackground);
@@ -139,6 +140,8 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--users-readonly-field-text', panelOn.primary);
   root.style.setProperty('--users-select-menu-bg', '#ffffff');
   root.style.setProperty('--users-select-menu-hover', sectionBg);
+  root.style.setProperty('--users-select-menu-checkbox-color', panelOn.secondary);
+  root.style.setProperty('--users-select-menu-checkbox-checked-color', accentSolid);
   root.style.setProperty('--users-chip-bg', sectionBg);
   root.style.setProperty('--users-confirm-dialog-bg', panelBg);
   root.style.setProperty('--users-border', border);
@@ -147,6 +150,8 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--area-groups-inner-bg', sectionBg);
   root.style.setProperty('--area-groups-chip-bg', sectionBg);
   root.style.setProperty('--area-groups-border', border);
+  root.style.setProperty('--area-group-on-surface-text', panelOn.primary);
+  root.style.setProperty('--area-group-inner-text', sectionOn.primary);
 
   root.style.setProperty('--activity-report-table-head-bg', sectionBg);
   root.style.setProperty('--activity-report-table-container-bg', panelBg);
@@ -234,6 +239,8 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--auth-field-text', whiteFieldOn.primary);
   root.style.setProperty('--auth-field-border', border);
   root.style.setProperty('--auth-field-border-focus', accentSolid);
+  /* Always dark when auth fields are white — password eye must stay visible */
+  root.style.setProperty('--auth-password-icon-color', whiteFieldOn.primary);
   root.style.setProperty('--auth-button-bg', accentSolid);
   root.style.setProperty('--auth-button-background', accentGradient);
   root.style.setProperty('--auth-button-text', accentText);
@@ -271,6 +278,9 @@ export function applyDynamicThemeTokens(
     alpha(panelBg, 0.94)
   );
   root.style.setProperty('--heatmap-sidebar-loading-spinner-color', accentSolid);
+  root.style.setProperty('--heatmap-sidebar-scrollbar-thumb', accentSolid);
+  root.style.setProperty('--heatmap-sidebar-scrollbar-thumb-hover', darken(accentSolid, 0.12));
+  root.style.setProperty('--heatmap-sidebar-scrollbar-track', 'rgba(0, 0, 0, 0.18)');
   root.style.setProperty('--heatmap-tab-pill-bg', dashboardTabPillBg);
   root.style.setProperty('--heatmap-tab-indicator-bg', '#ffffff');
   root.style.setProperty('--heatmap-tab-active-text', dashboardSurfaceSolid);

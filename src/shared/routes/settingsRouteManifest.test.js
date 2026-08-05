@@ -9,20 +9,20 @@ import {
 
 describe("settingsRouteManifest", () => {
   it("preserves canonical settings paths per variant", () => {
-    expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.USERS, "basic")).toBe("/users");
+    expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.USERS, "basic")).toBe("/setting/users");
     expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.SCHEDULE, "advanced")).toBe("/schedule");
     expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.WIDGETS, "customized")).toBe("/widgets/");
-    expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.WIDGETS, "basic")).toBe("/rename-widget/");
+    expect(getSettingsPathForVariant(SETTINGS_ROUTE_IDS.WIDGETS, "basic")).toBe("/setting/rename-widget/");
   });
 
   it("builds sidebar nav items with RBAC metadata", () => {
     const items = getSettingsNavItemsForVariant("basic");
     const users = items.find((i) => i.id === SETTINGS_ROUTE_IDS.USERS);
-    expect(users).toMatchObject({ path: "/users", roles: expect.arrayContaining(["Operator"]) });
+    expect(users).toMatchObject({ path: "/setting/users", roles: expect.arrayContaining(["Operator"]) });
   });
 
   it("detects active settings routes including related paths", () => {
-    expect(isSettingsRoutePath("/users", "basic")).toBe(true);
+    expect(isSettingsRoutePath("/setting/users", "basic")).toBe(true);
     expect(isSettingsRoutePath("/schedule/details/42", "basic")).toBe(true);
     expect(getActiveSettingsRouteId("/schedule/add-event", "customized")).toBe(
       SETTINGS_ROUTE_IDS.SCHEDULE

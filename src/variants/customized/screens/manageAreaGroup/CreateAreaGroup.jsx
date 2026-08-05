@@ -35,7 +35,7 @@ const CreateAreaGroup = () => {
     // Redirect if user doesn't have permission
     useEffect(() => {
         if (!canCreateAreaGroup()) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate('/setting/manage-area-groups', { replace: true });
         }
     }, [role, navigate]);
     const [groupName, setGroupName] = useState('');
@@ -186,7 +186,7 @@ const CreateAreaGroup = () => {
                 setShowCreateSuccess(true);
                 // Refresh the area groups list before navigating back
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1000);
+                setTimeout(() => navigate('/setting/manage-area-groups'), 1000);
                 setIsDisable(false)
             })
             .catch(() => {
@@ -319,7 +319,7 @@ const CreateAreaGroup = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
                     <Button
                         variant="contained"
-                        onClick={() => navigate('/manage-area-groups')}
+                        onClick={() => navigate('/setting/manage-area-groups')}
                         sx={{ backgroundColor: 'buttonColor', color: '#fff' }}
                     >
                         Cancel

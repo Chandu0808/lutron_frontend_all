@@ -2,13 +2,24 @@
 import { createAsyncThunk, createSlice, createSelector } from "@reduxjs/toolkit";
 
 export function createAlertsModule({ BaseUrl }) {
+  let alertTypesInflight = null;
+  let activeAlertsInflight = null;
 
   const fetchAlertTypes = createAsyncThunk(
     "alerts/fetchAlertTypes",
     async (_, { rejectWithValue }) => {
       try {
-        const res = await BaseUrl.get("/alert/alerts_types");
-        return Array.isArray(res?.data?.alert_types) ? res.data.alert_types : [];
+        if (alertTypesInflight) {
+          return await alertTypesInflight;
+        }
+        alertTypesInflight = BaseUrl.get("/alert/alerts_types")
+          .then((res) =>
+            Array.isArray(res?.data?.alert_types) ? res.data.alert_types : []
+          )
+          .finally(() => {
+            alertTypesInflight = null;
+          });
+        return await alertTypesInflight;
       } catch (e) {
         return rejectWithValue(e?.response?.data?.detail || "Failed to load alert types");
       }
@@ -19,8 +30,17 @@ export function createAlertsModule({ BaseUrl }) {
     "alerts/fetchActiveAlerts",
     async (_, { rejectWithValue }) => {
       try {
-        const res = await BaseUrl.get("/alert/active_alerts");
-        return Array.isArray(res?.data?.alerts) ? res.data.alerts : [];
+        if (activeAlertsInflight) {
+          return await activeAlertsInflight;
+        }
+        activeAlertsInflight = BaseUrl.get("/alert/active_alerts")
+          .then((res) =>
+            Array.isArray(res?.data?.alerts) ? res.data.alerts : []
+          )
+          .finally(() => {
+            activeAlertsInflight = null;
+          });
+        return await activeAlertsInflight;
       } catch (e) {
         return rejectWithValue(e?.response?.data?.detail || "Failed to load alerts");
       }

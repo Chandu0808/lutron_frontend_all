@@ -39,6 +39,11 @@ function useBuiltInWidgetExportHandlers({
     const emailLoadingKey = buildExportLoadingKey(keys.loadingPrefix, 'email');
 
     try {
+      if (!actions?.emailThunk) {
+        showSnackbar('Export is not available for this chart.', 'error');
+        return;
+      }
+
       beginExportAction(keys.menuCloseKey, emailLoadingKey);
 
       const validation = await validateEmailExport({
@@ -83,6 +88,11 @@ function useBuiltInWidgetExportHandlers({
     const downloadLoadingKey = buildExportLoadingKey(keys.loadingPrefix, 'download');
 
     try {
+      if (!actions?.downloadThunk) {
+        showSnackbar('Export is not available for this chart.', 'error');
+        return;
+      }
+
       beginExportAction(keys.menuCloseKey, downloadLoadingKey);
 
       const apiParams = buildApiParams();
@@ -230,9 +240,9 @@ export function useDashboardExports({
       outsideClickProfile
     );
 
-    document.addEventListener('click', handleClickOutside, { passive: true });
+    document.addEventListener('mousedown', handleClickOutside, { passive: true });
     return () => {
-      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [closeAllMenus, outsideClickProfile]);
 

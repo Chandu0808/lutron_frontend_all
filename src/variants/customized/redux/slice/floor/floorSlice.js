@@ -11,6 +11,8 @@ const _module = createFloorModule({
 
 export default _module.reducer;
 export const fetchFloors = _module.fetchFloors;
+export const setFloorSortMode = _module.setFloorSortMode;
+export const reorderFloors = _module.reorderFloors;
 export const createAreaGroup = _module.createAreaGroup;
 export const updateFloor = _module.updateFloor;
 export const deleteFloor = _module.deleteFloor;
@@ -25,6 +27,7 @@ export const correctCoordinates = _module.correctCoordinates;
 export const calculateAreaWithReferenceLength = _module.calculateAreaWithReferenceLength;
 export const fetchExistingCalculatedAreas = _module.fetchExistingCalculatedAreas;
 export const selectFloors = _module.selectFloors;
+export const selectManualSortEnabled = _module.selectManualSortEnabled;
 export const uniqueFloor = _module.uniqueFloor;
 export const selectFloorLoading = _module.selectFloorLoading;
 export const fetchLeafDataByID = _module.fetchLeafDataByID;

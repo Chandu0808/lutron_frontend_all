@@ -37,7 +37,7 @@ const renderWithStore = (preloadedState = {}) => {
   return render(
     <Provider store={store}>
       <ThemeProvider theme={createTheme()}>
-        <MemoryRouter initialEntries={["/alerts"]}>
+        <MemoryRouter initialEntries={["/setting/alerts"]}>
           <AlertsComponent />
         </MemoryRouter>
       </ThemeProvider>

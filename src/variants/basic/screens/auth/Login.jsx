@@ -32,6 +32,7 @@ import { resolveAuthPageBackgroundUrl } from "../../utils/normalizeBackgroundPat
 import lutronLogo from "../../assets/images/lutron-logo.png";
 import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
+import { dispatchFetchThemeSettingsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 
 const QV_ACCENT = "#0d6ebc";
 const QV_ACCENT_HOVER = "#0a5a9a";
@@ -78,7 +79,7 @@ const Login = () => {
 
   useEffect(() => {
     resetAuthRedirectGuard();
-    dispatch(fetchThemeSettings());
+    dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings);
     const token = localStorage.getItem("lutron");
     if (!token) {
       setAutoRdirect(false);

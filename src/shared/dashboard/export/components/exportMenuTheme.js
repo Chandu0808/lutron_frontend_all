@@ -109,7 +109,7 @@ export function resolveAdvancedEnergyExportMenuPreset(panelOverrides = {}) {
       mutedColor: 'rgba(44, 40, 32, 0.45)',
       dividerColor: 'var(--alerts-export-menu-border, #444)',
     },
-    panelDataAttribute: null,
+    panelDataAttribute: 'data-export-dropdown-panel',
     className: ADVANCED_EXPORT_MENU_PANEL_CLASS,
     useEmoji: false,
   };
@@ -157,7 +157,7 @@ export function resolveCustomizedEnergyExportMenuPreset() {
       mutedColor: '#999',
       dividerColor: '#444',
     },
-    panelDataAttribute: null,
+    panelDataAttribute: 'data-export-dropdown-panel',
     className: null,
     useEmoji: true,
   };

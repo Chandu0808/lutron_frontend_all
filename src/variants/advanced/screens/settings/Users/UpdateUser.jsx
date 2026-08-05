@@ -27,6 +27,7 @@ import {
   selectUpdateLoading,
 } from "../../../redux/slice/settingsslice/user/usersSlice";
 import { fetchFloors, selectFloors } from "../../../redux/slice/floor/floorSlice";
+import { dispatchFetchFloorsOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
 import { selectApplicationTheme } from '../../../redux/slice/theme/themeSlice';
 import {
   apiToPermissionLabel,
@@ -83,9 +84,9 @@ export default function UpdateUser({ open, user, onClose }) {
 
   useEffect(() => {
     if (open && isOperator) {
-      dispatch(fetchFloors());
+      dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floorList?.length));
     }
-  }, [open, isOperator, dispatch]);
+  }, [open, isOperator, dispatch, floorList?.length]);
 
   useEffect(() => {
     if (open && user) {
@@ -431,12 +432,7 @@ export default function UpdateUser({ open, user, onClose }) {
                                   <Checkbox
                                     checked={selectedFloorIds.includes(f.id)}
                                     size="small"
-                                    sx={{
-                                      mr: 1,
-                                      py: 0,
-                                      color: 'var(--settings-panel-muted-text, #4A586C)',
-                                      '&.Mui-checked': { color: buttonColor },
-                                    }}
+                                    sx={{ mr: 1, py: 0 }}
                                   />
                                   <ListItemText primary={label} />
                                 </MenuItem>
@@ -522,7 +518,13 @@ export default function UpdateUser({ open, user, onClose }) {
               borderRadius: '8px',
               boxShadow: 'none',
               '&:hover': { backgroundColor: 'var(--app-button, #232323)', opacity: 0.92 },
-              '&.Mui-disabled': { backgroundColor: '#9aa3b0', color: '#fff' },
+              '&.Mui-disabled': {
+                background: '#A6A49A !important',
+                backgroundColor: '#A6A49A !important',
+                backgroundImage: 'none !important',
+                color: '#fff !important',
+                opacity: '1 !important',
+              },
             }}
           >
             {updateLoading ? (

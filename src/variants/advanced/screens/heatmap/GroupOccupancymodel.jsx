@@ -31,6 +31,7 @@ import {
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { HEATMAP_SETTINGS_DIALOG_PAPER_BG } from './AreaSettingsDialog';
 import { getThemeButtonColor } from '../../utils/themePageBackground';
+import { normalizeOccupancyModeString } from '../../redux/slice/settingsslice/heatmap/occupancyModeUtils';
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (txt) =>
@@ -39,6 +40,11 @@ function toTitleCase(str) {
 }
 
 const modeOptions = ['Disabled', 'Auto', 'Vacancy'];
+
+const normalizeSelectableMode = (raw) => {
+  const n = normalizeOccupancyModeString(raw);
+  return modeOptions.includes(n) ? n : '';
+};
 
 const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const dispatch = useDispatch();
@@ -51,6 +57,8 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
 
   const [selectedGroup, setSelectedGroup] = useState("");
+  const [localMode, setLocalMode] = useState('');
+  const [pendingMode, setPendingMode] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -59,8 +67,11 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
     if (open) {
       dispatch(fetchAreaGroups());
     } else {
-      // Reset selection when dialog closes
       setSelectedGroup('');
+      setLocalMode('');
+      setPendingMode(false);
+      setIsUpdating(false);
+      setShowSuccessMessage(false);
     }
   }, [open, dispatch]);
 
@@ -79,31 +90,53 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
     }
   }, [open, selectedGroup, dispatch]);
 
-  // Handle mode change
+  // Keep local highlight in sync with backend status (unless a click is pending).
+  useEffect(() => {
+    if (!open) return;
+    const normalized = normalizeSelectableMode(status);
+    if (pendingMode) {
+      if (normalized && normalized === localMode) {
+        setPendingMode(false);
+      }
+      return;
+    }
+    if (normalized) {
+      setLocalMode(normalized);
+    }
+  }, [status, open, pendingMode, localMode]);
+
   const handleModeChange = (mode) => {
-    if (!selectedGroup) return;
-    
+    if (!selectedGroup || isUpdating || updating || loading) return;
+    const nextMode = normalizeSelectableMode(mode) || mode;
+
+    setLocalMode(nextMode);
+    setPendingMode(true);
     setIsUpdating(true);
     setShowSuccessMessage(false);
-    
-    dispatch(updateGroupOccupancy({ groupId: selectedGroup, mode }))
+
+    dispatch(updateGroupOccupancy({ groupId: selectedGroup, mode: nextMode }))
+      .unwrap()
       .then(() => {
-        dispatch(fetchGroupOccupancyStatus(selectedGroup));
+        setPendingMode(false);
         setIsUpdating(false);
         setShowSuccessMessage(true);
-        
-        // Hide success message after 3 seconds
+        dispatch(fetchGroupOccupancyStatus(selectedGroup));
         setTimeout(() => {
           setShowSuccessMessage(false);
         }, 3000);
       })
       .catch(() => {
+        setPendingMode(false);
         setIsUpdating(false);
+        setLocalMode(normalizeSelectableMode(status));
       });
   };
 
   const handleGroupChange = (e) => {
     setSelectedGroup(e.target.value);
+    setLocalMode('');
+    setPendingMode(false);
+    setShowSuccessMessage(false);
   };
   return (
     <Dialog
@@ -268,55 +301,74 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
           {/* Mode buttons — same pattern as Add Action > Occupancy in Action.jsx */}
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 2 }}>
             {modeOptions.map((mode) => {
-              const isActive =
-                status &&
-                status !== 'Mixed' &&
-                String(status).toLowerCase() === mode.toLowerCase();
+              const isActive = Boolean(localMode) && localMode === mode;
               const isCurrentModeUpdating = isUpdating && isActive;
+              const accent = buttonColor || "var(--app-button, #3d4a5c)";
 
               return (
                 <Button
                   key={mode}
+                  className={
+                    isActive
+                      ? "asd-occupancy-mode-btn asd-occupancy-mode-btn--active"
+                      : "asd-occupancy-mode-btn"
+                  }
                   onClick={() => handleModeChange(mode)}
                   disabled={!selectedGroup || loading || updating || isUpdating}
                   disableElevation
-                  variant="outlined"
+                  variant="contained"
                   sx={{
-                    borderRadius: '999px',
-                    textTransform: 'uppercase',
+                    borderRadius: "999px",
+                    textTransform: "uppercase",
                     minWidth: 100,
                     height: 45,
                     fontWeight: 700,
                     fontSize: 16,
-                    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.06)',
+                    boxShadow: "none !important",
+                    backgroundImage: "none !important",
+                    filter: "none !important",
+                    opacity: "1 !important",
                     ...(isActive
                       ? {
-                          backgroundColor: buttonColor,
-                          color: '#ffffff',
-                          border: 'none',
-                          '&.MuiButton-outlined': {
-                            backgroundColor: buttonColor,
-                            color: '#ffffff',
-                            border: 'none',
+                          background: `${accent} !important`,
+                          backgroundColor: `${accent} !important`,
+                          color: "#ffffff !important",
+                          WebkitTextFillColor: "#ffffff",
+                          border: `2px solid ${accent} !important`,
+                          outline: `2px solid #ffffff`,
+                          outlineOffset: 1,
+                          "&:hover": {
+                            background: `${accent} !important`,
+                            backgroundColor: `${accent} !important`,
+                            backgroundImage: "none !important",
+                            color: "#ffffff !important",
+                            opacity: "1 !important",
+                            filter: "none !important",
                           },
                         }
                       : {
-                          backgroundColor: '#ffffff',
-                          color: buttonColor,
-                          border: '1px solid #cccccc',
-                          '&.MuiButton-outlined': {
-                            backgroundColor: '#ffffff',
-                            color: buttonColor,
-                            borderColor: '#cccccc',
+                          background: "#ffffff !important",
+                          backgroundColor: "#ffffff !important",
+                          color: "#111111 !important",
+                          WebkitTextFillColor: "#111111",
+                          border: `2px solid ${accent} !important`,
+                          outline: "none",
+                          "&:hover": {
+                            background: "#f3f3f3 !important",
+                            backgroundColor: "#f3f3f3 !important",
+                            backgroundImage: "none !important",
+                            color: "#111111 !important",
+                            opacity: "1 !important",
+                            filter: "none !important",
                           },
                         }),
-                    '&.Mui-disabled': {
-                      opacity: 0.55,
+                    "&.Mui-disabled": {
+                      opacity: "0.55 !important",
                     },
                   }}
                 >
                   {isCurrentModeUpdating ? (
-                    <CircularProgress size={20} sx={{ color: '#ffffff' }} />
+                    <CircularProgress size={20} sx={{ color: "#ffffff" }} />
                   ) : (
                     mode.toUpperCase()
                   )}
@@ -327,6 +379,11 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
           {selectedGroup && status === "Mixed" && (
             <Box sx={{ textAlign: 'center', mt: 1, color: 'red', fontWeight: 500 }}>
               Occupancy status is mixed for this group.
+            </Box>
+          )}
+          {selectedGroup && !loading && !localMode && String(status).toLowerCase() === 'unknown' && (
+            <Box sx={{ textAlign: 'center', mt: 1, color: '#666', fontWeight: 500, fontSize: 13 }}>
+              Current occupancy mode unavailable. Select a mode below.
             </Box>
           )}
           

@@ -92,15 +92,18 @@ describe('AlertsWidget theme parity', () => {
     expect(theme.headerLayout).toBe('cardHeader');
   });
 
-  it('advanced theme maps to grid preset', () => {
+  it('advanced theme uses chart-header contrast on dark cards', () => {
     const theme = resolveAlertsTheme({ preset: ALERTS_THEME_PRESETS.advanced });
-    expect(theme.preset).toBe('grid');
+    expect(theme.preset).toBe('advanced');
+    expect(theme.titleStyle.color).toContain('dashboard-chart-header-text');
+    expect(theme.badgeSx.bgcolor).toBe('#dc2626');
+    expect(theme.badgeSx.color).toBe('#ffffff');
     expect(theme.listScrollable).toBe(false);
   });
 
   it('customized theme maps to grid preset', () => {
     const theme = resolveAlertsTheme({ preset: ALERTS_THEME_PRESETS.customized });
-    expect(theme.preset).toBe('grid');
+    expect(theme.preset).toBe('customized');
     expect(theme.badgeSx.minWidth).toBe(24);
   });
 });

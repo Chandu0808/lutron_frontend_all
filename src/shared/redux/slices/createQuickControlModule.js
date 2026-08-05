@@ -2,43 +2,133 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import Swal from 'sweetalert2';
 
+const CREATE_STRIP_FIELDS = [
+  'source',
+  'fade_time',
+  'delay_time',
+  'id',
+  'quick_control_area_id',
+  'quick_control_area_action_id',
+  'floor_id',
+];
+
+function formatApiErrorDetail(detail, fallback) {
+  if (detail == null || detail === '') return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return (
+      detail
+        .map((item) => (typeof item === 'string' ? item : item?.msg || JSON.stringify(item)))
+        .filter(Boolean)
+        .join('; ') || fallback
+    );
+  }
+  if (typeof detail === 'object' && detail.msg) return detail.msg;
+  return fallback;
+}
+
+/** Strip UI-only fields and keep one zone_status per area for /quick_control/create. */
+export function normalizeQuickControlCreatePayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  return {
+    name: String(payload.name ?? '').trim(),
+    areas: (payload.areas || []).map((area) => {
+      const actions = [];
+      let lastZoneStatus = null;
+
+      for (const raw of area.actions || []) {
+        if (!raw || typeof raw !== 'object') continue;
+        const action = { ...raw };
+        CREATE_STRIP_FIELDS.forEach((key) => {
+          delete action[key];
+        });
+        Object.keys(action).forEach((key) => {
+          if (action[key] === undefined) delete action[key];
+        });
+
+        if (action.type === 'set_scene' && action.scene_code != null && action.scene_code !== '') {
+          const code = Number(action.scene_code);
+          if (Number.isFinite(code)) action.scene_code = code;
+        }
+
+        if (action.type === 'zone_status') {
+          if (action.zone_id != null && action.zone_id !== '') {
+            const zoneId = Number(action.zone_id);
+            if (Number.isFinite(zoneId)) action.zone_id = zoneId;
+          }
+          lastZoneStatus = action;
+          continue;
+        }
+
+        if (action.type === 'shade_group_status') {
+          if (action.shade_group_id != null && action.shade_group_id !== '') {
+            const shadeId = Number(action.shade_group_id);
+            if (Number.isFinite(shadeId)) action.shade_group_id = shadeId;
+          }
+          if (action.shade_level != null && action.shade_level !== '') {
+            const level = String(action.shade_level).replace(/%+$/, '');
+            action.shade_level = `${level}%`;
+          }
+        }
+
+        actions.push(action);
+      }
+
+      if (lastZoneStatus) actions.push(lastZoneStatus);
+
+      return {
+        area_id:
+          area.area_id == null || area.area_id === ''
+            ? null
+            : Number.isFinite(Number(area.area_id))
+              ? Number(area.area_id)
+              : area.area_id,
+        actions,
+      };
+    }),
+  };
+}
 
 export function createQuickControlModule({ BaseUrl }) {
+  const fetchFloors = createAsyncThunk('quickControl/fetchFloors', async () => {
+    const response = await BaseUrl.get('/floor/list');
+    return response.data.floors || [];
+  });
 
-
-  // Async thunk to fetch floors
-  const fetchFloors = createAsyncThunk(
-    'quickControl/fetchFloors',
-    async () => {
-      const response = await BaseUrl.get('/floor/list');
-      return response.data.floors || [];
+  let quickControlsListInflight = null;
+  const fetchQuickControls = createAsyncThunk('quickControl/fetchQuickControls', async () => {
+    if (quickControlsListInflight) {
+      return await quickControlsListInflight;
     }
-  );
+    quickControlsListInflight = BaseUrl.get('/quick_control/list')
+      .then((response) => response.data)
+      .finally(() => {
+        quickControlsListInflight = null;
+      });
+    return await quickControlsListInflight;
+  });
 
-  const fetchQuickControls = createAsyncThunk(
-    'quickControl/fetchQuickControls',
-    async () => {
-      const response = await BaseUrl.get('/quick_control/list');
-      // response.data is the array!
-      return response.data || [];
-    }
-  );
-
-  // Create a new quick control
   const createQuickControl = createAsyncThunk(
     'quickControl/createQuickControl',
     async (payload, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.post('/quick_control/create', payload);
+        const normalized = normalizeQuickControlCreatePayload(payload);
+        const response = await BaseUrl.post('/quick_control/create', normalized);
         return response.data;
       } catch (err) {
         console.error('Create quick control error:', err);
-        return rejectWithValue(
-          err.response?.data?.detail ||
-          err.response?.data?.message ||
-          err.message ||
-          'Failed to create quick control'
+        const message = formatApiErrorDetail(
+          err.response?.data?.detail ?? err.response?.data?.message,
+          err.message || 'Failed to create quick control'
         );
+        Swal.fire({
+          icon: 'error',
+          title: 'Quick Control',
+          text: message,
+          confirmButtonText: 'OK',
+        });
+        return rejectWithValue(message);
       }
     }
   );
@@ -54,7 +144,8 @@ export function createQuickControlModule({ BaseUrl }) {
   const updateQuickControl = createAsyncThunk(
     'quickControl/updateQuickControl',
     async ({ controlId, payload }) => {
-      const response = await BaseUrl.put(`/quick_control/update/${controlId}`, payload);
+      const normalized = normalizeQuickControlCreatePayload(payload);
+      const response = await BaseUrl.put(`/quick_control/update/${controlId}`, normalized);
       return response.data;
     }
   );
@@ -67,26 +158,22 @@ export function createQuickControlModule({ BaseUrl }) {
     }
   );
 
-  // Removed schedule-related functions as schedules should not affect Quick Controls
-
   const deleteQuickControl = createAsyncThunk(
     'quickControl/deleteQuickControl',
     async (controlId, { rejectWithValue }) => {
       try {
         const response = await BaseUrl.delete(`/quick_control/delete/${controlId}`);
-        
-        // Check if the response contains an error message even with 200 status
-        if (response.data && response.data.status === "Error") {
+
+        if (response.data && response.data.status === 'Error') {
           return rejectWithValue(response.data.message);
         }
-        
+
         return { controlId, ...response.data };
       } catch (err) {
         console.error('Delete QuickControl error:', err);
-        
-        // Just pass the backend error message directly
-        let errorMessage = "";
-        
+
+        let errorMessage = '';
+
         if (err.response?.data?.message) {
           errorMessage = err.response.data.message;
         } else if (err.response?.data?.detail) {
@@ -94,7 +181,7 @@ export function createQuickControlModule({ BaseUrl }) {
         } else if (err.message) {
           errorMessage = err.message;
         }
-        
+
         return rejectWithValue(errorMessage);
       }
     }
@@ -117,7 +204,6 @@ export function createQuickControlModule({ BaseUrl }) {
       deleteStatus: null,
       updateStatus: null,
       shouldRefresh: false,
-      // Removed usageCheck as schedules should not affect Quick Controls
     },
     reducers: {
       clearSelectedControl(state) {
@@ -128,15 +214,13 @@ export function createQuickControlModule({ BaseUrl }) {
         state.deleteStatus = null;
         state.updateStatus = null;
         state.shouldRefresh = false;
-        // Removed usageCheck as schedules should not affect Quick Controls
       },
       setShouldRefresh(state, action) {
         state.shouldRefresh = action.payload;
-      }
+      },
     },
     extraReducers: (builder) => {
       builder
-        // Quick Controls
         .addCase(fetchQuickControls.pending, (state) => {
           state.loading = true;
           state.status = 'loading';
@@ -151,7 +235,6 @@ export function createQuickControlModule({ BaseUrl }) {
           state.status = 'failed';
           state.error = action.error.message;
         })
-        // Floors
         .addCase(fetchFloors.pending, (state) => {
           state.floorsLoading = true;
         })
@@ -163,7 +246,6 @@ export function createQuickControlModule({ BaseUrl }) {
           state.floorsLoading = false;
           state.floorsError = action.error.message;
         })
-        // Details
         .addCase(fetchQuickControlDetails.pending, (state) => {
           state.selectedControlLoading = true;
           state.selectedControlError = null;
@@ -176,33 +258,28 @@ export function createQuickControlModule({ BaseUrl }) {
           state.selectedControlLoading = false;
           state.selectedControlError = action.error.message;
         })
-        // Trigger
         .addCase(triggerQuickControl.pending, (state) => {
           state.triggerStatus = 'loading';
         })
-        .addCase(triggerQuickControl.fulfilled, (state, action) => {
+        .addCase(triggerQuickControl.fulfilled, (state) => {
           state.triggerStatus = 'success';
         })
-        .addCase(triggerQuickControl.rejected, (state, action) => {
+        .addCase(triggerQuickControl.rejected, (state) => {
           state.triggerStatus = 'failed';
         })
-        // Delete
         .addCase(deleteQuickControl.pending, (state) => {
           state.deleteStatus = 'loading';
         })
         .addCase(deleteQuickControl.fulfilled, (state, action) => {
           state.deleteStatus = 'success';
-          // Remove from controls list
-          state.controls = state.controls.filter(c => c.id !== action.payload.controlId);
+          state.controls = state.controls.filter((c) => c.id !== action.payload.controlId);
           state.selectedControl = null;
           state.shouldRefresh = true;
         })
         .addCase(deleteQuickControl.rejected, (state, action) => {
           state.deleteStatus = 'failed';
-          // Store the error message in the state so component can access it
           state.error = action.payload || action.error.message;
         })
-        // Update
         .addCase(updateQuickControl.pending, (state) => {
           state.updateStatus = 'loading';
         })
@@ -211,17 +288,16 @@ export function createQuickControlModule({ BaseUrl }) {
           state.selectedControl = action.payload;
           state.shouldRefresh = true;
         })
-        .addCase(updateQuickControl.rejected, (state, action) => {
+        .addCase(updateQuickControl.rejected, (state) => {
           state.updateStatus = 'failed';
         })
         .addCase(createQuickControl.fulfilled, (state) => {
           state.shouldRefresh = true;
-        })
-        // Removed checkQuickControlUsage cases as schedules should not affect Quick Controls
+        });
     },
   });
 
-  const {  clearSelectedControl, setShouldRefresh  } = quickControlSlice.actions;
+  const { clearSelectedControl, setShouldRefresh } = quickControlSlice.actions;
   const reducer = quickControlSlice.reducer;
   return {
     reducer,

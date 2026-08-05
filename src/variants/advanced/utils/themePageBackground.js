@@ -80,9 +80,13 @@ export function usesTheme4PageGradient(background) {
   return getFixedGradientPageTheme(background)?.id === 'theme4';
 }
 
-/** Gold or Brown page themes: light chrome for export on light surfaces (e.g. Activity Report). */
+/** Gold, Theme 3, or Theme 4: light page chrome — export trigger uses dark text on light surfaces. */
 export function usesLightPageExportChrome(background) {
-  return usesGoldPageTheme(background) || usesTheme4PageGradient(background);
+  return (
+    usesGoldPageTheme(background) ||
+    usesTheme3PageGradient(background) ||
+    usesTheme4PageGradient(background)
+  );
 }
 
 /** Theme 2 (Gold preset): exact Background anchor only — custom light colors use dynamic theme. */
@@ -151,11 +155,11 @@ export function buildAppPageBackground(background, { withRadialOverlay = true } 
   const base = background || '#6f809d';
   const lightBg = lighten(base, 0.25);
   const veryLightBg = lighten(base, 0.55);
-  const linear = `linear-gradient(180deg, ${base} 0%, ${lightBg} 42%, ${veryLightBg} 100%)`;
+  const linear = `linear-gradient(135deg, ${base} 0%, ${lightBg} 35%, ${veryLightBg} 100%)`;
   if (!withRadialOverlay) {
     return linear;
   }
-  return `radial-gradient(circle at 50% 15%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.05) 40%, transparent 70%), ${linear}`;
+  return `radial-gradient(circle at 88% 6%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.05) 40%, transparent 70%), ${linear}`;
 }
 
 const DEFAULT_NAVBAR_COLOR = '#3d4a5c';

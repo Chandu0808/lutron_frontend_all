@@ -40,23 +40,17 @@ export function buildDashboardApiParams({
     return null;
   }
 
-  let areasToUse = selectedAreas;
-  const floorsToUse = selectedFloorIds;
-
-  if (floorsToUse && floorsToUse.length > 0) {
-    areasToUse = null;
-  }
+  // Prefer explicit area selections when present. Only fall back to floors
+  // when no explicit areas are selected. This ensures selecting 3 areas
+  // results in `areaIds` being sent to the API instead of `floorIds`.
+  const areasToUse = selectedAreas && selectedAreas.length > 0 ? selectedAreas : null;
+  const floorsToUse = selectedFloorIds && selectedFloorIds.length > 0 ? selectedFloorIds : null;
 
   const { timeRange, startDate, endDate } = dateParams || {};
 
   return {
-    areaIds:
-      floorsToUse && floorsToUse.length > 0
-        ? null
-        : areasToUse && areasToUse.length > 0
-          ? areasToUse
-          : null,
-    floorIds: floorsToUse && floorsToUse.length > 0 ? floorsToUse : null,
+    areaIds: areasToUse && areasToUse.length > 0 ? areasToUse : null,
+    floorIds: !areasToUse && floorsToUse && floorsToUse.length > 0 ? floorsToUse : null,
     timeRange,
     startDate,
     endDate,
@@ -81,7 +75,9 @@ export function serializeDashboardApiParams(apiParams) {
  * Axios query params for dashboard chart GETs (matches dashboardSlice thunk logic).
  */
 export function buildDashboardChartAxiosParams(apiParams) {
-  const params = { _: Date.now() };
+  // No cache-buster: identical params must match dashboardSlice URLs so
+  // coalesceDashboardHttpGet can join custom-graph + built-in chart GETs.
+  const params = {};
   if (!apiParams) return params;
 
   const { areaIds, floorIds, groupIds, timeRange, startDate, endDate, isNavigating } = apiParams;

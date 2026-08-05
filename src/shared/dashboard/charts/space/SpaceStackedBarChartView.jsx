@@ -37,6 +37,13 @@ function resolvePlotHeightStyle(plotHeightStyle) {
   if (plotHeightStyle === 'chartsTabClamp') {
     return { height: 'clamp(200px, 42vh, 340px)' };
   }
+  if (plotHeightStyle === 'basicChartsTabClamp') {
+    /* Basic Utilization by Area Group — taller so bars are readable */
+    return { height: 'clamp(260px, 42vh, 360px)' };
+  }
+  if (plotHeightStyle === 'basicFixed320') {
+    return { height: '360px' };
+  }
   return { height: '400px' };
 }
 

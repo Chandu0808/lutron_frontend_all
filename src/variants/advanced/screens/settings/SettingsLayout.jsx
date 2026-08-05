@@ -51,6 +51,7 @@ const SettingsLayout = ({ children }) => {
           order: { xs: 1, md: 1 },
           p: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
           ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp),
+          borderRight: { xs: "none", md: "none" },
           position: { xs: "static", md: "sticky" },
           top: { xs: "auto", md: "20px" },
           alignSelf: "flex-start",

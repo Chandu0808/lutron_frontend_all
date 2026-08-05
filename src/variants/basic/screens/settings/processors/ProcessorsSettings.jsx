@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Grid,
   Table,
   TableBody,
   TableCell,
@@ -22,8 +21,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import MemoryIcon from '@mui/icons-material/Memory';
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
-import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
-import SettingsSidebarNav from '../../../components/SettingsSidebarNav';
+import SettingsLayout from '../SettingsLayout';
 import {
   fetchProcessorsListAll,
   discoverProcessors,
@@ -43,9 +41,6 @@ import { getThemeButtonColor } from '../../../utils/themePageBackground';
 const ProcessorsSettings = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
-
-  const { role: currentUserRole } = UseAuth();
-  const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(currentUserRole);
 
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
@@ -139,14 +134,7 @@ const ProcessorsSettings = () => {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        ml: '18px',
-        p: '18px',
-        position: 'relative',
-      }}
-    >
+    <>
       {pageBusy && (
         <Box
           sx={{
@@ -159,65 +147,26 @@ const ProcessorsSettings = () => {
         />
       )}
 
-      <Box
-        sx={{
-          width: '100%',
-          mx: 'auto',
-          px: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
-        }}
-      >
-        <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1 }}>
-          <Grid
-            item
-            xs={12}
-            md={3}
+      <SettingsLayout>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            position: 'relative',
+          }}
+        >
+          <Box
             sx={{
-              order: { xs: 1, md: 1 },
-              p: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
-              borderRadius: { xs: '4px', lg: '8px' },
-              mb: { xs: 0.3, lg: 0 },
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 2,
+              mb: 2,
             }}
           >
-            <Typography
-              variant="h6"
-              className="settings-sidebar-heading"
-              sx={{
-                mb: { xs: 0.8, sm: 1, md: 1.5, lg: 2 },
-                color: theme.palette.text.secondary,
-                fontSize: 24,
-                fontWeight: 600,
-                letterSpacing: 0.5,
-              }}
-            >
-              Settings
-            </Typography>
-            <SettingsSidebarNav items={visibleSidebarItemsWithPaths} />
-          </Grid>
-
-          <Grid item xs={12} lg={9} sx={{ order: { xs: 2, lg: 2 } }}>
-            <Box
-              className="settings-main-inner-panel"
-              sx={{
-                backgroundColor: 'var(--settings-panel-inner-bg, #fff)',
-                borderRadius: { xs: '4px', sm: '6px', md: '8px', lg: '10px' },
-                p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
-                width: '100%',
-                minHeight: 'fit-content',
-                display: 'flex',
-                flexDirection: 'column',
-                position: 'relative',
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 2,
-                  mb: 2,
-                }}
-              >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <MemoryIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
                   <Typography
@@ -401,27 +350,25 @@ const ProcessorsSettings = () => {
                 </TableContainer>
               )}
 
-              {!listLoading && !listAllError && processorsListAll.length === 0 && (
-                <Box
-                  sx={{
-                    py: 6,
-                    textAlign: 'center',
-                    color: 'text.secondary',
-                    border: '2px dashed',
-                    borderColor: 'divider',
-                    borderRadius: 2,
-                  }}
-                >
-                  <Typography>No processors in the database.</Typography>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    Use Discover Processor to scan the network.
-                  </Typography>
-                </Box>
-              )}
+          {!listLoading && !listAllError && processorsListAll.length === 0 && (
+            <Box
+              sx={{
+                py: 6,
+                textAlign: 'center',
+                color: 'text.secondary',
+                border: '2px dashed',
+                borderColor: 'divider',
+                borderRadius: 2,
+              }}
+            >
+              <Typography>No processors in the database.</Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Use Discover Processor to scan the network.
+              </Typography>
             </Box>
-          </Grid>
-        </Grid>
-      </Box>
+          )}
+        </Box>
+      </SettingsLayout>
 
       <AddByIpDialog
         open={addByIpOpen}
@@ -451,7 +398,7 @@ const ProcessorsSettings = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

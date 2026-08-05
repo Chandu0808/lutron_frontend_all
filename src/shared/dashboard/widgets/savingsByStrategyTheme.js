@@ -12,8 +12,8 @@ export const SAVINGS_BY_STRATEGY_ADAPTER_SHELL = {
   [SAVINGS_BY_STRATEGY_THEME_PRESETS.customized]: 'customized-builtin',
 };
 
-const BASIC_SLOT_HEIGHT_PX = 540;
-const BASIC_LIGHT_FULL_CARD_HEIGHT_PX = 648;
+const BASIC_SLOT_HEIGHT_PX = 360;
+const BASIC_LIGHT_FULL_CARD_HEIGHT_PX = 488;
 
 const BASIC_SLOT_OUTER_STYLE = {
   width: '100%',
@@ -141,11 +141,25 @@ export function resolveSavingsByStrategyTheme({
 
     let plotStyleOverride;
     if (embedded) {
-      plotStyleOverride = {
-        ...BASIC_PLOT_FLEX_STYLE,
-        border: '1px solid #e5e7eb',
-        backgroundColor: '#ffffff',
-      };
+      plotStyleOverride =
+        chartSurface === 'dark'
+          ? {
+              ...BASIC_PLOT_FLEX_STYLE,
+              flex: 1,
+              height: '100%',
+              minHeight: 0,
+              backgroundColor: 'transparent',
+              overflow: 'visible',
+            }
+          : {
+              ...BASIC_PLOT_FLEX_STYLE,
+              flex: 1,
+              height: '100%',
+              minHeight: 0,
+              border: 'none',
+              backgroundColor: 'transparent',
+              overflow: 'visible',
+            };
     } else if (light) {
       plotStyleOverride = {
         ...BASIC_PLOT_FLEX_STYLE,
@@ -180,6 +194,47 @@ export function resolveSavingsByStrategyTheme({
 
   if (preset === SAVINGS_BY_STRATEGY_THEME_PRESETS.advanced) {
     const surface = advancedSurface || {};
+    if (embedded) {
+      return {
+        preset,
+        shellVariant,
+        chartSurface: 'dark',
+        embedded: true,
+        outerStyleOverride: {
+          width: '100%',
+          height: '100%',
+          minHeight: 0,
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderRadius: 0,
+          padding: 0,
+          boxShadow: 'none',
+          marginBottom: 0,
+          flex: 1,
+        },
+        plotStyleOverride: {
+          flex: 1,
+          minHeight: 0,
+          height: '100%',
+          border: 'none',
+          borderRadius: '4px',
+          backgroundColor: 'transparent',
+          userSelect: 'none',
+          overflow: 'visible',
+        },
+        headerStyleOverride: chartHeaderStyle,
+        loaderLight: false,
+        loaderHeight: '100%',
+        cardShellStyle: {},
+        cardClassName: undefined,
+        cssTooltipStyle: surface.cssTooltipStyle || null,
+        resolveThemeColor: surface.resolveThemeColor || null,
+        resolveSegmentLabelColors: surface.resolveSegmentLabelColors || null,
+      };
+    }
     return {
       preset,
       shellVariant,
@@ -194,11 +249,12 @@ export function resolveSavingsByStrategyTheme({
         marginBottom: '20px',
       },
       plotStyleOverride: {
-        height: '360px',
+        height: '400px',
         border: '1px solid #ddd',
         borderRadius: '4px',
         backgroundColor: 'transparent',
         userSelect: 'none',
+        overflow: 'visible',
       },
       headerStyleOverride: chartHeaderStyle,
       loaderLight: false,

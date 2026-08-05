@@ -53,15 +53,15 @@ describe('dashboard widget orchestration parity', () => {
       );
     });
 
-    it('resolveBuiltinEnergyWidgetVisible is always true for advanced', () => {
+    it('resolveBuiltinEnergyWidgetVisible honors visibility map for advanced', () => {
       expect(
         resolveBuiltinEnergyWidgetVisible('consumption', { consumption: false }, {
           variant: 'advanced',
         })
-      ).toBe(true);
+      ).toBe(false);
     });
 
-    it('resolveCustomizedEnergyWidgetVisible matches legacy shouldShowEnergyWidget', () => {
+    it('resolveCustomizedEnergyWidgetVisible defaults to Advanced-like when empty', () => {
       const getPage = (key) =>
         key === 'occupancy_count' ? 'space' : 'energy';
 
@@ -69,10 +69,10 @@ describe('dashboard widget orchestration parity', () => {
         resolveCustomizedEnergyWidgetVisible('occupancy_count', { energy: {} }, getPage)
       ).toBe(false);
 
+      // Empty prefs → Advanced-like individuals (Combined off).
       expect(resolveCustomizedEnergyWidgetVisible('consumption', null, getPage)).toBe(true);
-
       expect(
-        resolveCustomizedEnergyWidgetVisible('consumption', { space: { x: true } }, getPage)
+        resolveCustomizedEnergyWidgetVisible('consumption_saving', null, getPage)
       ).toBe(false);
 
       expect(
@@ -87,6 +87,22 @@ describe('dashboard widget orchestration parity', () => {
         resolveCustomizedEnergyWidgetVisible(
           'total_consumption_by_group',
           { energy: { consumption_by_area_groups: true } },
+          getPage
+        )
+      ).toBe(true);
+
+      // Combined vs individuals mutual exclusion
+      expect(
+        resolveCustomizedEnergyWidgetVisible(
+          'consumption_saving',
+          { energy: { consumption_saving: true, consumption: true } },
+          getPage
+        )
+      ).toBe(false);
+      expect(
+        resolveCustomizedEnergyWidgetVisible(
+          'consumption',
+          { energy: { consumption_saving: true, consumption: true } },
           getPage
         )
       ).toBe(true);

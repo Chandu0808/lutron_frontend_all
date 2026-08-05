@@ -35,6 +35,7 @@ import {
   authCaptionSx,
   authFieldSx,
   authButtonSx,
+  authPasswordVisibilityIconSx,
 } from "./authFormStyles";
 import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
@@ -231,7 +232,8 @@ const Login = () => {
               InputProps={buildPasswordVisibilityInputProps(
                 showPassword,
                 setShowPassword,
-                { color: "var(--auth-field-text, rgba(0, 0, 0, 0.54))" }
+                authPasswordVisibilityIconSx,
+                "auth-password-visibility-btn"
               )}
               sx={{ mb: 2, ...authFieldSx }}
             />

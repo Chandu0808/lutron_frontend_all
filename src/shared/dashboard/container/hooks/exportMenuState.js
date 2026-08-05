@@ -37,6 +37,16 @@ export function createAdvancedGroupExportKeys() {
   });
 }
 
+export function toggleEnergyExportMenuState(setShowExportDropdown, menuKey, event) {
+  if (event) {
+    event.stopPropagation();
+  }
+  setShowExportDropdown((prev) => ({
+    ...prev,
+    [menuKey]: !prev[menuKey],
+  }));
+}
+
 export function useExportMenuState() {
   const [showExportDropdown, setShowExportDropdown] = useState({});
   const [exportLoading, setExportLoading] = useState({});

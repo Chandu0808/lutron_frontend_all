@@ -104,7 +104,7 @@ const HexColorPicker = ({
     };
 
     return (
-        <Box sx={{ width, backgroundColor: 'white', borderRadius: 3, p: 2, boxShadow: 3, mx: 'auto' }}>
+        <Box className="hex-picker-surface" sx={{ width, backgroundColor: 'white', borderRadius: 3, p: 2, boxShadow: 3, mx: 'auto' }}>
             <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
                 {renderHexGrid()}
             </svg>

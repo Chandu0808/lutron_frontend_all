@@ -27,12 +27,18 @@ import {
   selectLogoutLoading,
   getValidToken,
 } from "../redux/slice/auth/userlogin";
+import { dispatchFetchClientOnce, dispatchFetchProfileOnce } from "../../../shared/utils/bootstrapFetchGuards";
 import { getLutronDataClient, homeDataClient } from "../redux/slice/home/homeSlice";
 import {
   readUiVariantRaw,
   restoreUiVariantAfterStorageClear,
 } from "../../../utils/uiVariant";
+import {
+  snapshotAllVariantWidgetVisibilityForLogout,
+  restoreAllVariantWidgetVisibilityAfterStorageClear,
+} from "../../../shared/dashboard/utils/widgetVisibilityLogoutPreserve";
 import { DASHBOARD_DEFAULT_PATH } from "../utils/dashboardLanding";
+import { CUSTOMIZED_SETTINGS_HOME_PATH } from "../utils/customizedSettingsPaths";
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -58,17 +64,20 @@ export default function TopbarComponent() {
   const logoutLoading = useSelector(selectLogoutLoading);
   const clientData = useSelector(homeDataClient);
 
-  const logoUrl = clientData?.logo_image?.startsWith("http")
-    ? clientData.logo_image
-    : process.env.REACT_APP_API_URL
-    ? process.env.REACT_APP_API_URL + clientData.logo_image
-    : clientData.logo_image;
+  const CUSTOMIZED_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+  const logoUrl = (() => {
+    const logoImage = clientData?.logo_image;
+    if (!logoImage) return null;
+    return logoImage.startsWith("http")
+      ? logoImage
+      : `${CUSTOMIZED_API_URL}${logoImage}`;
+  })();
 
   useEffect(() => {
     // Don't fetch profile if logout is in progress or if there's no valid token
     const validToken = getValidToken();
     if (!profile && !profileLoading && !logoutLoading && validToken) {
-      dispatch(fetchProfile());
+      dispatchFetchProfileOnce(dispatch, fetchProfile);
     }
   }, [dispatch, profile, profileLoading, logoutLoading]);
 
@@ -78,15 +87,9 @@ export default function TopbarComponent() {
     // Don't fetch during logout process
     const validToken = getValidToken();
     if (validToken && profile && !clientData?.name && !logoutLoading) {
-      // Only fetch if we haven't tried recently (prevent multiple failed calls)
-      const lastFetchTime = sessionStorage.getItem('clientDataFetchTime');
-      const now = Date.now();
-      if (!lastFetchTime || (now - parseInt(lastFetchTime)) > 60000) { // Only retry after 1 minute
-        sessionStorage.setItem('clientDataFetchTime', now.toString());
-        dispatch(getLutronDataClient()).catch(() => {
-          // Silently handle errors - endpoint might not be available
-        });
-      }
+      dispatchFetchClientOnce(dispatch, getLutronDataClient).catch(() => {
+        // Silently handle errors - endpoint might not be available
+      });
     }
   }, [dispatch, profile, clientData?.name, logoutLoading]);
 
@@ -94,17 +97,8 @@ export default function TopbarComponent() {
   const roleFromStorage = localStorage.getItem('role');
   const currentRole = roleFromProfile || roleFromStorage;
   // Determine settings path based on user role
-  const getSettingsPath = (role) => {
-    if (role === 'Superadmin') {
-      return '/main'; // Home component
-    } else if (role === 'Admin') {
-      return '/main'; // Manage Area Groups component
-    } else {
-      // Operator - redirect to first available option
-      return '/main'; // Manage Area Groups component
-    }
-  };
-  
+  const getSettingsPath = () => CUSTOMIZED_SETTINGS_HOME_PATH;
+
   const settingsPath = getSettingsPath(currentRole);
 
   const [anchorEl, setAnchorEl] = useState(null);
@@ -170,6 +164,9 @@ export default function TopbarComponent() {
       return;
     }
 
+    // Preserve all variant widget prefs across logout — clearing only restored
+    // Customized before, so Basic/Advanced selections were wiped (and vice versa).
+    const widgetVisibilitySnapshot = snapshotAllVariantWidgetVisibilityForLogout();
     const uiVariantRaw = readUiVariantRaw();
 
     try {
@@ -184,16 +181,17 @@ export default function TopbarComponent() {
       // Clear local storage after successful logout API call
       localStorage.clear();
       restoreUiVariantAfterStorageClear(uiVariantRaw);
+      restoreAllVariantWidgetVisibilityAfterStorageClear(widgetVisibilitySnapshot);
       sessionStorage.clear();
 
       // Navigate to login page
       navigate("/", { replace: true });
-
     } catch (error) {
       // Even if logout API fails, clear local state and redirect for security
       console.warn("Logout error:", error);
       localStorage.clear();
       restoreUiVariantAfterStorageClear(uiVariantRaw);
+      restoreAllVariantWidgetVisibilityAfterStorageClear(widgetVisibilitySnapshot);
       sessionStorage.clear();
       navigate("/", { replace: true });
     }
@@ -416,7 +414,7 @@ export default function TopbarComponent() {
               overflow: "hidden",
             }}
           >
-            {/* Logo - Fixed size to prevent overflow */}
+            {/* Logo + hamburger (tablet) — left cluster */}
             <Box sx={{ 
               display: "flex", 
               alignItems: "center", 
@@ -436,8 +434,20 @@ export default function TopbarComponent() {
               },
               justifyContent: "flex-start",
               overflow: "hidden",
-              padding: "15px"
+              padding: "15px",
+              gap: 0.5,
             }}>
+              {isMdDown && (
+                <IconButton
+                  edge="start"
+                  color="inherit"
+                  aria-label="menu"
+                  onClick={openDrawer}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <MenuIcon />
+                </IconButton>
+              )}
               {clientData?.logo_image && (
                 <RouterLink to="/lutron" style={{ display: "flex", alignItems: "center", width: "100%" }}>
                   <img
@@ -547,18 +557,7 @@ export default function TopbarComponent() {
               </Box>
             )}
 
-            {/* Mobile menu - Only on very small screens */}
-            {isMdDown && (
-              <IconButton
-                edge="start"
-                color="inherit"
-                aria-label="menu"
-                onClick={openDrawer}
-                sx={{ ml: 1, mr: 1 }}
-              >
-                <MenuIcon />
-              </IconButton>
-            )}
+            {/* Mobile menu moved next to logo (tablet) */}
 
             {/* Right profile - Properly contained */}
             <Box sx={{ 
@@ -742,9 +741,9 @@ export default function TopbarComponent() {
                       color: "#111",
                       borderRadius: "8px",
                       boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                      width: `${menuWidth || 0}px`,
-                      minWidth: `${menuWidth || 0}px`,
-                      maxWidth: `${menuWidth || 0}px`,
+                      width: "max-content",
+                      minWidth: `${Math.max(menuWidth || 0, 160)}px`,
+                      maxWidth: "none",
                       mt: 0,
                       overflow: "hidden",
                       border: "1px solid rgba(0,0,0,0.08)",
@@ -781,6 +780,7 @@ export default function TopbarComponent() {
                     color: "#111", 
                     fontWeight: 500, 
                     justifyContent: "center",
+                    whiteSpace: "nowrap",
                     borderBottom: "1px solid rgba(0,0,0,0.08)",
                     py: 1.5,
                     minHeight: "48px",
@@ -789,7 +789,7 @@ export default function TopbarComponent() {
                     }
                   }}
                 >
-                  <LockResetIcon sx={{ mr: 1.5, fontSize: 18, color: "#666" }} />
+                  <LockResetIcon sx={{ mr: 1.5, fontSize: 18, color: "#666", flexShrink: 0 }} />
                   Reset Password
                 </MenuItem>
                 <MenuItem
@@ -804,6 +804,7 @@ export default function TopbarComponent() {
                     color: logoutLoading ? "#9ca3af" : "#ef4444", 
                     fontWeight: 600, 
                     justifyContent: "center",
+                    whiteSpace: "nowrap",
                     py: 1.5,
                     minHeight: "48px",
                     opacity: logoutLoading ? 0.7 : 1

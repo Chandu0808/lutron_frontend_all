@@ -6,8 +6,12 @@ import { Box, Typography, Button, Slider } from "@mui/material";
 import PaginatedList from '../../utils/PaginatedList';
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome } from "../../utils/themeOnSurface";
+import {
+  ALL_ZONES_VALUE,
+  buildAllZonesProxy,
+} from '../../../../shared/quickcontrols/zoneActionHelpers';
 
-const Action = ({ areaId, onActionSelect, initialAction = null }) => {
+const Action = ({ areaId, onActionSelect, initialAction = null, hideZoneOption = false, hideSceneOption = false }) => {
   const dispatch = useDispatch();
   const areaScenes = useSelector(selectAreaScenes) || [];
   const appTheme = useSelector(selectApplicationTheme);
@@ -76,17 +80,33 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     }
   }, [initialAction]);
 
+  // Keep selection on an allowed type when Scene/Zone options are hidden (add mode).
+  useEffect(() => {
+    if (hideSceneOption && selectedAction === "scene") {
+      setSelectedAction(hideZoneOption ? "occupancy" : "zone");
+    } else if (hideZoneOption && selectedAction === "zone") {
+      setSelectedAction(hideSceneOption ? "occupancy" : "scene");
+    }
+  }, [hideSceneOption, hideZoneOption, selectedAction]);
+
   // Auto-select first zone when zones are loaded and no zone is selected
   useEffect(() => {
     if (selectedAction === "zone" && zones.length > 0 && !selectedZoneId && !initialAction) {
-      const firstZone = zones[0];
-      handleZoneSelect(firstZone.id || firstZone.zone_id);
+      const controllable = zones.filter(
+        (z) => String(z?.type || z?.zone_type || '').toLowerCase() !== 'shade'
+      );
+      if (controllable.length >= 2) {
+        handleZoneSelect(ALL_ZONES_VALUE);
+      } else {
+        const firstZone = controllable[0] || zones[0];
+        handleZoneSelect(firstZone.id || firstZone.zone_id);
+      }
     }
   }, [zones, selectedAction, initialAction]);
 
   // When a zone is selected, initialize its values - FIXED to not override existing values
   useEffect(() => {
-    if (selectedZoneId && zones.length > 0) {
+    if (selectedZoneId && selectedZoneId !== ALL_ZONES_VALUE && zones.length > 0) {
       const zone = zones.find(z => String(z.id) === String(selectedZoneId));
       if (zone) {
         setZoneValues(prev => ({
@@ -171,6 +191,22 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     onActionSelect({ type: "scene", scene }); // scene contains id and name
   };
 
+  const getControllableZones = () =>
+    (zones || []).filter(
+      (z) => String(z?.type || z?.zone_type || '').toLowerCase() !== 'shade'
+    );
+
+  const emitZoneSelection = (zone, values, applyToAllZones = false) => {
+    const controllable = getControllableZones();
+    onActionSelect({
+      type: "zone",
+      zone,
+      values,
+      applyToAllZones,
+      zones: applyToAllZones ? controllable : undefined,
+    });
+  };
+
   // FIXED: Zone value change handler for smooth slider updates
   const handleZoneValueChange = (changed) => {
     const updatedValues = {
@@ -182,13 +218,13 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     
     // Only notify parent for non-slider changes (fade/delay time) to prevent lag
     if (changed.fadeTime || changed.delayTime) {
+      if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+        emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+        return;
+      }
       const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
       if (zone) {
-        onActionSelect({
-          type: "zone",
-          zone: zone,
-          values: updatedValues
-        });
+        emitZoneSelection(zone, updatedValues, false);
       }
     }
   };
@@ -210,18 +246,33 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
       [type]: value
     };
 
+    if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+      emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+      return;
+    }
     const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
     if (zone) {
-      onActionSelect({
-        type: "zone",
-        zone: zone,
-        values: updatedValues
-      });
+      emitZoneSelection(zone, updatedValues, false);
     }
   };
 
   // Update the zone selection handler - FIXED to notify parent immediately
   const handleZoneSelect = (zoneId) => {
+    if (String(zoneId) === ALL_ZONES_VALUE) {
+      const proxy = buildAllZonesProxy(zones);
+      setSelectedZoneId(ALL_ZONES_VALUE);
+      const initialValues = {
+        on_off: 'On',
+        brightness: undefined,
+        cct: undefined,
+        fadeTime: '02',
+        delayTime: '00'
+      };
+      setZoneValues(initialValues);
+      emitZoneSelection(proxy, initialValues, true);
+      return;
+    }
+
     const zone = zones.find(z => String(z.id || z.zone_id) === String(zoneId));
     if (!zone) return;
     
@@ -239,11 +290,7 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
     setZoneValues(initialValues);
     
     // Notify parent immediately with initial values
-    onActionSelect({
-      type: "zone",
-      zone: zone,
-      values: initialValues
-    });
+    emitZoneSelection(zone, initialValues, false);
   };
 
   // Handler for occupancy selection
@@ -315,8 +362,8 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
           marginBottom: 16
         }}
       >
-        <option value="scene">Scene</option>
-        <option value="zone">Zone</option>
+        {!hideSceneOption && <option value="scene">Scene</option>}
+        {!hideZoneOption && <option value="zone">Zone</option>}
         <option value="occupancy">Occupancy</option>
         <option value="shade">Shade</option>
       </select>
@@ -378,6 +425,9 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
                     fontSize: 16
                   }}
                 >
+                  {getControllableZones().length >= 2 && (
+                    <option value={ALL_ZONES_VALUE}>All Zones</option>
+                  )}
                   {zones.map(z => (
                     <option key={z.id || z.zone_id} value={z.id || z.zone_id}>
                       {z.name}
@@ -385,7 +435,10 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
                   ))}
                 </select>
                 {selectedZoneId && (() => {
-                  const zoneObj = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
+                  const zoneObj =
+                    String(selectedZoneId) === ALL_ZONES_VALUE
+                      ? buildAllZonesProxy(zones)
+                      : zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
                   if (!zoneObj) return null;
 
                   const brightnessMin = zoneObj.brightness_min ?? 0;
@@ -421,14 +474,13 @@ const Action = ({ areaId, onActionSelect, initialAction = null }) => {
                           <div
                             onClick={() => {
                               const newOnOff = safeValues.on_off === 'On' ? 'Off' : 'On';
-                              handleZoneValueChange({ on_off: newOnOff });
-                              const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
-                              if (zone) {
-                                onActionSelect({
-                                  type: "zone",
-                                  zone: zone,
-                                  values: { ...safeValues, on_off: newOnOff }
-                                });
+                              const updatedValues = { ...safeValues, on_off: newOnOff };
+                              setZoneValues(updatedValues);
+                              if (String(selectedZoneId) === ALL_ZONES_VALUE) {
+                                emitZoneSelection(buildAllZonesProxy(zones), updatedValues, true);
+                              } else {
+                                const zone = zones.find(z => String(z.id || z.zone_id) === String(selectedZoneId));
+                                if (zone) emitZoneSelection(zone, updatedValues, false);
                               }
                             }}
                             style={{

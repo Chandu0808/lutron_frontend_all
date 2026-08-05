@@ -12,8 +12,13 @@ import {
   ExportMenuPanel,
   EXPORT_MENU_COPY,
   buildEmailDownloadExportActions,
-  resolveEnergyExportMenuPresetFromTheme,
 } from '../../../../shared/dashboard/export/components';
+import {
+  BASIC_CONSUMPTION_SAVINGS_COMBINED_MIN_HEIGHT_PX,
+  CONSUMPTION_SAVINGS_COMBINED_MIN_HEIGHT_PX,
+  CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS,
+  resolveConsumptionSavingsCombinedChrome,
+} from '../../../../shared/dashboard/widgets/energy/consumptionSavingsCombinedChrome';
 import {
   computeCo2KgFromEnergySavings,
   formatCo2Kg,
@@ -34,24 +39,251 @@ import {
 const CONSUMPTION_COLOR = '#1565C0';
 const CONNECTED_LOAD_COLOR = '#C62828';
 
-const chartHeaderStyle = {
+const DASHBOARD_PALETTE = [
+  '#1565C0', // Blue
+  '#2E7D32', // Green
+  '#EF6C00', // Orange
+  '#C62828', // Red
+  '#6A1B9A', // Purple
+  '#00838F', // Cyan
+  '#AD1457', // Pink
+  '#37474F', // Blue Gray
+];
+
+const DEFAULT_TITLE_STYLE = {
   margin: 0,
   fontSize: '18px',
   fontWeight: 600,
-  color: '#000000'
+  color: '#000000',
 };
 
-/** Same target as `Dashboard` ENERGY_LIGHT_FULL_CARD_HEIGHT_PX — keeps combined Energy card aligned with standalone white-theme charts. */
-const ENERGY_COMBINED_CARD_MIN_HEIGHT_PX = 420 + 228;
+const formatCombinedTooltipValue = (val) =>
+  val != null && val !== '' && Number.isFinite(Number(val)) ? Number(val).toFixed(2) : '—';
 
-/** Matches Energy line chart light-theme export dropdown (`Dashboard` EnergyLineChart). */
-const EXPORT_MENU_STYLES = {
-  dropdownBg: '#ffffff',
-  dropdownBorder: '1px solid rgba(0,0,0,0.15)',
-  dropdownText: 'rgba(0, 0, 0, 0.87)',
-  dropdownMuted: 'rgba(0, 0, 0, 0.45)',
-  dropdownSep: 'rgba(0, 0, 0, 0.12)',
-};
+/**
+ * Compact multi-area tooltip for the combined energy chart.
+ * Shared by Basic / Advanced / Customized (same component import).
+ */
+function CombinedEnergyChartTooltip({
+  active,
+  label,
+  mergedData,
+  areaKeys = [],
+  unit,
+  consumptionColor,
+  connectedLoadColor,
+}) {
+  if (!active || !mergedData?.length) return null;
+  const row = mergedData.find((r) => String(r.date) === String(label));
+  if (!row) return null;
+
+  const unitSuffix = unit ? ` (${unit})` : '';
+
+  const stopWheel = (e) => {
+    e.stopPropagation();
+  };
+
+  const boxStyle = {
+    backgroundColor: '#f5f5f5',
+    border: '1px solid #333',
+    borderRadius: '4px',
+    color: '#000',
+    fontSize: '11px',
+    lineHeight: 1.25,
+    maxWidth: '280px',
+    pointerEvents: 'auto',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+  };
+
+  if (!areaKeys.length) {
+    return (
+      <div style={{ ...boxStyle, padding: '8px 10px' }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, borderBottom: '1px solid #333', paddingBottom: 4 }}>
+          {label}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '2px 8px', alignItems: 'center' }}>
+          <span
+            aria-hidden
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              backgroundColor: consumptionColor,
+              border: '1px solid rgba(0,0,0,0.25)',
+            }}
+          />
+          <span>Cons.{unitSuffix}</span>
+          <span style={{ fontWeight: 600, textAlign: 'right' }}>{formatCombinedTooltipValue(row.consumption)}</span>
+          <span />
+          <span>Sav.{unitSuffix}</span>
+          <span style={{ fontWeight: 600, textAlign: 'right' }}>{formatCombinedTooltipValue(row.savings)}</span>
+          <span
+            aria-hidden
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              backgroundColor: connectedLoadColor,
+              border: '1px solid rgba(0,0,0,0.25)',
+            }}
+          />
+          <span>Load{unitSuffix}</span>
+          <span style={{ fontWeight: 600, textAlign: 'right' }}>{formatCombinedTooltipValue(row.connectedLoad)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={boxStyle}>
+      <div
+        style={{
+          fontWeight: 700,
+          padding: '6px 8px 4px',
+          borderBottom: '1px solid #333',
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <span>{label}</span>
+        {unit ? <span style={{ fontWeight: 500, color: '#555' }}>{unit}</span> : null}
+      </div>
+      <div
+        style={{
+          maxHeight: '168px',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          padding: '0 0 4px',
+        }}
+        onWheel={stopWheel}
+        onMouseDown={stopWheel}
+        onTouchMove={stopWheel}
+      >
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+          }}
+        >
+          <thead>
+            <tr style={{ backgroundColor: '#ececec' }}>
+              <th
+                style={{
+                  textAlign: 'left',
+                  padding: '3px 6px',
+                  fontWeight: 600,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: '#ececec',
+                  width: '40%',
+                }}
+              >
+                Area
+              </th>
+              <th
+                style={{
+                  textAlign: 'right',
+                  padding: '3px 4px',
+                  fontWeight: 600,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: '#ececec',
+                }}
+              >
+                Cons.
+              </th>
+              <th
+                style={{
+                  textAlign: 'right',
+                  padding: '3px 4px',
+                  fontWeight: 600,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: '#ececec',
+                }}
+              >
+                Sav.
+              </th>
+              <th
+                style={{
+                  textAlign: 'right',
+                  padding: '3px 6px',
+                  fontWeight: 600,
+                  position: 'sticky',
+                  top: 0,
+                  backgroundColor: '#ececec',
+                }}
+              >
+                Load
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {areaKeys.map((areaName, idx) => {
+              const seriesColor = DASHBOARD_PALETTE[idx % DASHBOARD_PALETTE.length];
+              return (
+              <tr key={areaName}>
+                <td
+                  style={{
+                    padding: '2px 6px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontWeight: 600,
+                  }}
+                  title={areaName}
+                >
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      maxWidth: '100%',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        flexShrink: 0,
+                        width: 8,
+                        height: 8,
+                        borderRadius: 2,
+                        backgroundColor: seriesColor,
+                        border: '1px solid rgba(0,0,0,0.25)',
+                      }}
+                    />
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {areaName}
+                    </span>
+                  </span>
+                </td>
+                <td style={{ padding: '2px 4px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatCombinedTooltipValue(row[`${areaName}_consumption`])}
+                </td>
+                <td style={{ padding: '2px 4px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatCombinedTooltipValue(row[`${areaName}_savings`])}
+                </td>
+                <td style={{ padding: '2px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatCombinedTooltipValue(row[`${areaName}_connectedLoad`])}
+                </td>
+              </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function ConsumptionSavingsCombinedChart({
   mergedData = [],
@@ -71,14 +303,51 @@ function ConsumptionSavingsCombinedChart({
   exportDownloadLoading = false,
   title = 'Consumption & Savings',
   contentColor = 'rgba(128, 120, 100, 0.7)',
+  shellVariant = CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS.basic,
+  advancedSurface = null,
+  titleStyle: titleStyleProp,
   strategyContent = null,
   strategyLoading = false,
   topControls = null,
+  /** Theme-aware consumption color for the combined blue series (used when not rendering individual area series). */
+  consumptionColor = CONSUMPTION_COLOR,
+  /** Connected-load line color (defaults to red). */
+  connectedLoadColor = CONNECTED_LOAD_COLOR,
 }) {
   // Tabs like the reference image: Consumption | Savings By Strategy
   const [activeSeries, setActiveSeries] = useState('consumption'); // 'consumption' | 'strategy'
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const exportMenuWrapRef = useRef(null);
+
+  const areaKeys = useMemo(() => {
+    if (!mergedData || mergedData.length === 0) return [];
+    const keys = new Set();
+    mergedData.forEach((row) => {
+      Object.keys(row).forEach((k) => {
+        if (k.endsWith('_consumption')) {
+          const areaName = k.slice(0, -12); // remove '_consumption'
+          if (areaName && areaName !== 'Combined Areas') {
+            keys.add(areaName);
+          }
+        }
+      });
+    });
+    return Array.from(keys);
+  }, [mergedData]);
+
+  const isIndividualAreas = areaKeys.length > 0;
+
+  const titleStyle = titleStyleProp || DEFAULT_TITLE_STYLE;
+  const chrome = useMemo(
+    () =>
+      resolveConsumptionSavingsCombinedChrome({
+        shellVariant,
+        contentColor,
+        advancedSurface,
+        titleStyle,
+      }),
+    [shellVariant, contentColor, advancedSurface, titleStyle]
+  );
 
   const useServerExportMenu =
     typeof onEmail === 'function' && typeof onDownloadReport === 'function';
@@ -119,12 +388,31 @@ function ConsumptionSavingsCombinedChart({
   const handleClientCsvDownload = useCallback(() => {
     if (!mergedData.length) return;
     const headers = ['Time', `Consumption (${unit})`, `Savings (${unit})`, `Connected Load (${unit})`];
-    const rows = mergedData.map((row) => [
-      row.date,
-      row.consumption != null && row.consumption !== '' ? Number(row.consumption) : '',
-      row.savings != null && row.savings !== '' ? Number(row.savings) : '',
-      row.connectedLoad != null && row.connectedLoad !== '' ? Number(row.connectedLoad) : ''
-    ]);
+    if (areaKeys.length > 0) {
+      areaKeys.forEach((areaName) => {
+        headers.push(`${areaName} Consumption (${unit})`);
+        headers.push(`${areaName} Savings (${unit})`);
+        headers.push(`${areaName} Connected Load (${unit})`);
+      });
+    }
+
+    const rows = mergedData.map((row) => {
+      const line = [
+        row.date,
+        row.consumption != null && row.consumption !== '' ? Number(row.consumption) : '',
+        row.savings != null && row.savings !== '' ? Number(row.savings) : '',
+        row.connectedLoad != null && row.connectedLoad !== '' ? Number(row.connectedLoad) : ''
+      ];
+      if (areaKeys.length > 0) {
+        areaKeys.forEach((areaName) => {
+          line.push(row[`${areaName}_consumption`] ?? '');
+          line.push(row[`${areaName}_savings`] ?? '');
+          line.push(row[`${areaName}_connectedLoad`] ?? '');
+        });
+      }
+      return line;
+    });
+
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -133,7 +421,7 @@ function ConsumptionSavingsCombinedChart({
     link.click();
     URL.revokeObjectURL(link.href);
     if (typeof onDownload === 'function') onDownload();
-  }, [mergedData, unit, onDownload]);
+  }, [mergedData, unit, onDownload, areaKeys]);
 
   const chartConfig = useMemo(() => {
     const n = mergedData.length;
@@ -178,12 +466,12 @@ function ConsumptionSavingsCombinedChart({
     () => ({
       value: '100%',
       position: 'right',
-      fill: CONNECTED_LOAD_COLOR,
+      fill: connectedLoadColor,
       fontSize: 11,
       fontWeight: 600,
       offset: 10,
     }),
-    []
+    [connectedLoadColor]
   );
 
   const hasData = useMemo(() => {
@@ -215,16 +503,19 @@ function ConsumptionSavingsCombinedChart({
         <button
           type="button"
           data-export-menu="true"
-          onClick={() => setShowExportDropdown((v) => !v)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setShowExportDropdown((v) => !v);
+          }}
           style={{
             background: 'none',
             border: 'none',
             cursor: 'pointer',
             fontSize: '14px',
-            color: '#1565C0',
+            color: chrome.exportColor,
             display: 'flex',
             alignItems: 'center',
-            gap: '5px'
+            gap: '5px',
           }}
         >
           <FileUploadOutlined sx={{ fontSize: 18, color: 'inherit', flexShrink: 0 }} aria-hidden />
@@ -232,11 +523,9 @@ function ConsumptionSavingsCombinedChart({
         </button>
         {showExportDropdown && (
           <ExportMenuPanel
-            panelStyle={{
-              ...resolveEnergyExportMenuPresetFromTheme(EXPORT_MENU_STYLES, { useEmoji: true }).panel,
-              marginTop: '4px',
-            }}
-            panelDataAttribute="data-export-dropdown-panel"
+            panelStyle={chrome.exportMenuPreset.panel}
+            panelDataAttribute={chrome.exportMenuPreset.panelDataAttribute}
+            className={chrome.exportMenuPreset.className}
             actions={buildEmailDownloadExportActions({
               onEmail: () => {
                 setShowExportDropdown(false);
@@ -251,8 +540,8 @@ function ConsumptionSavingsCombinedChart({
               emailLabel: EXPORT_MENU_COPY.email,
               downloadLabel: EXPORT_MENU_COPY.download,
             })}
-            itemDefaults={resolveEnergyExportMenuPresetFromTheme(EXPORT_MENU_STYLES, { useEmoji: true }).item}
-            useEmoji
+            itemDefaults={chrome.exportMenuPreset.item}
+            useEmoji={chrome.exportMenuUseEmoji}
           />
         )}
       </div>
@@ -265,10 +554,10 @@ function ConsumptionSavingsCombinedChart({
           border: 'none',
           cursor: 'pointer',
           fontSize: '14px',
-          color: '#1565C0',
+          color: chrome.exportColor,
           display: 'flex',
           alignItems: 'center',
-          gap: '5px'
+          gap: '5px',
         }}
       >
         <FileUploadOutlined sx={{ fontSize: 18, color: 'inherit', flexShrink: 0 }} aria-hidden />
@@ -276,91 +565,90 @@ function ConsumptionSavingsCombinedChart({
       </button>
     ));
 
-  if (isLoading || (activeSeries === 'strategy' && strategyLoading)) {
-    return (
-      <div
+  const seriesTabs = (
+    <div style={{ display: 'flex', gap: 16 }}>
+      <button
+        type="button"
+        onClick={() => setActiveSeries('consumption')}
         style={{
-          backgroundColor: contentColor,
-          borderRadius: '8px',
-          padding: '12px 16px 8px 16px',
-          boxShadow: '0 2px 12px rgba(15, 23, 42, 0.08)',
-          marginBottom: '8px',
-          border: '1px solid #e5e7eb'
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: activeSeries === 'consumption' ? chrome.tabActiveColor : chrome.tabInactiveColor,
+          fontSize: 12,
+          fontWeight: 600,
+          textDecoration: activeSeries === 'consumption' ? 'underline' : 'none',
+          textUnderlineOffset: 6,
         }}
       >
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 6, marginBottom: 6 }}>
-            <h3 style={chartHeaderStyle}>{title}</h3>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 12,
-              width: '100%',
-            }}
-          >
-            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveSeries('consumption')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: activeSeries === 'consumption' ? '#1565C0' : '#64748b',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: activeSeries === 'consumption' ? 'underline' : 'none',
-                    textUnderlineOffset: 6,
-                  }}
-                >
-                  Consumption
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSeries('strategy')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: activeSeries === 'strategy' ? '#1565C0' : '#64748b',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: activeSeries === 'strategy' ? 'underline' : 'none',
-                    textUnderlineOffset: 6,
-                  }}
-                >
-                  Savings By Strategy
-                </button>
-              </div>
-            </div>
-            {headerCenterControls}
-            <div
-              style={{
-                flex: '1 1 0',
-                minWidth: 0,
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'flex-start',
-              }}
-            >
-              {headerExportOnly}
-            </div>
-          </div>
+        Consumption
+      </button>
+      <button
+        type="button"
+        onClick={() => setActiveSeries('strategy')}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: activeSeries === 'strategy' ? chrome.tabActiveColor : chrome.tabInactiveColor,
+          fontSize: 12,
+          fontWeight: 600,
+          textDecoration: activeSeries === 'strategy' ? 'underline' : 'none',
+          textUnderlineOffset: 6,
+        }}
+      >
+        Savings By Strategy
+      </button>
+    </div>
+  );
+
+  const cardHeader = (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ borderBottom: chrome.divider, paddingBottom: 6, marginBottom: 6 }}>
+        <h3 style={chrome.titleStyle}>{title}</h3>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+          width: '100%',
+        }}
+      >
+        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'flex-start' }}>
+          {seriesTabs}
         </div>
-        <div style={{ height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: '4px' }}>
+        {headerCenterControls}
+        <div
+          style={{
+            flex: '1 1 0',
+            minWidth: 0,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'flex-start',
+          }}
+        >
+          {headerExportOnly}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (isLoading || (activeSeries === 'strategy' && strategyLoading)) {
+    return (
+      <div style={chrome.shell} className={chrome.shellClassName}>
+        {cardHeader}
+        <div style={{ height: shellVariant === CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS.basic ? '400px' : '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', borderRadius: '4px' }}>
           <div
             style={{
               width: '40px',
               height: '40px',
-              border: '3px solid #555',
-              borderTop: '3px solid #333',
+              border: chrome.loader.border,
+              borderTop: chrome.loader.borderTop,
               borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
+              animation: 'spin 1s linear infinite',
             }}
           />
         </div>
@@ -380,107 +668,20 @@ function ConsumptionSavingsCombinedChart({
       }))
       : []
     return (
-      <div
-        style={{
-          backgroundColor: contentColor,
-          borderRadius: '8px',
-          padding: '12px 16px 8px 16px',
-          boxShadow: '0 2px 12px rgba(15, 23, 42, 0.08)',
-          marginBottom: '8px',
-          border: '1px solid #e5e7eb'
-        }}
-      >
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 6, marginBottom: 6 }}>
-            <h3 style={chartHeaderStyle}>{title}</h3>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 12,
-              width: '100%',
-            }}
-          >
-            <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{ display: 'flex', gap: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveSeries('consumption')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: activeSeries === 'consumption' ? '#1565C0' : '#64748b',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: activeSeries === 'consumption' ? 'underline' : 'none',
-                    textUnderlineOffset: 6,
-                  }}
-                >
-                  Consumption
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSeries('strategy')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: activeSeries === 'strategy' ? '#1565C0' : '#64748b',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: activeSeries === 'strategy' ? 'underline' : 'none',
-                    textUnderlineOffset: 6,
-                  }}
-                >
-                  Savings By Strategy
-                </button>
-              </div>
-            </div>
-            {headerCenterControls}
-            <div
-              style={{
-                flex: '1 1 0',
-                minWidth: 0,
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'flex-start',
-              }}
-            >
-              {headerExportOnly}
-            </div>
-          </div>
-        </div>
-        <div
-          style={{
-            height: '420px',
-            minHeight: '380px',
-            border: '1px solid rgba(0,0,0,0.1)',
-            borderRadius: '4px',
-            backgroundColor: '#ffffff',
-            padding: '10px',
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'stretch',
-            justifyContent: 'center',
-            color: 'rgba(0,0,0,0.7)',
-          }}
-        >
+      <div style={chrome.shell} className={chrome.shellClassName}>
+        {cardHeader}
+        <div style={chrome.plotEmpty}>
           {blank ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={placeholder} margin={{ top: 20, right: 100, left: 20, bottom: 8 }}>
-                <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid stroke={chrome.chart.gridStroke} strokeDasharray="3 3" vertical={false} />
                 <XAxis
                   dataKey="date"
-                  stroke="#111827"
+                  stroke={chrome.chart.axisStroke}
                   fontSize={10}
-                  tick={{ fill: '#111827', fontWeight: 600, fontSize: 10 }}
-                  axisLine={{ stroke: '#111827' }}
-                  tickLine={{ stroke: '#111827' }}
+                  tick={{ fill: chrome.chart.tickFill, fontWeight: 600, fontSize: 10 }}
+                  axisLine={{ stroke: chrome.chart.axisStroke }}
+                  tickLine={{ stroke: chrome.chart.axisStroke }}
                   interval={3}
                   angle={-45}
                   textAnchor="end"
@@ -488,16 +689,23 @@ function ConsumptionSavingsCombinedChart({
                   type="category"
                 />
                 <YAxis
-                  stroke="#111827"
+                  stroke={chrome.chart.axisStroke}
                   fontSize={10}
-                  tick={{ fill: '#111827', fontWeight: 600, fontSize: 10 }}
-                  axisLine={{ stroke: '#111827' }}
-                  tickLine={{ stroke: '#111827' }}
+                  tick={{ fill: chrome.chart.tickFill, fontWeight: 600, fontSize: 10 }}
+                  axisLine={{ stroke: chrome.chart.axisStroke }}
+                  tickLine={{ stroke: chrome.chart.axisStroke }}
                   width={50}
                   tickCount={6}
                 />
                 {/* keep area with nulls so frame matches, but no fill renders */}
-                <Area type="monotone" dataKey="consumption" stroke={CONSUMPTION_COLOR} fill={CONSUMPTION_COLOR} fillOpacity={0.22} connectNulls={false} />
+                <Area
+                  type="monotone"
+                  dataKey="consumption"
+                  stroke={consumptionColor}
+                  fill={consumptionColor}
+                  fillOpacity={0.22}
+                  connectNulls={false}
+                />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
@@ -513,123 +721,35 @@ function ConsumptionSavingsCombinedChart({
   return (
     <div
       style={{
-        backgroundColor: contentColor,
-        borderRadius: '8px',
-        padding: '12px 16px 8px 16px',
-        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.08)',
-        marginBottom: '8px',
-        border: '1px solid #e5e7eb',
-        minHeight: ENERGY_COMBINED_CARD_MIN_HEIGHT_PX,
-        boxSizing: 'border-box',
+        ...chrome.shell,
+        minHeight:
+          shellVariant === CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS.basic
+            ? BASIC_CONSUMPTION_SAVINGS_COMBINED_MIN_HEIGHT_PX
+            : CONSUMPTION_SAVINGS_COMBINED_MIN_HEIGHT_PX,
       }}
+      className={chrome.shellClassName}
     >
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 6, marginBottom: 6 }}>
-          <h3 style={chartHeaderStyle}>{title}</h3>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 12,
-            width: '100%',
-          }}
-        >
-          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'flex-start' }}>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <button
-                type="button"
-                onClick={() => setActiveSeries('consumption')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  color: activeSeries === 'consumption' ? '#1565C0' : '#64748b',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textDecoration: activeSeries === 'consumption' ? 'underline' : 'none',
-                  textUnderlineOffset: 6,
-                }}
-              >
-                Consumption
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveSeries('strategy')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  color: activeSeries === 'strategy' ? '#1565C0' : '#64748b',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textDecoration: activeSeries === 'strategy' ? 'underline' : 'none',
-                  textUnderlineOffset: 6,
-                }}
-              >
-                Savings By Strategy
-              </button>
-            </div>
-          </div>
-          {headerCenterControls}
-          <div
-            style={{
-              flex: '1 1 0',
-              minWidth: 0,
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'flex-start',
-            }}
-          >
-            {headerExportOnly}
-          </div>
-        </div>
-      </div>
+      {cardHeader}
       {activeSeries === 'strategy' ? (
-        <div
-          style={{
-            height: '420px',
-            minHeight: '380px',
-            border: '1px solid #e5e7eb',
-            borderRadius: '4px',
-            backgroundColor: '#ffffff',
-            padding: '8px',
-            width: '100%',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
+        <div style={chrome.strategyPlot}>
           {strategyContent}
         </div>
       ) : (
-        <div
-          style={{
-            height: '420px',
-            minHeight: '380px',
-            border: '1px solid #e5e7eb',
-            borderRadius: '4px',
-            backgroundColor: '#ffffff',
-            padding: '8px 8px 4px 8px',
-            width: '100%'
-          }}
-        >
+        <div style={chrome.plot}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
               data={mergedData}
               margin={{ top: 20, right: 100, left: 20, bottom: 8 }}
             >
-              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid stroke={chrome.chart.gridStroke} strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="date"
-                stroke="#111827"
+                stroke={chrome.chart.axisStroke}
                 fontSize={chartConfig.xAxisFontSize}
-                tick={{ fill: '#111827', fontWeight: 600, fontSize: chartConfig.xAxisFontSize }}
+                tick={{ fill: chrome.chart.tickFill, fontWeight: 600, fontSize: chartConfig.xAxisFontSize }}
                 tickFormatter={consumptionAxisTickFormatter}
-                axisLine={{ stroke: '#111827' }}
-                tickLine={{ stroke: '#111827' }}
+                axisLine={{ stroke: chrome.chart.axisStroke }}
+                tickLine={{ stroke: chrome.chart.axisStroke }}
                 interval={chartConfig.xAxisInterval}
                 angle={-45}
                 textAnchor="end"
@@ -642,15 +762,15 @@ function ConsumptionSavingsCombinedChart({
                   value: '(Time)',
                   position: 'insideBottomLeft',
                   offset: -5,
-                  style: { textAnchor: 'start', fill: '#111827', fontSize: '12px', fontWeight: 'bold' }
+                  style: { textAnchor: 'start', fill: chrome.chart.tickFill, fontSize: '12px', fontWeight: 'bold' },
                 }}
               />
               <YAxis
-                stroke="#111827"
+                stroke={chrome.chart.axisStroke}
                 fontSize={chartConfig.xAxisFontSize}
-                tick={{ fill: '#111827', fontWeight: 600, fontSize: chartConfig.xAxisFontSize }}
-                axisLine={{ stroke: '#111827' }}
-                tickLine={{ stroke: '#111827' }}
+                tick={{ fill: chrome.chart.tickFill, fontWeight: 600, fontSize: chartConfig.xAxisFontSize }}
+                axisLine={{ stroke: chrome.chart.axisStroke }}
+                tickLine={{ stroke: chrome.chart.axisStroke }}
                 width={50}
                 tickCount={8}
                 domain={yDomain}
@@ -659,51 +779,63 @@ function ConsumptionSavingsCombinedChart({
                   angle: -90,
                   position: 'insideLeft',
                   offset: 15,
-                  style: { textAnchor: 'middle', fill: '#111827', fontSize: '12px', fontWeight: 'bold' }
+                  style: { textAnchor: 'middle', fill: chrome.chart.tickFill, fontSize: '12px', fontWeight: 'bold' },
                 }}
               />
               <Tooltip
-                content={({ active, payload, label }) => {
-                  if (!active || !mergedData.length) return null;
-                  const row = mergedData.find((r) => String(r.date) === String(label));
-                  if (!row) return null;
-                  return (
-                    <div
-                      style={{
-                        backgroundColor: '#f5f5f5',
-                        border: '1px solid #333',
-                        borderRadius: '4px',
-                        padding: '10px',
-                        color: '#000',
-                        fontSize: '12px'
-                      }}
-                    >
-                      <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', borderBottom: '1px solid #333', paddingBottom: '4px' }}>{label}</p>
-                      <p style={{ margin: '4px 0' }}>Consumption: {row.consumption != null && row.consumption !== '' ? Number(row.consumption).toFixed(2) : '—'} {unit}</p>
-                      <p style={{ margin: '4px 0' }}>Savings: {row.savings != null && row.savings !== '' ? Number(row.savings).toFixed(2) : '—'} {unit}</p>
-                      <p style={{ margin: '4px 0' }}>Connected Load: {row.connectedLoad != null && row.connectedLoad !== '' ? Number(row.connectedLoad).toFixed(2) : '—'} {unit}</p>
-                    </div>
-                  );
-                }}
+                content={({ active, label }) => (
+                  <CombinedEnergyChartTooltip
+                    active={active}
+                    label={label}
+                    mergedData={mergedData}
+                    areaKeys={areaKeys}
+                    unit={unit}
+                    consumptionColor={consumptionColor}
+                    connectedLoadColor={connectedLoadColor}
+                  />
+                )}
+                wrapperStyle={{ pointerEvents: 'auto', zIndex: 20, outline: 'none' }}
+                allowEscapeViewBox={{ x: true, y: true }}
                 cursor={{ stroke: '#333', strokeWidth: 1 }}
               />
               {/* Legend removed to avoid "Consumption" label under x-axis */}
-              <Area
-                type="monotone"
-                dataKey="consumption"
-                name="Consumption"
-                fill={CONSUMPTION_COLOR}
-                fillOpacity={0.7}
-                stroke={CONSUMPTION_COLOR}
-                strokeWidth={chartConfig.strokeWidth}
-                dot={{ r: chartConfig.dotSize, fill: CONSUMPTION_COLOR, stroke: '#fff', strokeWidth: 1 }}
-                activeDot={{ r: 4, fill: CONSUMPTION_COLOR, stroke: '#fff', strokeWidth: 0.5 }}
-                connectNulls={false}
-              />
+              {isIndividualAreas ? (
+                areaKeys.map((areaName, idx) => {
+                  const color = DASHBOARD_PALETTE[idx % DASHBOARD_PALETTE.length];
+                  return (
+                    <Area
+                      key={`${areaName}_consumption`}
+                      type="monotone"
+                      dataKey={`${areaName}_consumption`}
+                      name={`${areaName} Consumption`}
+                      fill={color}
+                      fillOpacity={0.4 / areaKeys.length}
+                      stroke={color}
+                      strokeWidth={chartConfig.strokeWidth}
+                      dot={{ r: chartConfig.dotSize, fill: color, stroke: '#fff', strokeWidth: 1 }}
+                      activeDot={{ r: 4, fill: color, stroke: '#fff', strokeWidth: 0.5 }}
+                      connectNulls={false}
+                    />
+                  );
+                })
+              ) : (
+                <Area
+                  type="monotone"
+                  dataKey="consumption"
+                  name="Consumption"
+                  fill={consumptionColor}
+                  fillOpacity={0.7}
+                  stroke={consumptionColor}
+                  strokeWidth={chartConfig.strokeWidth}
+                  dot={{ r: chartConfig.dotSize, fill: consumptionColor, stroke: '#fff', strokeWidth: 1 }}
+                  activeDot={{ r: 4, fill: consumptionColor, stroke: '#fff', strokeWidth: 0.5 }}
+                  connectNulls={false}
+                />
+              )}
               {yAxisMax != null && yAxisMax > 0 && connectedLoadRefSegment && (
                 <ReferenceLine
                   segment={connectedLoadRefSegment}
-                  stroke={CONNECTED_LOAD_COLOR}
+                  stroke={connectedLoadColor}
                   strokeDasharray="4 4"
                   label={hundredPctRefLabel}
                 />
@@ -711,7 +843,7 @@ function ConsumptionSavingsCombinedChart({
               {yAxisMax != null && yAxisMax > 0 && !connectedLoadRefSegment && mergedData.length > 0 && (
                 <ReferenceLine
                   y={yAxisMax}
-                  stroke={CONNECTED_LOAD_COLOR}
+                  stroke={connectedLoadColor}
                   strokeDasharray="4 4"
                   label={hundredPctRefLabel}
                 />
@@ -722,7 +854,7 @@ function ConsumptionSavingsCombinedChart({
       )}
 
       {/* Summary - single line, no background */}
-      <div style={{ marginTop: '2px', marginBottom: '0', color: '#111827', fontSize: '14px' }}>
+      <div style={{ marginTop: '2px', marginBottom: '0', color: chrome.summaryColor, fontSize: '14px' }}>
         Summary Total energy consumed: <strong>{summary.totalConsumption.toFixed(1)} {unit}</strong>
         {' · '}
         Savings compared to Full On: <strong>{summary.totalSavings.toFixed(2)} {unit} ({summary.savingsPercent.toFixed(0)}%)</strong>

@@ -1,13 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-
-// Suppress findDOMNode warning for ReactQuill (third-party library issue)
-const originalError = console.error;
-console.error = (...args) => {
-  if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
-    return;
-  }
-  originalError.call(console, ...args);
-};
 import {
     Box,
     Button,
@@ -22,8 +13,7 @@ import {
 import { styled } from '@mui/system';
 import { selectApplicationTheme } from '../../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import CustomizedHomeDescriptionEditor from './CustomizedHomeDescriptionEditor';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
@@ -45,6 +35,10 @@ import {
     homeDataProject
 } from '../../../redux/slice/home/homeSlice';
 import {
+    dispatchFetchClientOnce,
+    dispatchFetchProjectOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
 } from '../../../../../utils/keyboard/rovingTablistKeyboard';
@@ -53,6 +47,15 @@ import {
   requestSettingsSidebarFocus,
 } from '../../../../../utils/keyboard/pageSubNavBridge';
 import { isKeyboardNavBlockedTarget } from '../../../../../utils/keyboard/keyboardNavUtils';
+
+// Suppress findDOMNode warning for ReactQuill (third-party library issue)
+const originalError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
+    return;
+  }
+  originalError.call(console, ...args);
+};
 
 const HOME_TAB_KEYS = ['Lutron', 'Client', 'Project'];
 
@@ -235,11 +238,9 @@ const HomeComponent = () => {
     // Redirect if user doesn't have permission
     useEffect(() => {
         if (!canAccessHome) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate('/setting/manage-area-groups', { replace: true });
         }
     }, [canAccessHome, navigate]);
-    
-    if (!canAccessHome) return null;
     
     // Redux selectors
     const appTheme = useSelector(selectApplicationTheme);
@@ -328,11 +329,11 @@ const HomeComponent = () => {
         }
         if (!dataLoadedRef.current.client && (!homeClientData || !homeClientData.name)) {
             dataLoadedRef.current.client = true;
-            dispatch(getLutronDataClient());
+            dispatchFetchClientOnce(dispatch, getLutronDataClient);
         }
         if (!dataLoadedRef.current.project && (!homeProjectData || !homeProjectData.name)) {
             dataLoadedRef.current.project = true;
-            dispatch(getLutronDataProject());
+            dispatchFetchProjectOnce(dispatch, getLutronDataProject);
         }
     }, [dispatch]); // Only depend on dispatch to prevent infinite loops
 
@@ -351,7 +352,7 @@ const HomeComponent = () => {
         if (displayMode === 'Lutron' && homeData) {
             setDescription(homeData.description || '');
             if (homeData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const imageUrl = homeData.background_image.startsWith("http")
                     ? homeData.background_image
                     : `${API_URL}${homeData.background_image}`;
@@ -368,14 +369,14 @@ const HomeComponent = () => {
             setDescription(homeClientData.description || '');
             setClientName(homeClientData.name || '');
             if (homeClientData.background_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const imageUrl = homeClientData.background_image.startsWith("http")
                     ? homeClientData.background_image
                     : `${API_URL}${homeClientData.background_image}`;
                 setImagePreview(imageUrl);
             }
             if (homeClientData.logo_image) {
-                const API_URL = process.env.REACT_APP_API_URL || "";
+                const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
                 const logoUrl = homeClientData.logo_image.startsWith("http")
                     ? homeClientData.logo_image
                     : `${API_URL}${homeClientData.logo_image}`;
@@ -510,7 +511,7 @@ const HomeComponent = () => {
             if (saveClientData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
                 // FIXED: Only refresh once after successful save
-                await dispatch(getLutronDataClient());
+                await dispatchFetchClientOnce(dispatch, getLutronDataClient, { force: true });
             }
         } else if (displayMode === 'Project') {
             if (description) formData.append('description', cleanDescription(description));
@@ -525,7 +526,7 @@ const HomeComponent = () => {
             const result = await dispatch(saveProjectData(formData));
             if (saveProjectData.fulfilled.match(result)) {
                 setShowSuccessMessage(true);
-                dispatch(getLutronDataProject());
+                await dispatchFetchProjectOnce(dispatch, getLutronDataProject, { force: true });
             }
         }
     };
@@ -571,31 +572,6 @@ const HomeComponent = () => {
             prev.map(s => s.id === id ? { ...s, name: newName } : s)
         );
     };
-
-    const modules = {
-        toolbar: [
-            [{ list: 'ordered' }, { list: 'bullet' }],
-            [{ color: [] }, { background: [] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            ['blockquote', 'code-block'],
-            [{ align: [] }],
-            ['link', 'image'],
-            ['clean'],
-        ],
-        clipboard: {
-            // Toggle to add line breaks when pasting
-            matchVisual: false,
-        },
-    };
-
-    const formats = [
-        'list', 'bullet',
-        'color', 'background',
-        'bold', 'italic', 'underline', 'strike',
-        'blockquote', 'code-block',
-        'align',
-        'link', 'image',
-    ];
 
     const renderTabs = () => (
         <Box
@@ -648,6 +624,8 @@ const HomeComponent = () => {
             ))}
         </Box>
     );
+
+    if (!canAccessHome) return null;
 
     return (
         <Box className="settings-container" sx={{
@@ -979,55 +957,11 @@ const HomeComponent = () => {
                                                 <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                                     Description
                                                 </Typography>
-                                                <Box
-                                                    sx={{
-                                                        backgroundColor: '#eee',
-                                                        borderRadius: '8px',
-                                                        overflow: 'hidden',
-                                                        pt: 1,
-                                                        mb: 2,
-                                                        '.ql-toolbar': {
-                                                            backgroundColor: '#fff',
-                                                            border: 'none',
-                                                            padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
-                                                            height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                            display: 'flex',
-                                                            flexWrap: 'wrap',
-                                                            alignItems: 'center',
-                                                            borderTopLeftRadius: '8px',
-                                                            borderTopRightRadius: '8px',
-                                                            width: '100%',
-                                                            margin: '0 auto',
-                                                            borderRadius: '6px',
-                                                        },
-                                                        '.ql-container': {
-                                                            backgroundColor: '#eee',
-                                                            border: 'none',
-                                                            borderBottomLeftRadius: '8px',
-                                                            borderBottomRightRadius: '8px',
-                                                            minHeight: 'auto', // Remove fixed height
-                                                            height: 'auto', // Allow natural height
-                                                            width: '100%',
-                                                            overflow: 'visible', // Remove scroll from editor container
-                                                        },
-                                                        '.ql-editor': {
-                                                            minHeight: 'auto', // Remove fixed height
-                                                            height: 'auto', // Allow natural height
-                                                            fontSize: { xs: '8px', sm: '9px', md: '10px', lg: '12px' },
-                                                            paddingTop: 0,
-                                                            overflow: 'visible', // Remove scroll from editor content
-                                                        },
-                                                    }}
-                                                >
-                                                    <ReactQuill
-                                                        value={description}
-                                                        onChange={setDescription}
-                                                        placeholder="Write here"
-                                                        modules={modules}
-                                                        formats={formats}
-                                                        style={{ borderRadius: '8px' }}
-                                                    />
-                                                </Box>
+                                                <CustomizedHomeDescriptionEditor
+                                                    value={description}
+                                                    onChange={setDescription}
+                                                    placeholder="Write here"
+                                                />
                                             </Grid>
                                         </Grid>
 
@@ -1102,69 +1036,11 @@ const HomeComponent = () => {
                                             Description
                                         </Typography>
 
-                                        <Box sx={{ position: 'relative', mb: 1 }}>
-                                            <Box
-                                                sx={{
-                                                    position: 'absolute',
-                                                    top: 0,
-                                                    left: 0,
-                                                    right: 0,
-                                                    backgroundColor: '#fff',
-                                                    borderTopLeftRadius: '6px',
-                                                    borderTopRightRadius: '6px',
-                                                    zIndex: 2,
-                                                    px: { xs: 0.5, sm: 0.8, md: 1.2 },
-                                                    pt: { xs: 0.2, sm: 0.3, md: 0.5 },
-                                                }}
-                                            />
-
-                                            <Box
-                                                sx={{
-                                                    backgroundColor: '#eee',
-                                                    borderRadius: '16px',
-                                                    overflow: 'hidden',
-                                                    pt: 2,
-                                                    mb: 2,
-                                                    '.ql-toolbar': {
-                                                        backgroundColor: '#fff',
-                                                        border: 'none',
-                                                        padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
-                                                        height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                        display: 'flex',
-                                                        flexWrap: 'wrap',
-                                                        alignItems: 'center',
-                                                        borderTopLeftRadius: '8px',
-                                                        borderTopRightRadius: '8px',
-                                                        width: '100%',
-                                                        margin: '0 auto',
-                                                        borderRadius: '6px',
-                                                    },
-                                                    '.ql-container': {
-                                                        border: 'none',
-                                                        backgroundColor: '#eee',
-                                                        borderRadius: '6px',
-                                                        minHeight: 'auto', // Remove fixed height
-                                                        height: 'auto', // Allow natural height
-                                                        overflow: 'visible', // Remove scroll from editor container
-                                                    },
-                                                    '.ql-editor': {
-                                                        minHeight: 'auto', // Remove fixed height
-                                                        height: 'auto', // Allow natural height
-                                                        fontSize: { xs: '8px', sm: '9px', md: '10px', lg: '12px' },
-                                                        paddingTop: 0,
-                                                        overflow: 'visible', // Remove scroll from editor content
-                                                    },
-                                                }}
-                                            >
-                                                <ReactQuill
-                                                    value={description}
-                                                    onChange={setDescription}
-                                                    placeholder="Write here"
-                                                    modules={modules}
-                                                    formats={formats}
-                                                />
-                                            </Box>
-                                        </Box>
+                                        <CustomizedHomeDescriptionEditor
+                                            value={description}
+                                            onChange={setDescription}
+                                            placeholder="Write here"
+                                        />
 
                                         <Typography fontWeight="bold" mt={1} mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                             Background Image
@@ -1262,60 +1138,11 @@ const HomeComponent = () => {
                                         <Typography fontWeight="bold" mb={0.5} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                             Description
                                         </Typography>
-                                        <Box
-                                            sx={{
-                                                backgroundColor: '#eee',
-                                                borderRadius: '16px',
-                                                overflow: 'hidden',
-                                                pt: 1,
-                                                mb: 1,
-                                                '.ql-toolbar': {
-                                                    backgroundColor: '#fff',
-                                                    border: 'none',
-                                                    padding: { xs: '1px 2px', sm: '2px 3px', md: '2px 4px', lg: '4px 6px' },
-                                                    height: { xs: 'auto', sm: 'auto', md: 'auto', lg: '32px' },
-                                                    display: 'flex',
-                                                    flexWrap: 'wrap',
-                                                    alignItems: 'center',
-                                                    borderTopLeftRadius: '8px',
-                                                    borderTopRightRadius: '8px',
-                                                    width: '100%',
-                                                    margin: '0 auto',
-                                                    borderRadius: '6px',
-                                                },
-                                                '.ql-container': {
-                                                    border: '1px solid #e0e0e0',
-                                                    borderTop: 'none',
-                                                    backgroundColor: '#f5f5f5',
-                                                    height: 'auto',
-                                                    minHeight: 'auto',
-                                                    borderRadius: '6px',
-                                                    width: '100%',
-                                                    overflow: 'visible',
-                                                    '&::-webkit-scrollbar': {
-                                                        display: 'none',
-                                                    },
-                                                    scrollbarWidth: 'none',
-                                                },
-                                                '.ql-editor': {
-                                                    height: 'auto',
-                                                    minHeight: 'auto',
-                                                    overflow: 'visible',
-                                                    '&::-webkit-scrollbar': {
-                                                        display: 'none',
-                                                    },
-                                                    scrollbarWidth: 'none',
-                                                },
-                                            }}
-                                        >
-                                            <ReactQuill
-                                                value={description}
-                                                onChange={setDescription}
-                                                placeholder="Write here"
-                                                modules={modules}
-                                                formats={formats}
-                                            />
-                                        </Box>
+                                        <CustomizedHomeDescriptionEditor
+                                            value={description}
+                                            onChange={setDescription}
+                                            placeholder="Write here"
+                                        />
 
                                         <Box sx={{
                                             display: 'flex',

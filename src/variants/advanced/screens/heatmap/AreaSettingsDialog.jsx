@@ -52,6 +52,43 @@ const ASD_ZONE_CARD_BG = "var(--heatmap-dialog-zone-card-bg, #ffffff)";
 const ZONE_CARD_TEXT_COLOR = "#111";
 const ZONE_CARD_MUTED_TEXT_COLOR = "#3d4a5c";
 
+const ASD_ZONE_VALUE_CHIP_SX = {
+  color: `${ZONE_CARD_TEXT_COLOR} !important`,
+  WebkitTextFillColor: ZONE_CARD_TEXT_COLOR,
+  backgroundColor: "#f5f5f5",
+  px: 0.3,
+  py: 0.1,
+  borderRadius: 0.5,
+  border: "1px solid #ddd",
+  textAlign: "center",
+  flexShrink: 0,
+  cursor: "text",
+  lineHeight: 1.4,
+  "& .MuiInputBase-root": {
+    color: `${ZONE_CARD_TEXT_COLOR} !important`,
+  },
+  "& .MuiInputBase-input": {
+    color: `${ZONE_CARD_TEXT_COLOR} !important`,
+    WebkitTextFillColor: ZONE_CARD_TEXT_COLOR,
+    caretColor: ZONE_CARD_TEXT_COLOR,
+  },
+  "& .MuiInput-input": {
+    color: `${ZONE_CARD_TEXT_COLOR} !important`,
+  },
+};
+
+const ASD_ZONE_VALUE_INPUT_PROPS = {
+  inputMode: "numeric",
+  pattern: "[0-9]*",
+  style: {
+    textAlign: "center",
+    fontWeight: 700,
+    fontSize: 10,
+    color: ZONE_CARD_TEXT_COLOR,
+    WebkitTextFillColor: ZONE_CARD_TEXT_COLOR,
+  },
+};
+
 /** Heatmap area sidebar + settings dialog palette (Schedule Details / Add Event alignment). */
 export const HEATMAP_AREA_SIDEBAR = {
   panelBg: "var(--heatmap-sidebar-panel-bg, #d6dde8)",
@@ -94,22 +131,70 @@ const ASD_SECTION_TITLE_SX = {
   color: "#fff",
   lineHeight: 1.2,
 };
-/** Occupancy mode pills inside settings dialog (#3d4a5c sections). */
-const asdOccupancyModeBtnSx = (isSelected, buttonColor) => ({
-  borderRadius: "999px",
-  fontWeight: 700,
-  fontSize: 13,
-  textTransform: "uppercase",
-  px: 2,
-  minWidth: 0,
-  boxShadow: 0,
-  bgcolor: isSelected ? buttonColor : "#fff",
-  color: isSelected ? "#fff" : buttonColor,
-  borderColor: buttonColor,
-  "&:hover": {
-    bgcolor: isSelected ? buttonColor : "#eee",
-  },
-});
+/** Occupancy mode pills inside settings dialog — must beat theme `MuiButton-contained !important` rules. */
+const asdOccupancyModeBtnSx = (isSelected, buttonColor) => {
+  const accent = buttonColor || "var(--app-button, #3d4a5c)";
+  if (isSelected) {
+    return {
+      borderRadius: "999px",
+      fontWeight: 700,
+      fontSize: 13,
+      textTransform: "uppercase",
+      px: 2,
+      minWidth: 0,
+      boxShadow: "none !important",
+      backgroundImage: "none !important",
+      background: `${accent} !important`,
+      backgroundColor: `${accent} !important`,
+      color: "#ffffff !important",
+      WebkitTextFillColor: "#ffffff",
+      border: `2px solid #ffffff !important`,
+      outline: `2px solid ${accent}`,
+      outlineOffset: 0,
+      filter: "none !important",
+      opacity: "1 !important",
+      "&:hover": {
+        background: `${accent} !important`,
+        backgroundColor: `${accent} !important`,
+        backgroundImage: "none !important",
+        color: "#ffffff !important",
+        WebkitTextFillColor: "#ffffff",
+        border: `2px solid #ffffff !important`,
+        opacity: "1 !important",
+        filter: "none !important",
+      },
+    };
+  }
+  return {
+    borderRadius: "999px",
+    fontWeight: 700,
+    fontSize: 13,
+    textTransform: "uppercase",
+    px: 2,
+    minWidth: 0,
+    boxShadow: "none !important",
+    backgroundImage: "none !important",
+    background: "#ffffff !important",
+    backgroundColor: "#ffffff !important",
+    /* Near-black on white — readable on dark section chrome regardless of theme accent */
+    color: "#111111 !important",
+    WebkitTextFillColor: "#111111",
+    border: `2px solid ${accent} !important`,
+    outline: "none",
+    filter: "none !important",
+    opacity: "1 !important",
+    "&:hover": {
+      background: "#f3f3f3 !important",
+      backgroundColor: "#f3f3f3 !important",
+      backgroundImage: "none !important",
+      color: "#111111 !important",
+      WebkitTextFillColor: "#111111",
+      border: `2px solid ${accent} !important`,
+      opacity: "1 !important",
+      filter: "none !important",
+    },
+  };
+};
 const ASD_APPLY_BTN_SX = {
   background: "#222",
   color: "#fff",
@@ -1240,7 +1325,13 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
                     return (
                       <Button
                         key={opt}
+                        className={
+                          isSelected
+                            ? "asd-occupancy-mode-btn asd-occupancy-mode-btn--active"
+                            : "asd-occupancy-mode-btn"
+                        }
                         variant="contained"
+                        disableElevation
                         onClick={() => handleOccupancyChange(opt)}
                         disabled={occupancyLoading}
                         sx={asdOccupancyModeBtnSx(isSelected, buttonColor)}
@@ -1656,6 +1747,110 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
     cancelCctEdit();
   };
 
+  const renderZoneCctKelvin = (displayValue, { min, max }) => (
+    <Typography
+      component="div"
+      className="advanced-zone-value-chip"
+      fontSize={{ xs: 8, sm: 9, md: 10 }}
+      fontWeight={700}
+      sx={{
+        ...ASD_ZONE_VALUE_CHIP_SX,
+        minWidth: 36,
+        cursor: disabled ? "default" : "text",
+      }}
+      onClick={() => {
+        if (disabled) return;
+        beginCctEdit(displayValue);
+      }}
+    >
+      {cctEdit.isEditing && !disabled ? (
+        <TextField
+          value={cctEdit.value}
+          size="small"
+          variant="standard"
+          inputProps={{
+            ...ASD_ZONE_VALUE_INPUT_PROPS,
+            style: { ...ASD_ZONE_VALUE_INPUT_PROPS.style, width: 34 },
+          }}
+          sx={{
+            "& .MuiInputBase-input": {
+              color: `${ZONE_CARD_TEXT_COLOR} !important`,
+              WebkitTextFillColor: ZONE_CARD_TEXT_COLOR,
+            },
+          }}
+          onChange={(e) => {
+            const next = e.target.value.replace(/[^\d]/g, "");
+            setCctEdit((prev) => ({ ...prev, value: next }));
+          }}
+          onBlur={() => commitCctEdit({ min, max })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitCctEdit({ min, max });
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancelCctEdit();
+            }
+          }}
+        />
+      ) : (
+        `${displayValue}K`
+      )}
+    </Typography>
+  );
+
+  const renderZoneBrightnessValue = (displayValue, { min, max }) => (
+    <Typography
+      component="div"
+      className="advanced-zone-value-chip"
+      fontSize={{ xs: 8, sm: 9, md: 10 }}
+      fontWeight={700}
+      sx={{
+        ...ASD_ZONE_VALUE_CHIP_SX,
+        minWidth: 24,
+        cursor: disabled ? "default" : "text",
+      }}
+      onClick={() => {
+        if (disabled) return;
+        beginBrightnessEdit(displayValue);
+      }}
+    >
+      {brightnessEdit.isEditing && !disabled ? (
+        <TextField
+          value={brightnessEdit.value}
+          size="small"
+          variant="standard"
+          inputProps={{
+            ...ASD_ZONE_VALUE_INPUT_PROPS,
+            style: { ...ASD_ZONE_VALUE_INPUT_PROPS.style, width: 26 },
+          }}
+          sx={{
+            "& .MuiInputBase-input": {
+              color: `${ZONE_CARD_TEXT_COLOR} !important`,
+              WebkitTextFillColor: ZONE_CARD_TEXT_COLOR,
+            },
+          }}
+          onChange={(e) => {
+            const next = e.target.value.replace(/[^\d]/g, "");
+            setBrightnessEdit((prev) => ({ ...prev, value: next }));
+          }}
+          onBlur={() => commitBrightnessEdit({ min, max })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitBrightnessEdit({ min, max });
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancelBrightnessEdit();
+            }
+          }}
+        />
+      ) : (
+        `${displayValue}%`
+      )}
+    </Typography>
+  );
+
   if (isSwitchType) {
     const isOn = safeValues.on_off === 'On';
     return (
@@ -1726,10 +1921,11 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
-        <Box sx={{
+        <Box
+          className="asd-zone-control-card"
+          sx={{
           flex: 1,
           bgcolor: zoneCardBg,
-          className: 'asd-zone-control-card',
           color: ZONE_CARD_TEXT_COLOR,
           borderRadius: 0.5,
           p: { xs: 0.5, md: 1 },
@@ -1764,56 +1960,10 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
             >
               {zone.name}
             </Typography>
-            <Typography
-              fontSize={{ xs: 8, sm: 9, md: 10 }}
-              fontWeight={700}
-              sx={{
-                color: ZONE_CARD_MUTED_TEXT_COLOR,
-                background: '#f5f5f5',
-                px: 0.3,
-                py: 0.1,
-                borderRadius: 0.5,
-                border: '1px solid #ddd',
-                minWidth: 24,
-                textAlign: 'center',
-                flexShrink: 0,
-                cursor: disabled ? 'default' : 'text',
-              }}
-              onClick={() => {
-                if (disabled) return;
-                const current = safeValues.brightness !== undefined ? safeValues.brightness : brightnessMin;
-                beginBrightnessEdit(current);
-              }}
-            >
-              {brightnessEdit.isEditing && !disabled ? (
-                <TextField
-                  value={brightnessEdit.value}
-                  size="small"
-                  variant="standard"
-                  inputProps={{
-                    inputMode: 'numeric',
-                    pattern: '[0-9]*',
-                    style: { textAlign: 'center', fontWeight: 700, fontSize: 10, width: 26 },
-                  }}
-                  onChange={(e) => {
-                    const next = e.target.value.replace(/[^\d]/g, '');
-                    setBrightnessEdit((prev) => ({ ...prev, value: next }));
-                  }}
-                  onBlur={() => commitBrightnessEdit({ min: brightnessMin, max: brightnessMax })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitBrightnessEdit({ min: brightnessMin, max: brightnessMax });
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      cancelBrightnessEdit();
-                    }
-                  }}
-                />
-              ) : (
-                `${safeValues.brightness !== undefined ? safeValues.brightness : brightnessMin}%`
-              )}
-            </Typography>
+            {renderZoneBrightnessValue(
+              safeValues.brightness !== undefined ? safeValues.brightness : brightnessMin,
+              { min: brightnessMin, max: brightnessMax }
+            )}
           </Box>
 
           {/* Brightness Slider - Fixed positioning */}
@@ -1858,56 +2008,10 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
               pr: { xs: 0.5, md: 1 },
             }}
           >
-            <Typography
-              fontSize={{ xs: 8, sm: 9, md: 10 }}
-              fontWeight={700}
-              sx={{
-                color: ZONE_CARD_MUTED_TEXT_COLOR,
-                background: '#f5f5f5',
-                px: 0.3,
-                py: 0.1,
-                borderRadius: 0.5,
-                border: '1px solid #ddd',
-                minWidth: 36,
-                textAlign: 'center',
-                flexShrink: 0,
-                cursor: disabled ? 'default' : 'text',
-              }}
-              onClick={() => {
-                if (disabled) return;
-                const current = safeValues.cct !== undefined ? safeValues.cct : cctMin;
-                beginCctEdit(current);
-              }}
-            >
-              {cctEdit.isEditing && !disabled ? (
-                <TextField
-                  value={cctEdit.value}
-                  size="small"
-                  variant="standard"
-                  inputProps={{
-                    inputMode: 'numeric',
-                    pattern: '[0-9]*',
-                    style: { textAlign: 'center', fontWeight: 700, fontSize: 10, width: 34 },
-                  }}
-                  onChange={(e) => {
-                    const next = e.target.value.replace(/[^\d]/g, '');
-                    setCctEdit((prev) => ({ ...prev, value: next }));
-                  }}
-                  onBlur={() => commitCctEdit({ min: cctMin, max: cctMax })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitCctEdit({ min: cctMin, max: cctMax });
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      cancelCctEdit();
-                    }
-                  }}
-                />
-              ) : (
-                `${safeValues.cct !== undefined ? safeValues.cct : cctMin}K`
-              )}
-            </Typography>
+            {renderZoneCctKelvin(
+              safeValues.cct !== undefined ? safeValues.cct : cctMin,
+              { min: cctMin, max: cctMax }
+            )}
           </Box>
 
           {/* CCT Slider - Fixed positioning */}
@@ -1942,12 +2046,24 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
           <Box sx={{
             display: 'flex',
             justifyContent: 'space-between',
-            fontSize: { xs: 7, md: 9 },
-            color: ZONE_CARD_MUTED_TEXT_COLOR,
-            mt: 0.8 // Increased margin top
+            mt: 0.8,
           }}>
-            <span>{cctMin}K</span>
-            <span>{cctMax}K</span>
+            <Typography
+              component="span"
+              className="asd-zone-cct-range-label"
+              fontSize={{ xs: 7, md: 9 }}
+              sx={{ color: ZONE_CARD_MUTED_TEXT_COLOR, WebkitTextFillColor: ZONE_CARD_MUTED_TEXT_COLOR }}
+            >
+              {cctMin}K
+            </Typography>
+            <Typography
+              component="span"
+              className="asd-zone-cct-range-label"
+              fontSize={{ xs: 7, md: 9 }}
+              sx={{ color: ZONE_CARD_MUTED_TEXT_COLOR, WebkitTextFillColor: ZONE_CARD_MUTED_TEXT_COLOR }}
+            >
+              {cctMax}K
+            </Typography>
           </Box>
         </Box>
 
@@ -2003,10 +2119,11 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
   if (isDimmedType) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
-        <Box sx={{
+        <Box
+          className="asd-zone-control-card"
+          sx={{
           flex: 1,
           bgcolor: zoneCardBg,
-          className: 'asd-zone-control-card',
           color: ZONE_CARD_TEXT_COLOR,
           borderRadius: 0.5,
           pt:0.5,
@@ -2042,55 +2159,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, isMobile, isTablet,
             >
               {zone.name}
             </Typography>
-            <Typography
-              fontSize={{ xs: 8, sm: 9, md: 10 }}
-              fontWeight={700}
-              sx={{
-                color: ZONE_CARD_MUTED_TEXT_COLOR,
-                background: '#f5f5f5',
-                px: 0.3,
-                py: 0.1,
-                borderRadius: 0.5,
-                border: '1px solid #ddd',
-                minWidth: 24,
-                textAlign: 'center',
-                flexShrink: 0,
-                cursor: disabled ? 'default' : 'text',
-              }}
-              onClick={() => {
-                if (disabled) return;
-                beginBrightnessEdit(safeValues.brightness);
-              }}
-            >
-              {brightnessEdit.isEditing && !disabled ? (
-                <TextField
-                  value={brightnessEdit.value}
-                  size="small"
-                  variant="standard"
-                  inputProps={{
-                    inputMode: 'numeric',
-                    pattern: '[0-9]*',
-                    style: { textAlign: 'center', fontWeight: 700, fontSize: 10, width: 26 },
-                  }}
-                  onChange={(e) => {
-                    const next = e.target.value.replace(/[^\d]/g, '');
-                    setBrightnessEdit((prev) => ({ ...prev, value: next }));
-                  }}
-                  onBlur={() => commitBrightnessEdit({ min: 0, max: 100 })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitBrightnessEdit({ min: 0, max: 100 });
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      cancelBrightnessEdit();
-                    }
-                  }}
-                />
-              ) : (
-                `${safeValues.brightness}%`
-              )}
-            </Typography>
+            {renderZoneBrightnessValue(safeValues.brightness, { min: 0, max: 100 })}
           </Box>
           <Box sx={{ position: 'relative', width: '85%', mt: 0.5, ml: { xs: 1, md: 2 } }}>
             <Slider

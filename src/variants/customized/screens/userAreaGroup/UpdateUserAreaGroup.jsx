@@ -137,7 +137,7 @@ const UpdateUserAreaGroup = () => {
                 setShowSnackbar(true);
                 // Refresh the area groups list before navigating back
                 dispatch(fetchAreaGroups());
-                setTimeout(() => navigate('/manage-area-groups'), 1500);
+                setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
             })
             .catch(() => {
                 setSnackbarMessage("Failed to delete area group. Please try again.");
@@ -199,7 +199,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to copy area group. Please try again.");
@@ -214,7 +214,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                     // Refresh the area groups list before navigating back
                     dispatch(fetchAreaGroups());
-                    setTimeout(() => navigate('/manage-area-groups'), 1500);
+                    setTimeout(() => navigate('/setting/manage-area-groups'), 1500);
                 })
                 .catch(() => {
                     setSnackbarMessage("Failed to update area group. Please try again.");
@@ -469,7 +469,7 @@ const UpdateUserAreaGroup = () => {
                         )}
                         <Button
                             variant="contained"
-                            onClick={() => navigate('/manage-area-groups')}
+                            onClick={() => navigate('/setting/manage-area-groups')}
                             sx={{ backgroundColor: 'buttonColor', color: '#fff' }}
                         >
                             Close

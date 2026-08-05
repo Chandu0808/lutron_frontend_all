@@ -28,6 +28,7 @@ export const settingsTitleTypographySx = {
   letterSpacing: 0.5,
   paddingTop: '18px',
   marginBottom: '16px',
+  color: '#fff',
 };
 
 /** Outer shell — matches Settings → Help (`help-container`). */

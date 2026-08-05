@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 // import AreaGroupFilter from "./AreaGroupFilter";
 // import { normalizeAreaGroupListPayload } from "utils/areaGroupListNormalize.js
@@ -27,10 +27,19 @@ import {
   Bar
 } from 'recharts'
 import { useSelector, useDispatch, useStore } from 'react-redux'
-import { UseAuth } from '../../customhooks/UseAuth'
+import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
 import { FileUpload as FileUploadIcon } from '@mui/icons-material';
 import { Box, useTheme, useMediaQuery, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Button, Grid } from '@mui/material'
 import { BaseUrl } from '../../BaseUrl'
+import { coalesceDashboardHttpGet } from '../../../../shared/dashboard/utils/coalesceDashboardHttpGet'
+import {
+  dispatchFetchAreaGroupsOnce,
+  dispatchFetchCustomGraphsOnce,
+  dispatchFetchFloorsOnce,
+  dispatchFetchProfileOnce,
+  dispatchFetchWidgetConfigurationOnce,
+  dispatchFetchWidgetTitlesOnce,
+} from '../../../../shared/utils/bootstrapFetchGuards'
 import {
   downloadOccupancyCount,
   downloadInstantOccupancyCount,
@@ -62,6 +71,11 @@ import {
   selectInstantOccupancyCountLoading,
   selectInstantOccupancyCountError,
   setSelectedAreas,
+  setCustomDateRange,
+  setCurrentDate,
+  setCurrentYear,
+  setSelectedDuration,
+  setIsNavigating,
   selectCurrentDate,
   selectCurrentYear,
   selectEmailLoading,
@@ -82,7 +96,22 @@ import {
   selectAreaGroups,
   selectAreaGroupsLoading,
   selectAreaGroupsError,
+  fetchDashboardChartOrder,
+  saveDashboardChartOrder,
+  selectDashboardChartOrder,
+  selectDashboardChartOrderStatus,
+  fetchWidgetConfiguration,
+  selectWidgetConfiguration,
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice'
+import {
+  applyVariantDashboardOrderBlob,
+  persistCustomizedLayoutAndBuildApiPayload,
+  DASHBOARD_ORDER_STORAGE_KEY,
+} from '../../../../shared/dashboard/container/dashboardLayoutApiSync'
+import {
+  pinWidgetFirstInOrder,
+  SPACE_COMBINED_WIDGET_KEY,
+} from '../../../../shared/dashboard/container/dashboardLayoutResolvers'
 import { fetchProfile } from '../../redux/slice/auth/userlogin'
 import { readBuiltinWidgetOverrides, normalizeBuiltinApiPath } from '../../utils/builtinWidgetOverrides'
 import { buildAreaGroupIdNameMap, resolveOccupancyGroupDisplayName } from '../../utils/areaGroupNameLookup'
@@ -95,6 +124,12 @@ import {
   getEffectiveBuiltinDashboardPage,
   ENERGY_BUILTIN_KEYS,
 } from '../../utils/builtinWidgetDashboardPage'
+import {
+  parseCustomizedWidgetVisibilityRoot,
+  CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY,
+  hydrateCustomizedVisibilityFromApiItems,
+} from '../../utils/customizedOverviewWidgetVisibility'
+import { resolveCustomizedSpaceWidgetVisible } from '../../../../shared/dashboard/container/hooks/widgetVisibilityResolvers'
 import CustomGroupScopeTooltip, { buildAreaNameToGroupNameMap } from '../../components/charts/CustomGroupScopeTooltip'
 import { DASHBOARD_CHART_PLOT_BACKGROUND } from '../../utils/dashboardChartPlotSurface'
 import { SHOW_SPACE_UTILIZATION_LINE_CHART } from '../../utils/dashboardLanding'
@@ -110,26 +145,6 @@ import { readCustomGraphScopeDraft } from '../../utils/mergeCustomGraphScopeInto
 import { buildMixedWidgetEnergyFloorBuckets, buildFloorBucketsFromSelectedAreaIds } from '../../utils/aggregateEnergyConsumptionByFloorScope'
 import { mergeLeafPayloadIntoAreaFloorMap } from '../../utils/mergeLeafPayloadIntoAreaFloorMap'
 import { normalizeDashboardFloorIds } from '../../utils/intersectDashboardGraphFloors'
-
-function extendDashboardFloorIdsWithWidgetAreaIds(dFloors, widgetScopeDraft, areaIdToFloorMap) {
-  const base = normalizeDashboardFloorIds(dFloors)
-  const m =
-    areaIdToFloorMap instanceof Map
-      ? areaIdToFloorMap
-      : new Map(Object.entries(areaIdToFloorMap || {}))
-  const extra = new Set()
-  for (const aid of widgetScopeDraft?.area_ids || []) {
-    const n =
-      typeof aid === 'number' && !Number.isNaN(aid) ? aid : parseInt(String(aid), 10)
-    if (!Number.isFinite(n)) continue
-    const f = m.get(n) ?? m.get(String(n))
-    const fn = Number(f)
-    if (Number.isFinite(fn)) extra.add(fn)
-  }
-  if (extra.size === 0) return base
-  return [...new Set([...base, ...extra])].sort((a, b) => a - b)
-}
-
 import { calculatePeakMinFromOccupancyPayload } from '../../../../shared/dashboard/charts/transforms/calculatePeakMinFromOccupancyPayload'
 import { formatPeakMinTimeLabel } from '../../../../shared/dashboard/charts/transforms/formatPeakMinTimeLabel'
 import {
@@ -149,7 +164,31 @@ import {
   renderCustomizedSpaceWidgetSlot,
   createCustomizedSpaceLayoutAdapterStyles,
 } from './customizedSpaceLayoutSlots'
+import {
+  BUILTIN_CHART_HEADER_ROW,
+  BUILTIN_COMPACT_PANEL,
+} from '../../utils/advancedBuiltinChartStyles'
 import { formatDateForState, parseDateFromState } from '../../../../shared/dashboard/utils/dashboardDateState'
+import DashboardDurationFilterBar from '../../../basic/screens/dashboard/DashboardDurationFilterBar'
+
+function extendDashboardFloorIdsWithWidgetAreaIds(dFloors, widgetScopeDraft, areaIdToFloorMap) {
+  const base = normalizeDashboardFloorIds(dFloors)
+  const m =
+    areaIdToFloorMap instanceof Map
+      ? areaIdToFloorMap
+      : new Map(Object.entries(areaIdToFloorMap || {}))
+  const extra = new Set()
+  for (const aid of widgetScopeDraft?.area_ids || []) {
+    const n =
+      typeof aid === 'number' && !Number.isNaN(aid) ? aid : parseInt(String(aid), 10)
+    if (!Number.isFinite(n)) continue
+    const f = m.get(n) ?? m.get(String(n))
+    const fn = Number(f)
+    if (Number.isFinite(fn)) extra.add(fn)
+  }
+  if (extra.size === 0) return base
+  return [...new Set([...base, ...extra])].sort((a, b) => a - b)
+}
 
 const ChartLoader = bindChartLoader('customized')
 
@@ -203,7 +242,7 @@ function getColorForName(name) {
   return DASHBOARD_PALETTE[index];
 }
 
-/** Same rule as built-in occupancy line chart: day → count; week/month/year → %; custom range → % if longer than one day. */
+/** Same rule as built-in occupancy line chart: day ? count; week/month/year ? %; custom range ? % if longer than one day. */
 function shouldShowOccupancyPercentageForCustomGraph(selectedDuration, customDateRange) {
   if (selectedDuration === 'this-day') {
     return false
@@ -259,7 +298,7 @@ function isTimeBased(rows) {
 /**
  * Peak/min strip on custom occupancy graphs: same rules as `calculatePeakMinFromChartData`.
  * Charts tab: prefer instant for instant paths (and occupancy for occupancy paths), then fall back to the
- * other series if the primary has no computable points — matches built-in widgets when one fetch is empty.
+ * other series if the primary has no computable points ? matches built-in widgets when one fetch is empty.
  * Space Utilization tab: primary series only. Falls back to `raw` if Redux is not yet available.
  */
 function peakMinForOccupancyCustomGraphCard(apiPathStr, raw, instantOccupancyCount, occupancyCount, showChartsTab) {
@@ -304,7 +343,7 @@ function peakMinForOccupancyCustomGraphCard(apiPathStr, raw, instantOccupancyCou
   return null
 }
 
-/** Manage Area Groups name tokens — used only by built-in Utilization by area list. */
+/** Manage Area Groups name tokens ? used only by built-in Utilization by area list. */
 function addBuiltInUtilizationAreaNameTokens(set, nameStr) {
   const raw = String(nameStr ?? '').trim().toLowerCase()
   if (!raw) return
@@ -463,7 +502,7 @@ function resolveBuiltInSpecialAreaGroupLabel(apiAreaName, areaGroups, areaTree, 
 const COLORS = SPACE_CHART_DEFAULT_COLORS
 
 /**
- * Isolated color picker portal — holds its own state so opening/closing it
+ * Isolated color picker portal ? holds its own state so opening/closing it
  * does NOT re-render SpaceUtilization or any chart component (prevents scroll-to-top).
  * Controlled imperatively via a ref: colorPickerRef.current.toggle(graphId, seriesName, x, y)
  */
@@ -495,7 +534,7 @@ const ColorPickerPortal = React.memo(React.forwardRef(function ColorPickerPortal
 
   return createPortal(
     <>
-      {/* Transparent backdrop — click anywhere outside to close */}
+      {/* Transparent backdrop ? click anywhere outside to close */}
       <div
         onClick={() => setState(null)}
         style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'transparent', cursor: 'default' }}
@@ -551,6 +590,13 @@ const SpaceUtilization = ({
   /** When set by Dashboard, custom graphs use the same `apiParams` as built-in chart thunks. `null` = wait / do not fetch. */
   dashboardApiParams,
 }) => {
+  const { role: spaceUtilUserRole } = UseAuth()
+  /** Superadmin may rearrange/resize Space cards; Admin/Operator see shared layout only. */
+  const spaceLayoutLocked = !isSuperadminRole(spaceUtilUserRole)
+  const dispatch = useDispatch()
+  const dashboardChartOrder = useSelector(selectDashboardChartOrder)
+  const dashboardChartOrderStatus = useSelector(selectDashboardChartOrderStatus)
+
   function SortableDashboardItem({
     id,
     disabled,
@@ -655,7 +701,7 @@ const SpaceUtilization = ({
                   cursor: 'pointer',
                 }}
               >
-                {span === 2 ? '½' : '↔'}
+                {span === 2 ? '?' : '?'}
               </button>
             ) : null}
             {showHeightToggle ? (
@@ -686,7 +732,7 @@ const SpaceUtilization = ({
                   cursor: 'pointer',
                 }}
               >
-                ↕
+                ?
               </button>
             ) : null}
           </div>
@@ -735,7 +781,7 @@ const SpaceUtilization = ({
                 backdropFilter: 'blur(6px)',
               }}
             >
-              ✕
+              ?
             </button>
             <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               {children}
@@ -748,9 +794,9 @@ const SpaceUtilization = ({
     )
   }
 
-  const dispatch = useDispatch()
   const store = useStore()
   const theme = useTheme()
+  const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
   const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'))
   const is2XLargeScreen = useMediaQuery('(min-width: 1600px)')
@@ -863,7 +909,7 @@ const SpaceUtilization = ({
       return raw ? JSON.parse(raw) : {};
     } catch { return {}; }
   });
-  // Ref to the isolated ColorPickerPortal — open/close without re-rendering SpaceUtilization
+  // Ref to the isolated ColorPickerPortal ? open/close without re-rendering SpaceUtilization
   const colorPickerRef = useRef(null);
 
   const getCustomColor = useCallback((graphId, seriesName) => {
@@ -940,7 +986,7 @@ const SpaceUtilization = ({
       Boolean(areaGroups?.user_area_groups?.length) ||
       Boolean(areaGroups?.special_area_groups?.length)
     if (!hasAnyGroups && !areaGroupsLoading && !areaGroupsError) {
-      dispatch(fetchAreaGroups())
+      dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups)
     }
   }, [dispatch, areaGroups, areaGroupsLoading, areaGroupsError])
 
@@ -1387,12 +1433,14 @@ const SpaceUtilization = ({
             // Sort floors by name to ensure consistent ordering
             rows.sort((a, b) => a.x.localeCompare(b.x))
 
-            // Inject metadata for categorical coloring and per-floor tooltips
-            r.__isPerFloorEnergyData = true
-            r.__perFloorTooltipTitles = rows.map((row) => row.tooltipTitle)
-            r['x-axis'] = rows.map((row) => row.x)
-
-            return { rows, seriesKeys: ['y'] }
+            // Do not mutate `r` ? payloads from Redux/Immer are often non-extensible
+            // (`Cannot add property __isPerFloorEnergyData`). Return flags with rows.
+            return {
+              rows,
+              seriesKeys: ['y'],
+              isPerFloorEnergyData: true,
+              perFloorTooltipTitles: rows.map((row) => row.tooltipTitle),
+            }
           }
           // For Pie and Circular charts, we want each area to be a distinct series/slice.
           const seriesKeys = []
@@ -1595,7 +1643,7 @@ const SpaceUtilization = ({
           >
             {(() => {
               if (!id) return <CenterMessage title="No data" />
-              if (isLoading) return <CenterMessage title="Loading…" subtitle="Fetching chart data" />
+              if (isLoading) return <CenterMessage title="Loading?" subtitle="Fetching chart data" />
               if (err) return <CenterMessage title="Error" subtitle={String(err)} />
               if (raw == null) return <CenterMessage title="No data" />
 
@@ -1604,7 +1652,17 @@ const SpaceUtilization = ({
                 const st = String(raw.status || raw.state || '').toLowerCase()
                 if (st === 'error') return <CenterMessage title="Error" subtitle={String(raw.message || raw.detail || 'Error')} />
 
-                const { rows, seriesKeys } = normalizeToXY(raw)
+                const {
+                  rows,
+                  seriesKeys,
+                  isPerFloorEnergyData: normalizedPerFloor = false,
+                  perFloorTooltipTitles: normalizedPerFloorTooltips,
+                } = normalizeToXY(raw)
+                const isPerFloorEnergyData =
+                  normalizedPerFloor === true || raw?.__isPerFloorEnergyData === true
+                const perFloorTooltipTitles = Array.isArray(normalizedPerFloorTooltips)
+                  ? normalizedPerFloorTooltips
+                  : raw?.__perFloorTooltipTitles
                 let effectiveRows = rows
                 let effectiveSeriesKeys = seriesKeys
 
@@ -1765,7 +1823,7 @@ const SpaceUtilization = ({
                         const val = Number(toNumberOrNull(r?.[sk])) || 0
                         const pct = totalValue > 0 ? (val / totalValue) * 100 : 0
                         const floorColor = getSeriesColor(id, String(r?.x ?? ''))
-                        const label = raw?.__isPerFloorEnergyData ? (raw?.__perFloorTooltipTitles?.[i] ?? String(r?.x ?? '')) : String(r?.x ?? '')
+                        const label = isPerFloorEnergyData ? (perFloorTooltipTitles?.[i] ?? String(r?.x ?? '')) : String(r?.x ?? '')
 
                         return (
                           <Box key={`${id}_row_${i}`} sx={{ mb: 2.5, position: 'relative' }}>
@@ -1897,12 +1955,12 @@ const SpaceUtilization = ({
 
                   // If multi-series, sum each series. If single series, sum y.
                   let slices = []
-                  if (raw?.__isPerFloorEnergyData && effectiveRows.length) {
+                  if (isPerFloorEnergyData && effectiveRows.length) {
                     const sk = (effectiveSeriesKeys && effectiveSeriesKeys.length) ? effectiveSeriesKeys[0] : 'y'
                     slices = effectiveRows.map((row, idx) => ({
                       name: row.x || `Item ${idx + 1}`,
                       value: Number(toNumberOrNull(row?.[sk])) || 0,
-                      tooltipTitle: raw.__perFloorTooltipTitles?.[idx]
+                      tooltipTitle: perFloorTooltipTitles?.[idx]
                     }))
                   } else if (effectiveRows.length && effectiveSeriesKeys.length && effectiveSeriesKeys[0] !== 'y') {
                     slices = effectiveSeriesKeys.map((k) => ({
@@ -2317,7 +2375,7 @@ const SpaceUtilization = ({
                                 fill={getSeriesColor(id, k)}
                                 hide={Boolean(focused) && String(k) !== String(focused)}
                               >
-                                {(raw?.__isPerFloorEnergyData || isCategoricalChart) && effectiveRows.map((entry, index) => (
+                                {(isPerFloorEnergyData || isCategoricalChart) && effectiveRows.map((entry, index) => (
                                   <Cell
                                     key={`cell-${index}`}
                                     fill={getSeriesColor(id, entry.x || index)}
@@ -2387,27 +2445,49 @@ const SpaceUtilization = ({
 
   const writeDashboardOrder = useCallback((nextOrder) => {
     try {
+      const order =
+        Array.isArray(nextOrder) && nextOrder.includes(SPACE_COMBINED_WIDGET_KEY)
+          ? pinWidgetFirstInOrder(nextOrder, SPACE_COMBINED_WIDGET_KEY)
+          : Array.isArray(nextOrder)
+            ? nextOrder
+            : []
       const raw = localStorage.getItem('dashboardOrder')
       const parsed = raw ? JSON.parse(raw) : {}
       const obj = parsed && typeof parsed === 'object' ? parsed : {}
-      obj.space = Array.isArray(nextOrder) ? nextOrder : []
+      obj.space = order
       localStorage.setItem('dashboardOrder', JSON.stringify(obj))
+      setSpaceCardOrder(order)
+      if (!spaceLayoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistCustomizedLayoutAndBuildApiPayload({ space: order })
+          )
+        )
+      }
     } catch {
       // ignore
     }
-  }, [])
+  }, [spaceLayoutLocked, dispatch])
 
   const writeDashboardSpan = useCallback((nextSpan) => {
     try {
       const raw = localStorage.getItem('dashboardOrder')
       const parsed = raw ? JSON.parse(raw) : {}
       const obj = parsed && typeof parsed === 'object' ? parsed : {}
-      obj.spaceSpan = nextSpan && typeof nextSpan === 'object' && !Array.isArray(nextSpan) ? nextSpan : {}
+      obj.spaceSpan =
+        nextSpan && typeof nextSpan === 'object' && !Array.isArray(nextSpan) ? nextSpan : {}
       localStorage.setItem('dashboardOrder', JSON.stringify(obj))
+      if (!spaceLayoutLocked && dispatch && saveDashboardChartOrder) {
+        dispatch(
+          saveDashboardChartOrder(
+            persistCustomizedLayoutAndBuildApiPayload({ spaceSpan: obj.spaceSpan })
+          )
+        )
+      }
     } catch {
       // ignore
     }
-  }, [])
+  }, [spaceLayoutLocked, dispatch])
 
   // Press & hold to start dragging (no Edit/Done toggle).
   // Touchpads often jitter a bit while holding, so use a larger tolerance + sane delay.
@@ -2421,6 +2501,27 @@ const SpaceUtilization = ({
     setSpaceCardOrder(readDashboardOrder())
     setSpaceCardSpan(readDashboardSpan())
   }, [readDashboardOrder, readDashboardSpan])
+
+  useEffect(() => {
+    dispatch(fetchDashboardChartOrder())
+  }, [dispatch])
+
+  useEffect(() => {
+    if (dashboardChartOrderStatus !== 'succeeded') return
+    const blob = dashboardChartOrder?.customized_dashboard_order
+    if (!blob || typeof blob !== 'object') return
+    const applied = applyVariantDashboardOrderBlob(DASHBOARD_ORDER_STORAGE_KEY, blob)
+    if (!applied) return
+    if (Array.isArray(applied.space)) {
+      const space = applied.space.includes(SPACE_COMBINED_WIDGET_KEY)
+        ? pinWidgetFirstInOrder(applied.space, SPACE_COMBINED_WIDGET_KEY)
+        : applied.space
+      setSpaceCardOrder(space)
+    }
+    if (applied.spaceSpan && typeof applied.spaceSpan === 'object') {
+      setSpaceCardSpan(applied.spaceSpan)
+    }
+  }, [dashboardChartOrder, dashboardChartOrderStatus])
 
   // userProfile/profileLoading moved above (avoid TDZ crash)
 
@@ -2448,10 +2549,8 @@ const SpaceUtilization = ({
 
   // Fetch floors on component mount
   useEffect(() => {
-    // if (floors.length === 0 && floorStatus !== 'loading') {
-    dispatch(fetchFloors())
-    // }
-  }, [dispatch])
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length))
+  }, [dispatch, floors?.length])
 
   // Fetch widget titles when missing; widgetList is usually { titles: [...] } after normalize
   useEffect(() => {
@@ -2463,23 +2562,25 @@ const SpaceUtilization = ({
         !Array.isArray(widgetList) &&
         !Array.isArray(widgetList.titles));
     if (needsFetch) {
-      dispatch(fetchRenameWidgets());
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets);
     }
   }, [dispatch, widgetList]);
 
   useEffect(() => {
-    const onWidgetTitlesUpdated = () => dispatch(fetchRenameWidgets());
+    const onWidgetTitlesUpdated = () =>
+      dispatchFetchWidgetTitlesOnce(dispatch, fetchRenameWidgets, { force: true });
     window.addEventListener('widgetTitlesUpdated', onWidgetTitlesUpdated);
     return () =>
       window.removeEventListener('widgetTitlesUpdated', onWidgetTitlesUpdated);
   }, [dispatch]);
 
   useEffect(() => {
-    dispatch(fetchCustomGraphs());
+    dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs);
   }, [dispatch]);
 
   useEffect(() => {
-    const onCustomGraphsUpdated = () => dispatch(fetchCustomGraphs());
+    const onCustomGraphsUpdated = () =>
+      dispatchFetchCustomGraphsOnce(dispatch, fetchCustomGraphs, { force: true });
     window.addEventListener('customGraphsUpdated', onCustomGraphsUpdated);
     return () =>
       window.removeEventListener('customGraphsUpdated', onCustomGraphsUpdated);
@@ -2517,7 +2618,7 @@ const SpaceUtilization = ({
         const loading = Boolean(s?.groupOccupancy?.areaGroupsLoading);
         if (!hasAny && !loading) {
           try {
-            await dispatch(fetchAreaGroups()).unwrap();
+            await dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups);
           } catch (e) {
             // If area groups fetch fails, proceed with request anyway (will likely show no data).
           }
@@ -2526,7 +2627,7 @@ const SpaceUtilization = ({
 
       // Use Dashboard `apiParams` when the parent has a ready object (same as built-in thunks).
       // When `apiParams` is still null (e.g. waiting for allAreasLoaded) or prop omitted, fall back to
-      // local date/selection so custom graphs still load — previous behavior before dashboardApiParams.
+      // local date/selection so custom graphs still load ? previous behavior before dashboardApiParams.
       const effectiveApiParams =
         dashboardApiParams != null
           ? dashboardApiParams
@@ -2663,7 +2764,7 @@ const SpaceUtilization = ({
                   floorIds: hasFloorId ? [Number(bucket.floorId)] : null,
                   groupIds: null,
                 })
-                const res = await BaseUrl.get(path, { params })
+                const res = await coalesceDashboardHttpGet(BaseUrl, path, { params })
                 const { label } = perFloorBucketAxisAndTooltipTitle(bucket, floorsList, displayMapCw)
                 const { xAxis, values } = extract(res.data)
                 return { label, xAxis, values }
@@ -2712,7 +2813,7 @@ const SpaceUtilization = ({
                 floorIds: hasFloorId ? [Number(bucket.floorId)] : null,
                 groupIds: null,
               })
-              const res = await BaseUrl.get(path, { params })
+              const res = await coalesceDashboardHttpGet(BaseUrl, path, { params })
               const { label, tooltipTitle } = perFloorBucketAxisAndTooltipTitle(
                 bucket,
                 floorsList,
@@ -2743,7 +2844,7 @@ const SpaceUtilization = ({
         }
       }
 
-      // Settings → Widgets scope (not built-in) for /dashboard/occupancy_count
+      // Settings ? Widgets scope (not built-in) for /dashboard/occupancy_count
       const isBuiltinOverrideGraph = String(id).startsWith('builtin_')
       if (
         !isBuiltinOverrideGraph &&
@@ -2893,7 +2994,7 @@ const SpaceUtilization = ({
                   floorIds: hasFloorId ? [Number(bucket.floorId)] : null,
                   groupIds: null,
                 })
-                const resWg = await BaseUrl.get(path, { params: paramsWg })
+                const resWg = await coalesceDashboardHttpGet(BaseUrl, path, { params: paramsWg })
                 const { label, tooltipTitle } = perFloorBucketAxisAndTooltipTitle(
                   bucket,
                   floorsList,
@@ -3015,7 +3116,7 @@ const SpaceUtilization = ({
                 floorIds: hasPartialAreas ? null : [entityId],
                 areaIds: !hasPartialAreas ? null : areasForThisEntity,
               })
-              const res = await BaseUrl.get(path, { params })
+              const res = await coalesceDashboardHttpGet(BaseUrl, path, { params })
               const label = getFloorDisplayLabel(floorsList, entityId)
               const { xAxis, values } = extract(res.data)
               return { label, xAxis, values }
@@ -3080,7 +3181,7 @@ const SpaceUtilization = ({
                 areaIds: (isPerFloor && !hasPartialAreas) ? null : areasForThisEntity,
               }
 
-            const res = await BaseUrl.get(path, { params })
+            const res = await coalesceDashboardHttpGet(BaseUrl, path, { params })
             const label = isPerFloor
               ? getFloorDisplayLabel(floorsList, entityId)
               : (resolveAreaNameFromTree(entityId, areaTree, floorsList) || `Area ${entityId}`)
@@ -3122,10 +3223,15 @@ const SpaceUtilization = ({
         // Use Redux thunk ONLY for built-in widgets to allow data sharing.
         // Custom (user-created) widgets fetch independently to avoid side-effects on built-ins.
         if (rule && isBuiltin) {
-          const arg = rule.mapArgs ? rule.mapArgs(mergedParams) : mergedParams
-          await dispatch(rule.thunk(arg)).unwrap()
-          const data = rule.select(store.getState())
-          setCustomGraphData((p) => ({ ...p, [id]: data }))
+          const existing = rule.select(store.getState())
+          if (existing != null) {
+            setCustomGraphData((p) => ({ ...p, [id]: existing }))
+          } else {
+            const arg = rule.mapArgs ? rule.mapArgs(mergedParams) : mergedParams
+            await dispatch(rule.thunk(arg)).unwrap()
+            const data = rule.select(store.getState())
+            setCustomGraphData((p) => ({ ...p, [id]: data }))
+          }
         } else {
           // Direct fetch for custom widgets or unmapped paths.
           const finalParams = { ...mergedParams }
@@ -3144,15 +3250,8 @@ const SpaceUtilization = ({
             }
           })
 
-          const res = await BaseUrl.get(path, { params: searchParams })
-          let payload = res.data
-          // Special case: adapt specific custom area group response if needed
-          if (
-            path.toLowerCase().includes('custom_area_group') &&
-            path.toLowerCase().includes('occupancy_and_energy')
-          ) {
-            payload = adaptCustomAreaGroupOccupancyEnergyResponse(res.data)
-          }
+          const res = await coalesceDashboardHttpGet(BaseUrl, path, { params: searchParams })
+          const payload = res.data
           setCustomGraphData((p) => ({ ...p, [id]: payload }))
         }
       }
@@ -3247,9 +3346,9 @@ const SpaceUtilization = ({
     fetchCustomGraphData,
   ])
 
-  // Fetch user profile on component mount
+  // Profile is owned by Topbar; join if already in flight
   useEffect(() => {
-    dispatch(fetchProfile())
+    dispatchFetchProfileOnce(dispatch, fetchProfile)
   }, [dispatch])
 
   // REMOVED: useEffect that was calling loadAllAreasFromAllFloors
@@ -3740,33 +3839,84 @@ const SpaceUtilization = ({
   const getNavigationButtonText = (direction) => {
     if (direction === 'previous') {
       switch (selectedDuration) {
-        case 'this-day': return '← Previous Day';
-        case 'this-week': return '← Previous Week';
-        case 'this-month': return '← Previous Month';
-        case 'this-year': return '← Previous Year';
-        default: return '← Previous';
+        case 'this-day': return '? Previous Day';
+        case 'this-week': return '? Previous Week';
+        case 'this-month': return '? Previous Month';
+        case 'this-year': return '? Previous Year';
+        default: return '? Previous';
       }
     } else {
       switch (selectedDuration) {
-        case 'this-day': return 'Next Day →';
-        case 'this-week': return 'Next Week →';
-        case 'this-month': return 'Next Month →';
-        case 'this-year': return 'Next Year →';
-        default: return 'Next →';
+        case 'this-day': return 'Next Day ?';
+        case 'this-week': return 'Next Week ?';
+        case 'this-month': return 'Next Month ?';
+        case 'this-year': return 'Next Year ?';
+        default: return 'Next ?';
       }
     }
   };
 
+  const handleSpaceChartsDurationChange = useCallback(
+    (e) => {
+      e.stopPropagation();
+      const newDuration = e.target.value;
+      if (!newDuration || newDuration === selectedDuration) return;
+      const today = new Date();
+      dispatch(setCurrentDate(formatDateForState(today)));
+      dispatch(setCurrentYear(today.getFullYear()));
+      dispatch(setCustomDateRange({ startDate: null, endDate: null }));
+      dispatch(setIsNavigating(false));
+      dispatch(setSelectedDuration(newDuration));
+    },
+    [dispatch, selectedDuration]
+  );
+
+  const spaceChartsDurationFilterElement = useMemo(
+    () => (
+      <DashboardDurationFilterBar
+        selectedDuration={selectedDuration}
+        onDurationChange={handleSpaceChartsDurationChange}
+        customDateRange={customDateRange}
+        onCustomStartDateChange={(startDate) =>
+          dispatch(
+            setCustomDateRange({
+              startDate,
+              endDate: (customDateRange.endDate || '').split('T')[0],
+            })
+          )
+        }
+        onCustomEndDateChange={(endDate) =>
+          dispatch(
+            setCustomDateRange({
+              startDate: (customDateRange.startDate || '').split('T')[0],
+              endDate,
+            })
+          )
+        }
+        globalLoading={globalLoading}
+        periodLabel={getCurrentPeriodText()}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        isLargeScreen={isLargeScreen}
+        isMediumScreen={isMediumScreen}
+      />
+    ),
+    [
+      selectedDuration,
+      handleSpaceChartsDurationChange,
+      customDateRange,
+      dispatch,
+      globalLoading,
+      getCurrentPeriodText,
+      handlePrevious,
+      handleNext,
+      isLargeScreen,
+      isMediumScreen,
+    ]
+  );
+
   // Helper function to get widget titles from rename settings
-  const parseWidgetVisibilityFromLocalStorage = () => {
-    try {
-      const raw = localStorage.getItem("widgetVisibility");
-      const obj = raw ? JSON.parse(raw) : null;
-      return obj && typeof obj === "object" ? obj : {};
-    } catch {
-      return {};
-    }
-  };
+  const parseWidgetVisibilityFromLocalStorage = () => parseCustomizedWidgetVisibilityRoot();
 
   const [widgetVisibility, setWidgetVisibility] = useState(() =>
     parseWidgetVisibilityFromLocalStorage()
@@ -3781,7 +3931,7 @@ const SpaceUtilization = ({
 
     const onCustomEvent = () => refreshFromStorage();
     const onStorage = (e) => {
-      if (!e || e.key === "widgetVisibility") refreshFromStorage();
+      if (!e || e.key === CUSTOMIZED_WIDGET_VISIBILITY_STORAGE_KEY) refreshFromStorage();
     };
 
     window.addEventListener("widgetVisibilityUpdated", onCustomEvent);
@@ -3792,45 +3942,53 @@ const SpaceUtilization = ({
     };
   }, []);
 
+  // Load DB visibility for customized (source of truth) into local cache.
+  // Share once-guard with Dashboard so configuration is not fetched twice.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const action = await dispatchFetchWidgetConfigurationOnce(
+          dispatch,
+          fetchWidgetConfiguration
+        );
+        if (cancelled) return;
+        let items = null;
+        if (action && fetchWidgetConfiguration.fulfilled.match(action)) {
+          items = action.payload;
+        } else {
+          items = selectWidgetConfiguration(store.getState());
+        }
+        if (!Array.isArray(items) || items.length === 0) return;
+        const root = hydrateCustomizedVisibilityFromApiItems(items);
+        if (!root || cancelled) return;
+        setWidgetVisibility(root);
+        window.dispatchEvent(new CustomEvent('widgetVisibilityUpdated'));
+      } catch {
+        /* keep local cache */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, store]);
+
   useEffect(() => {
     const onPage = () => setBuiltinDashboardPageTick((t) => t + 1);
     window.addEventListener("builtinWidgetDashboardPageUpdated", onPage);
     return () => window.removeEventListener("builtinWidgetDashboardPageUpdated", onPage);
   }, []);
 
-  const shouldShowWidget = (widgetKey) => {
-    // Match advanced: Utilization line chart is off by default in customized (see dashboardLanding.js).
-    if (widgetKey === 'utilization' && !SHOW_SPACE_UTILIZATION_LINE_CHART) {
-      return false;
-    }
-
-    const spaceMap = widgetVisibility?.space;
-    const energyMap = widgetVisibility?.energy;
-    const hasSpaceMap =
-      spaceMap && typeof spaceMap === "object" && Object.keys(spaceMap).length > 0;
-    const hasEnergyMap =
-      energyMap && typeof energyMap === "object" && Object.keys(energyMap).length > 0;
-
-    // No saved prefs at all => show all charts (matches Energy when both maps absent).
-    // If only Energy prefs exist (no space map), do not show every Space chart by default.
-    if (!hasSpaceMap) {
-      if (!hasEnergyMap) return true;
-      return false;
-    }
-
-    // Custom graphs: default to visible unless explicitly disabled.
-    if (String(widgetKey).startsWith("custom_graph:")) {
-      return spaceMap?.[widgetKey] !== false;
-    }
-
-    // Built-in widgets assigned to Space in settings should not appear here when marked for Energy.
-    if (getEffectiveBuiltinDashboardPage(widgetKey) === "energy") {
-      return false;
-    }
-
-    // When a spaceMap exists (user made selections), only show widgets explicitly enabled.
-    return spaceMap?.[widgetKey] === true;
-  };
+  const shouldShowWidget = useCallback(
+    (widgetKey) =>
+      resolveCustomizedSpaceWidgetVisible(
+        widgetKey,
+        widgetVisibility,
+        getEffectiveBuiltinDashboardPage,
+        { showUtilizationLineChart: SHOW_SPACE_UTILIZATION_LINE_CHART }
+      ),
+    [widgetVisibility]
+  );
 
   const spaceCustomGraphs = useMemo(() => {
     const list = Array.isArray(customGraphs) ? customGraphs : []
@@ -3846,6 +4004,7 @@ const SpaceUtilization = ({
   const spaceVisibleCardIds = useMemo(() => {
     if (!showChartsTab) return []
     const ids = []
+    if (shouldShowWidget('instant_utilization_combined')) ids.push('instant_utilization_combined')
     if (shouldShowWidget('utilization')) ids.push('utilization')
     if (shouldShowWidget('instant_occupancy_count')) ids.push('instant_occupancy_count')
     if (shouldShowWidget('utilization_by_area_group')) ids.push('utilization_by_area_group')
@@ -3867,12 +4026,48 @@ const SpaceUtilization = ({
   const spaceMergedOrder = useMemo(() => {
     const currentOrder = Array.isArray(spaceCardOrder) ? spaceCardOrder : []
     const visible = Array.isArray(spaceVisibleCardIds) ? spaceVisibleCardIds : []
-    return [...currentOrder.filter((k) => visible.includes(k)), ...visible.filter((k) => !currentOrder.includes(k))]
+    const merged = [
+      ...currentOrder.filter((k) => visible.includes(k)),
+      ...visible.filter((k) => !currentOrder.includes(k)),
+    ]
+    return visible.includes(SPACE_COMBINED_WIDGET_KEY)
+      ? pinWidgetFirstInOrder(merged, SPACE_COMBINED_WIDGET_KEY)
+      : merged
   }, [spaceCardOrder, spaceVisibleCardIds])
 
   useEffect(() => {
     spaceMergedOrderRef.current = spaceMergedOrder
   }, [spaceMergedOrder])
+
+  // When Space Combined is enabled, persist it first (Basic Energy parity).
+  useEffect(() => {
+    if (!spaceVisibleCardIds.includes(SPACE_COMBINED_WIDGET_KEY)) return
+    setSpaceCardOrder((prev) => {
+      const base = Array.isArray(prev) ? prev : []
+      const withCombined = base.includes(SPACE_COMBINED_WIDGET_KEY)
+        ? base
+        : [...base, SPACE_COMBINED_WIDGET_KEY]
+      const next = pinWidgetFirstInOrder(withCombined, SPACE_COMBINED_WIDGET_KEY)
+      if (JSON.stringify(next) === JSON.stringify(prev)) return prev
+      try {
+        const raw = localStorage.getItem('dashboardOrder')
+        const parsed = raw ? JSON.parse(raw) : {}
+        const obj = parsed && typeof parsed === 'object' ? parsed : {}
+        obj.space = next
+        localStorage.setItem('dashboardOrder', JSON.stringify(obj))
+        if (!spaceLayoutLocked && dispatch && saveDashboardChartOrder) {
+          dispatch(
+            saveDashboardChartOrder(
+              persistCustomizedLayoutAndBuildApiPayload({ space: next })
+            )
+          )
+        }
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [spaceVisibleCardIds, spaceLayoutLocked, dispatch])
 
   const getSpaceCardOrder = useCallback(
     (id) => {
@@ -3888,7 +4083,7 @@ const SpaceUtilization = ({
       if (raw === 2 || raw === '2') return 2
       if (raw === 1 || raw === '1') return 1
       // sensible defaults: these look best full-width
-      if (id === 'utilization' || id === 'instant_occupancy_count') return 2
+      if (id === 'utilization' || id === 'instant_occupancy_count' || id === 'instant_utilization_combined') return 2
       return 1
     },
     [spaceCardSpan]
@@ -3896,6 +4091,7 @@ const SpaceUtilization = ({
 
   const toggleSpaceCardSpan = useCallback(
     (id) => {
+      if (spaceLayoutLocked) return
       setSpaceCardSpan((prev) => {
         const next = { ...(prev && typeof prev === 'object' && !Array.isArray(prev) ? prev : {}) }
         const cur = next?.[id]
@@ -3905,7 +4101,7 @@ const SpaceUtilization = ({
         return next
       })
     },
-    [writeDashboardSpan]
+    [spaceLayoutLocked, writeDashboardSpan]
   )
 
   const getSpaceCardRowSpan = useCallback(() => 1, [])
@@ -4192,15 +4388,31 @@ const SpaceUtilization = ({
         renderCustomizedSpaceWidgetSlot(slotId, meta, layoutContext, {
           chartHeaderStyle,
           isLargeScreen,
+          isMediumScreen,
           getWidgetTitle,
           generateDynamicChartTitle,
           ExportDropdown,
           showExportDropdown,
           setShowExportDropdown,
+          exportLoading,
+          handleExport,
           theme,
+          spaceChartsDurationFilterElement,
+          shouldShowWidget,
         }),
     }),
-    [chartHeaderStyle, isLargeScreen, showExportDropdown, setShowExportDropdown, theme]
+    [
+      chartHeaderStyle,
+      isLargeScreen,
+      isMediumScreen,
+      showExportDropdown,
+      setShowExportDropdown,
+      exportLoading,
+      handleExport,
+      theme,
+      spaceChartsDurationFilterElement,
+      shouldShowWidget,
+    ]
   );
 
   return (
@@ -4238,7 +4450,7 @@ const SpaceUtilization = ({
         maxWidth: '100%'
       }}>
 
-      {/* Isolated color picker — renders in document.body via portal, never re-renders SpaceUtilization */}
+      {/* Isolated color picker ? renders in document.body via portal, never re-renders SpaceUtilization */}
       <ColorPickerPortal
         ref={colorPickerRef}
         getSeriesColor={getSeriesColor}
@@ -4298,6 +4510,7 @@ const SpaceUtilization = ({
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={(event) => {
+                if (spaceLayoutLocked) return
                 const activeId = String(event?.active?.id ?? '')
                 const overId = String(event?.over?.id ?? '')
                 if (!activeId || !overId || activeId === overId) return
@@ -4311,16 +4524,16 @@ const SpaceUtilization = ({
               }}
             >
               <SortableContext items={spaceMergedOrder} strategy={rectSortingStrategy}>
-                {/* Utilization line chart — hidden when SHOW_SPACE_UTILIZATION_LINE_CHART is false (advanced parity) */}
+                {/* Utilization line chart ? hidden when SHOW_SPACE_UTILIZATION_LINE_CHART is false (advanced parity) */}
                 {shouldShowWidget('utilization') && (
                   <SortableDashboardItem
                     id="utilization"
-                    disabled={false}
+                    disabled={spaceLayoutLocked}
                     order={getSpaceCardOrder('utilization')}
                     span={getSpaceCardSpan('utilization')}
-                    showSpanToggle={true}
+                    showSpanToggle={!spaceLayoutLocked}
                     onToggleSpan={toggleSpaceCardSpan}
-                    showHeightToggle={true}
+                    showHeightToggle={!spaceLayoutLocked}
                     isFullscreen={String(spaceFullscreenCardId || '') === 'utilization'}
                     onToggleFullscreen={toggleSpaceFullscreen}
                     rowSpan={getSpaceCardRowSpan('utilization')}
@@ -4461,16 +4674,55 @@ const SpaceUtilization = ({
                   </SortableDashboardItem>
                 )}
 
+                {shouldShowWidget('instant_utilization_combined') && (
+                  <SortableDashboardItem
+                    id="instant_utilization_combined"
+                    disabled={spaceLayoutLocked}
+                    order={getSpaceCardOrder('instant_utilization_combined')}
+                    span={getSpaceCardSpan('instant_utilization_combined')}
+                    showSpanToggle={false}
+                    onToggleSpan={toggleSpaceCardSpan}
+                    showHeightToggle={!spaceLayoutLocked}
+                    isFullscreen={String(spaceFullscreenCardId || '') === 'instant_utilization_combined'}
+                    onToggleFullscreen={toggleSpaceFullscreen}
+                    rowSpan={getSpaceCardRowSpan('instant_utilization_combined')}
+                  >
+                    {renderCustomizedSpaceWidgetSlot(
+                      'instant_utilization_combined',
+                      { widgetKey: 'instant_occupancy_count', selectorMode: 'active' },
+                      {
+                        widgetRenderContext: spaceWidgetRenderContext,
+                        selectorMode: 'active',
+                      },
+                      {
+                        chartHeaderStyle,
+                        isLargeScreen,
+                        isMediumScreen,
+                        getWidgetTitle,
+                        generateDynamicChartTitle,
+                        ExportDropdown,
+                        showExportDropdown,
+                        setShowExportDropdown,
+                        exportLoading,
+                        handleExport,
+                        theme,
+                        spaceChartsDurationFilterElement,
+                        shouldShowWidget,
+                      }
+                    )}
+                  </SortableDashboardItem>
+                )}
+
                 {/* Top Section: Instant Occupancy Count Chart */}
                 {shouldShowWidget('instant_occupancy_count') && (
                   <SortableDashboardItem
                     id="instant_occupancy_count"
-                    disabled={false}
+                    disabled={spaceLayoutLocked}
                     order={getSpaceCardOrder('instant_occupancy_count')}
                     span={getSpaceCardSpan('instant_occupancy_count')}
-                    showSpanToggle={true}
+                    showSpanToggle={!spaceLayoutLocked}
                     onToggleSpan={toggleSpaceCardSpan}
-                    showHeightToggle={true}
+                    showHeightToggle={!spaceLayoutLocked}
                     isFullscreen={String(spaceFullscreenCardId || '') === 'instant_occupancy_count'}
                     onToggleFullscreen={toggleSpaceFullscreen}
                     rowSpan={getSpaceCardRowSpan('instant_occupancy_count')}
@@ -4568,12 +4820,12 @@ const SpaceUtilization = ({
                     {shouldShowWidget('utilization_by_area_group') && (
                       <SortableDashboardItem
                         id="utilization_by_area_group"
-                        disabled={false}
+                        disabled={spaceLayoutLocked}
                         order={getSpaceCardOrder('utilization_by_area_group')}
                         span={getSpaceCardSpan('utilization_by_area_group')}
-                        showSpanToggle={true}
+                        showSpanToggle={!spaceLayoutLocked}
                         onToggleSpan={toggleSpaceCardSpan}
-                        showHeightToggle={true}
+                        showHeightToggle={!spaceLayoutLocked}
                         isFullscreen={String(spaceFullscreenCardId || '') === 'utilization_by_area_group'}
                         onToggleFullscreen={toggleSpaceFullscreen}
                         rowSpan={getSpaceCardRowSpan('utilization_by_area_group')}
@@ -4667,12 +4919,12 @@ const SpaceUtilization = ({
                     {shouldShowWidget('peak_and_minimum_utilization') && (
                       <SortableDashboardItem
                         id="peak_and_minimum_utilization"
-                        disabled={false}
+                        disabled={spaceLayoutLocked}
                         order={getSpaceCardOrder('peak_and_minimum_utilization')}
                         span={getSpaceCardSpan('peak_and_minimum_utilization')}
-                        showSpanToggle={true}
+                        showSpanToggle={!spaceLayoutLocked}
                         onToggleSpan={toggleSpaceCardSpan}
-                        showHeightToggle={true}
+                        showHeightToggle={!spaceLayoutLocked}
                         isFullscreen={String(spaceFullscreenCardId || '') === 'peak_and_minimum_utilization'}
                         onToggleFullscreen={toggleSpaceFullscreen}
                         rowSpan={getSpaceCardRowSpan('peak_and_minimum_utilization')}
@@ -4704,28 +4956,15 @@ const SpaceUtilization = ({
                             }
                           }}
                           sx={{
-                            // If the "neighbor" charts in this grid row are hidden by checkbox selection,
-                            // span full width to avoid an empty column.
                             gridColumn:
                               !shouldShowWidget('utilization_by_area_group') && !shouldShowWidget('utilization_by_area')
                                 ? { xs: '1 / -1', sm: '1 / -1', md: '1 / -1' }
                                 : undefined,
-                            backgroundColor: 'rgba(128, 120, 100, 0.6)',
-                            borderRadius: '8px',
-                            padding: { xs: 2, sm: 2.5, md: 3, lg: 4, xl: 5 },
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                            border: '1px solid #ccc',
+                            ...BUILTIN_COMPACT_PANEL,
                             minWidth: 0,
-                            height: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
+                            minHeight: 'unset',
                           }}>
-                          <Box sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: { xs: 1.5, sm: 2, md: 2.5, lg: 3, xl: 3.5 }
-                          }}>
+                          <Box sx={BUILTIN_CHART_HEADER_ROW}>
                             <Box component="h3" sx={chartHeaderStyle}>
                               {generateDynamicChartTitle(getWidgetTitle('peak_and_minimum_utilization', 'Peak & Minimum Utilization'))}
                             </Box>
@@ -4746,12 +4985,12 @@ const SpaceUtilization = ({
                     <>
                       <SortableDashboardItem
                         id="utilization_by_area"
-                        disabled={false}
+                        disabled={spaceLayoutLocked}
                         order={getSpaceCardOrder('utilization_by_area')}
                         span={getSpaceCardSpan('utilization_by_area')}
-                        showSpanToggle={true}
+                        showSpanToggle={!spaceLayoutLocked}
                         onToggleSpan={toggleSpaceCardSpan}
-                        showHeightToggle={true}
+                        showHeightToggle={!spaceLayoutLocked}
                         isFullscreen={String(spaceFullscreenCardId || '') === 'utilization_by_area'}
                         onToggleFullscreen={toggleSpaceFullscreen}
                         rowSpan={getSpaceCardRowSpan('utilization_by_area')}
@@ -4863,12 +5102,12 @@ const SpaceUtilization = ({
                     <SortableDashboardItem
                       key={key}
                       id={key}
-                      disabled={false}
+                      disabled={spaceLayoutLocked}
                       order={getSpaceCardOrder(key)}
                       span={getSpaceCardSpan(key)}
-                      showSpanToggle={true}
+                      showSpanToggle={!spaceLayoutLocked}
                       onToggleSpan={toggleSpaceCardSpan}
-                      showHeightToggle={true}
+                      showHeightToggle={!spaceLayoutLocked}
                       isFullscreen={String(spaceFullscreenCardId || '') === String(key)}
                       onToggleFullscreen={toggleSpaceFullscreen}
                       rowSpan={getSpaceCardRowSpan(key)}
@@ -4903,12 +5142,12 @@ const SpaceUtilization = ({
                     <SortableDashboardItem
                       key={widKey}
                       id={widKey}
-                      disabled={false}
+                      disabled={spaceLayoutLocked}
                       order={getSpaceCardOrder(widKey)}
                       span={getSpaceCardSpan(widKey)}
-                      showSpanToggle={true}
+                      showSpanToggle={!spaceLayoutLocked}
                       onToggleSpan={toggleSpaceCardSpan}
-                      showHeightToggle={true}
+                      showHeightToggle={!spaceLayoutLocked}
                       isFullscreen={String(spaceFullscreenCardId || '') === String(widKey)}
                       onToggleFullscreen={toggleSpaceFullscreen}
                       rowSpan={getSpaceCardRowSpan(widKey)}

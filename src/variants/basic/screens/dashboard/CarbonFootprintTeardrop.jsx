@@ -36,12 +36,13 @@ function CarbonFootprintTeardrop({ co2Kg }) {
         src={co2GreenIcon}
         alt="CO2 Icon"
         sx={{
-          width: 'min(92%, min(8rem, 42cqi, 46cqh))',
-          height: 'min(58%, min(8rem, 42cqi, 46cqh))',
+          width: 'min(92%, min(6.75rem, 36cqi, 40cqh))',
+          height: 'min(52%, min(6.75rem, 36cqi, 40cqh))',
           maxWidth: '100%',
           objectFit: 'contain',
-          flexShrink: 0,
-          mb: { xs: 0.50, sm: 0.1 },
+          flexShrink: 1,
+          minHeight: 0,
+          mb: { xs: 0.25, sm: 0.1 },
           userSelect: 'none',
         }}
       />
@@ -52,9 +53,10 @@ function CarbonFootprintTeardrop({ co2Kg }) {
         sx={{
           fontWeight: 700,
           color: VALUE_COLOR,
-          fontSize: 'clamp(1.5rem, 0.9rem + 4cqi, 2.1rem)',
+          fontSize: 'clamp(1.2rem, 0.75rem + 3.2cqi, 1.85rem)',
           lineHeight: 1.0,
           letterSpacing: '-0.02em',
+          flexShrink: 0,
         }}
       >
         {displayValue}

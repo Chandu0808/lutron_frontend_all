@@ -123,6 +123,8 @@ export function applyTheme4Preset(root, context = {}) {
   root.style.setProperty("--users-input-bg", "#ffffff");
   root.style.setProperty("--users-select-menu-bg", THEME_4_LIGHT_SECTION_BG);
   root.style.setProperty("--users-select-menu-hover", "rgba(64, 58, 49, 0.12)");
+  root.style.setProperty("--users-select-menu-checkbox-color", "rgba(44, 40, 32, 0.55)");
+  root.style.setProperty("--users-select-menu-checkbox-checked-color", THEME_4_BUTTON_SOLID);
   root.style.setProperty("--users-chip-bg", THEME_4_LIGHT_SECTION_BG);
   root.style.setProperty("--users-confirm-dialog-bg", THEME_4_LIGHT_PANEL_BG);
   root.style.setProperty("--users-border", "rgba(64, 58, 49, 0.28)");
@@ -130,6 +132,8 @@ export function applyTheme4Preset(root, context = {}) {
   root.style.setProperty("--area-groups-inner-bg", THEME_4_LIGHT_SECTION_BG);
   root.style.setProperty("--area-groups-chip-bg", THEME_4_LIGHT_SECTION_BG);
   root.style.setProperty("--area-groups-border", "rgba(64, 58, 49, 0.28)");
+  root.style.setProperty("--area-group-on-surface-text", THEME_4_LIGHT_SURFACE_TEXT);
+  root.style.setProperty("--area-group-inner-text", THEME_4_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--settings-form-section-bg", THEME_4_LIGHT_SECTION_BG);
   root.style.setProperty("--settings-form-control-bg", "#ffffff");
   root.style.setProperty("--settings-form-control-text", THEME_4_LIGHT_SURFACE_TEXT);

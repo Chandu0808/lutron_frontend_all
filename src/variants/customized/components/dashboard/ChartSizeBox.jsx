@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import { Resizable } from 're-resizable';
 import { useGraphSize } from '../../utils/useGraphSize';
 import { updateGraphSize } from '../../utils/graphSizesStore';
+import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth';
 
 function isFillParentHeight(height) {
   if (height === '100%' || height === 'auto') return true;
@@ -24,8 +25,11 @@ const ENABLE = {
 /**
  * Explicit size wrapper for ResponsiveContainer. Optional session-only resize
  * (sizes reset on full page reload when using in-memory graphSizesStore).
+ * Drag-resize is Superadmin-only; Admin/Operator see saved sizes but cannot change them.
  */
 export default function ChartSizeBox({ graphId, graph, sx, resizable = true, children }) {
+  const { role } = UseAuth();
+  const allowResize = Boolean(resizable) && isSuperadminRole(role);
   const parentRef = useRef(null);
   const defaults = useMemo(
     () => ({
@@ -66,14 +70,15 @@ export default function ChartSizeBox({ graphId, graph, sx, resizable = true, chi
 
   const onResizeStop = useCallback(
     (_e, _dir, el) => {
-      if (!graphId || !el) return;
+      if (!allowResize || !graphId || !el) return;
       updateGraphSize(graphId, el.offsetWidth, el.offsetHeight);
     },
-    [graphId]
+    [allowResize, graphId]
   );
 
   const onResizeStart = useCallback(
     (e, _dir, el) => {
+      if (!allowResize) return;
       if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
       // If the wrapper is currently using %/auto sizing, snap to pixel size at drag start
       // so resizing behaves predictably.
@@ -84,7 +89,7 @@ export default function ChartSizeBox({ graphId, graph, sx, resizable = true, chi
         updateGraphSize(graphId, w, h);
       }
     },
-    [graphId, size.width, size.height]
+    [allowResize, graphId, size.width, size.height]
   );
 
   const outerSx = {
@@ -112,7 +117,7 @@ export default function ChartSizeBox({ graphId, graph, sx, resizable = true, chi
     </Box>
   );
 
-  if (!resizable || !graphId) {
+  if (!allowResize || !graphId) {
     return (
       <Box
         ref={parentRef}
@@ -157,4 +162,3 @@ export default function ChartSizeBox({ graphId, graph, sx, resizable = true, chi
     </Box>
   );
 }
-

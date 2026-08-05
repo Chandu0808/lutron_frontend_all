@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
+  dispatchFetchFloorsOnce,
+  dispatchFetchApplicationThemeOnce,
+  dispatchFetchHeatMapThemeOnce,
+} from "../../../../shared/utils/bootstrapFetchGuards";
+import {
   Box,
   CircularProgress,
   IconButton,
@@ -25,7 +30,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import { configurePdfJsWorker, buildPdfDocumentFile } from "../../../../shared/pdf/floorPlanPdf";
 import { getPolygonRings, flattenAreaCoords } from '../../utils/floorplanCoordinates';
 import {
   fetchFloorMapData,
@@ -47,6 +53,7 @@ import {
   renameArea,
   refreshAllHeatmapData,
   selectHeatmapLoading,
+  selectHeatmapError,
   optimisticallyUpdateAreaStatus,
   selectHeatmapSearchTerm, // added
 } from '../../redux/slice/settingsslice/heatmap/HeatmapSlice';
@@ -90,14 +97,26 @@ import {
   getLightLevelFillColor,
   resolveLightModeFill,
 } from './heatmapLightStyles';
+import { isMapProcessorUnreachable } from '../../../../shared/heatmap/processorReachable';
 import {
   ZONE_CONTROL_CARD_WIDTH_SX,
   ZONE_CONTROL_SLIDER_WRAP_SX,
   HEATMAP_STATUS_PANEL_OVERFLOW_SX,
+  HEATMAP_SIDEBAR_STICKY_HEADER_SX,
   HEATMAP_SIDEBAR_MAIN_SCROLL_SX,
   HEATMAP_ZONES_SECTION_SX,
   HEATMAP_ZONES_LIST_SCROLL_SX,
+  HEATMAP_ZONES_LIST_PAGINATED_SX,
 } from './zoneControlCardLayout';
+import { normalizeHeatmapColor } from '../../../../shared/utils/normalizeHeatmapColor';
+import { buildBasicShadeSectionTheme } from './shadeControlTheme';
+import {
+  buildShadesUpdatePayload,
+  formatSidebarEnergyWatts,
+  parseShadeLevel,
+  resolveShadeZoneId,
+} from '../../../../utils/heatmapSidebarUtils';
+import HeatmapShadesPanel from '../../../../components/heatmap/HeatmapShadesPanel';
 
 
 const normalizeZoneType = (type) =>
@@ -112,31 +131,23 @@ const isWhitening = (type) => ["whitening", "whitetune"].includes(normalizeZoneT
 const isDimmed = (type) => normalizeZoneType(type) === "dimmed";
 const isSwitched = (type) => normalizeZoneType(type) === "switched";
 
+/** Sidebar zone list: always paginate 2 zones per page when more are available. */
+const SIDEBAR_ZONES_PER_PAGE = 2;
+
+const buildSidebarZonesToShow = (zones) => {
+  const list = zones || [];
+  const whiteTuneZones = list.filter((z) => isWhitening(z.type));
+  const dimmedZones = list.filter((z) => isDimmed(z.type));
+  const switchedZones = list.filter((z) => isSwitched(z.type));
+  return [...whiteTuneZones, ...dimmedZones, ...switchedZones];
+};
+
 
 // Add the missing TOP_PADDING constant
 const TOP_PADDING = 60; // Adjust this value based on your header height
 
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+configurePdfJsWorker();
 
-// #region agent log
-const __fitDebug = (location, message, data, hypothesisId) => {
-  try {
-    fetch('http://127.0.0.1:7894/ingest/3166fa2d-8968-40ed-a9aa-c3ba13ec3f5e', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '659c6c' },
-      body: JSON.stringify({
-        sessionId: '659c6c',
-        runId: 'fit-repro-1',
-        hypothesisId,
-        location,
-        message,
-        data,
-        timestamp: Date.now(),
-      }),
-    }).catch(() => { });
-  } catch (_) { }
-};
-// #endregion
 
 function toTitleCase(str) {
   return str.replace(/\w\S*/g, (txt) =>
@@ -166,6 +177,7 @@ const HeatMap = () => {
   const areaStatusLoading = useSelector(selectAreaStatusLoading);
   const areaStatusError = useSelector(selectAreaStatusError);
   const heatmapLoading = useSelector(selectHeatmapLoading);
+  const heatmapError = useSelector(selectHeatmapError);
   const searchTerm = useSelector(selectHeatmapSearchTerm); // added
   const activeAlerts = useSelector(selectAlerts); // added for alert indicators
 
@@ -321,14 +333,6 @@ const HeatMap = () => {
       height: Math.max(height, 200),
     };
 
-    // #region agent log
-    __fitDebug('HeatMap.jsx:getContainerDimensions', 'container dims', {
-      clientW: container.clientWidth,
-      clientH: container.clientHeight,
-      finalW: result.width,
-      finalH: result.height,
-    }, 'H4');
-    // #endregion
     return result;
   };
   const [selectedAreaId, setSelectedAreaId] = useState(null);
@@ -377,6 +381,16 @@ const HeatMap = () => {
   const buttonColor = appTheme?.application_theme?.button || '#232323'
   const whiteChrome = isWhiteAreaPickerChrome(contentColor);
   const settingsFormActionBlue = whiteChrome ? '#1565C0' : buttonColor;
+  const shadeSectionTheme = useMemo(
+    () =>
+      buildBasicShadeSectionTheme({
+        whiteChrome,
+        buttonColor,
+        contentColor,
+        settingsFormActionBlue,
+      }),
+    [whiteChrome, buttonColor, contentColor, settingsFormActionBlue]
+  );
 
   const [refreshing, setRefreshing] = useState(false);
   const layoutRef = useRef(null);
@@ -407,12 +421,10 @@ const HeatMap = () => {
     setContentBBox(null);
   }, [pdfUrl]);
 
-  // Ensure floors are loaded
+  // Ensure floors are loaded (once-guarded)
   useEffect(() => {
-    if (!floors || floors.length === 0) {
-      dispatch(fetchFloors());
-    }
-  }, [dispatch, floors]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   // Fetch active alerts on component mount
   useEffect(() => {
@@ -468,73 +480,31 @@ const HeatMap = () => {
   };
 
   const ZONES_PER_PAGE = getZonesPerPage();
-  const SHADES_PER_PAGE = isMobile ? 2 : isTablet ? 3 : 4;
-
-  const [shadesPage, setShadesPage] = useState(0);
 
   const shades = areaStatus?.zones?.filter(z => (z.type || '').toLowerCase() === 'shade') || [];
-  const pagedShades = shades.slice(shadesPage * SHADES_PER_PAGE, (shadesPage + 1) * SHADES_PER_PAGE);
 
   //heatmap api calling
   const heatMapTheme = useSelector(selectHeatMapTheme);
-  const normalizeColor = (color) => {
-    if (!color) {
-      return '#e88330'; // Default fallback
-    }
-
-    if (typeof color === 'string' && color.startsWith('hsl')) {
-      const [h, s, l] = color.match(/\d+/g).map(Number);
-      const hexColor = hslToHex(h, s, l);
-      return hexColor;
-    }
-
-    // Ensure it's a valid hex color
-    if (typeof color === 'string' && color.startsWith('#')) {
-      return color;
-    }
-
-    return '#e88330'; // Default fallback
-  };
-
-  const hslToHex = (h, s, l) => {
-    s /= 100;
-    l /= 100;
-    const c = (1 - Math.abs(2 * l - 1)) * s;
-    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-    const m = l - c / 2;
-    let r, g, b;
-    if (0 <= h && h < 60) [r, g, b] = [c, x, 0];
-    else if (60 <= h && h < 120) [r, g, b] = [x, c, 0];
-    else if (120 <= h && h < 180) [r, g, b] = [0, c, x];
-    else if (180 <= h && h < 240) [r, g, b] = [0, x, c];
-    else if (240 <= h && h < 300) [r, g, b] = [x, 0, c];
-    else[r, g, b] = [c, 0, x];
-    const toHex = n => {
-      const hex = Math.round((n + m) * 255).toString(16);
-      return hex.length === 1 ? '0' + hex : hex;
-    };
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-  };
-  const lightColor = normalizeColor(heatMapTheme?.application_theme?.light || '#f2ff00');
-  const occupancyColor = normalizeColor(heatMapTheme?.application_theme?.occupancy || '#ea3ebf');
-  const energyBaseColor = normalizeColor(heatMapTheme?.application_theme?.energy || '#a71ee6');
+  const lightColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.light || '#f2ff00');
+  const occupancyColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.occupancy || '#ea3ebf');
+  const energyBaseColor = normalizeHeatmapColor(heatMapTheme?.application_theme?.energy || '#a71ee6');
 
   // Monitor theme changes
   useEffect(() => {
     // Theme change handling
   }, [heatMapTheme, lightColor, occupancyColor, energyBaseColor]);
   useEffect(() => {
-    dispatch(fetchHeatMapTheme());
-    dispatch(fetchApplicationTheme());
+    dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
+    dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
   }, [dispatch]);
 
-  /** Sidebar Energy row — avoid showing "NaN W" when API sends non-numeric values */
-  const formatSidebarEnergyWatts = (v) => {
-    if (v === undefined || v === null || v === "") return "Unknown";
-    const n = typeof v === "number" ? v : Number(v);
-    if (!Number.isFinite(n)) return "Unknown";
-    return `${n.toFixed(1)} W`;
-  };
+  const lastFloorMapFloorIdRef = useRef(null);
+  const lastAreaStatusSnapshotRef = useRef({
+    areaId: null,
+    light: null,
+    occ: null,
+    scene: null,
+  });
 
   const applyButtonSx = {
     background: whiteChrome ? settingsFormActionBlue : '#222',
@@ -576,82 +546,57 @@ const HeatMap = () => {
     return Math.max(sw, sh) + 0.01;
   };
 
+  // Effect A — floor change only (do not re-hit light_status on mode switch)
   useEffect(() => {
     if (!selectedFloorId) return;
+    if (lastFloorMapFloorIdRef.current === selectedFloorId) return;
+    lastFloorMapFloorIdRef.current = selectedFloorId;
+    lastAreaStatusSnapshotRef.current = {
+      areaId: null,
+      light: null,
+      occ: null,
+      scene: null,
+    };
 
     setPdfLoaded(false);
     setPdfLoading(true);
     setFilteredAreas([]);
+    setHasFit(false);
 
-    // Always fetch base floor map data first (includes PDF and coordinates)
     dispatch(fetchFloorMapData({ floorId: selectedFloorId }))
-      .then(() => {
-        // Fetch boundary values for all display modes to enable proper zoom fit-to-window
-        BaseUrl.get(`/floor/light_status?floor_id=${selectedFloorId}`)
-          .then(response => {
-            if (response.data.status === 'success' && response.data.boundary_values) {
-              setBoundaryValues(response.data.boundary_values);
-            } else {
-              setBoundaryValues(null);
-            }
-          })
-          .catch((error) => {
-            // Silently handle expected errors:
-            // - 403 Forbidden (permission denied for operators)
-            // - 401 Unauthorized (authentication issues)
-            // - "No valid authentication token" (token expired or missing)
-            const isExpectedError =
-              error.response?.status === 403 ||
-              error.response?.status === 401 ||
-              error.message?.includes('authentication token') ||
-              error.message?.includes('No valid authentication token');
-
-            // Only log unexpected errors in development
-            if (!isExpectedError && process.env.NODE_ENV === 'development') {
-              console.warn('Failed to fetch boundary values:', error.message);
-            }
-            setBoundaryValues(null);
-          });
-
-        // Then fetch mode-specific data
-        if (displayMode === "Light") {
-          setPdfLoading(false);
-        } else if (displayMode === "Occupancy") {
-          dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }))
-            .then(() => {
-              setPdfLoading(false);
-            })
-            .catch((error) => {
-              setPdfLoading(false);
-            });
-        } else if (displayMode === "Energy") {
-          dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }))
-            .then(() => {
-              setPdfLoading(false);
-            })
-            .catch((error) => {
-              setPdfLoading(false);
-            });
+      .then((action) => {
+        const bv = action?.payload?.boundary_values;
+        if (action?.meta?.requestStatus === 'fulfilled' && bv) {
+          setBoundaryValues(bv);
+        } else {
+          setBoundaryValues(null);
         }
+        setPdfLoading(false);
       })
-      .catch((error) => {
+      .catch(() => {
         setPdfLoading(false);
       });
+  }, [dispatch, selectedFloorId]);
 
-    setHasFit(false);
+  // Effect B — mode-specific data only (occupancy / energy)
+  useEffect(() => {
+    if (!selectedFloorId) return;
+    if (displayMode === "Occupancy") {
+      dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
+    } else if (displayMode === "Energy") {
+      dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
+    }
   }, [dispatch, selectedFloorId, displayMode]);
 
-  // Calculate available height so the heatmap column fits the viewport exactly
+  // Sidebar / heatmap column height = remaining viewport below this layout
+  // (do not subtract header again; `top` already accounts for it).
+  // Reserve space so the bottom legend bar ("Light: …", Create Area Group) stays visible above the app footer.
   useEffect(() => {
     const recalc = () => {
       if (!layoutRef.current) return;
       const top = layoutRef.current.getBoundingClientRect().top;
-      // Use full viewport height minus the top offset to prevent scrolling
-      // Account for header height, footer height, and small padding
-      const headerHeight = 60; // Adjust based on your header height
-      const footerHeight = 40; // Further reduced footer height
-      const padding = 10; // Further reduced padding for better space utilization
-      const h = Math.max(0, window.innerHeight - top - headerHeight - footerHeight - padding);
+      const footerReserve = 36;
+      const h = Math.max(240, Math.floor(window.innerHeight - top - footerReserve));
       setAvailableHeight(h);
     };
     recalc();
@@ -788,20 +733,6 @@ const HeatMap = () => {
     // Ensure minimum scale
     fitScale = Number.isFinite(fitScale) ? Math.max(0.1, fitScale) : 1.0;
 
-    // #region agent log
-    __fitDebug('HeatMap.jsx:calculateConsistentScale', 'scale calc', {
-      cw, ch,
-      viewW, viewH,
-      scaleX, scaleY,
-      source: hasValidContentBBox ? 'contentBBox' : hasValidBoundary ? 'boundary' : 'pageDims',
-      hasValidContentBBox,
-      hasValidBoundary,
-      contentBBox: contentBBox ? { minX: contentBBox.minX, minY: contentBBox.minY, w: contentBBox.width, h: contentBBox.height } : null,
-      boundaryValues,
-      pageDims,
-      fitScale,
-    }, 'H2_H3_H4');
-    // #endregion
     return fitScale;
   };
 
@@ -826,23 +757,8 @@ const HeatMap = () => {
     setPan(fitPan);
     setHasFit(true);
     setDefaultFitScale(consistentScale);
-    // #region agent log
-    __fitDebug('HeatMap.jsx:applyFitToScreen', 'fit applied', {
-      force,
-      consistentScale,
-      fitPan,
-      pageDims,
-    }, 'H1_H5');
-    // #endregion
   };
 
-  // #region agent log
-  useEffect(() => {
-    __fitDebug('HeatMap.jsx:scaleOrPanChanged', 'scale/pan state changed', {
-      scale, pan, isDragging, dragStart,
-    }, 'H5');
-  }, [scale, pan, isDragging, dragStart]);
-  // #endregion
 
   useEffect(() => {
     if (!containerRef.current || !pageDims || typeof ResizeObserver === 'undefined') return;
@@ -1150,23 +1066,13 @@ const HeatMap = () => {
     if (!highlightedFofpZone || !areaStatus?.zones?.length) return;
     if (Number(areaStatus.area_id) !== Number(highlightedFofpZone.areaId)) return;
 
-    let zonesPerPageForFofp = ZONES_PER_PAGE;
-    if (is1440Screen || isUltraWide || is2560Screen) {
-      zonesPerPageForFofp = 4;
-    } else {
-      zonesPerPageForFofp = 2;
-    }
-
     const idx = findFofpZoneIndexInPanelList(areaStatus.zones, highlightedFofpZone);
     if (idx >= 0) {
-      setZonePage(Math.floor(idx / zonesPerPageForFofp));
+      setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
     }
   }, [
     areaStatus,
     highlightedFofpZone,
-    is1440Screen,
-    isUltraWide,
-    is2560Screen,
     ZONES_PER_PAGE,
   ]);
 
@@ -1178,11 +1084,9 @@ const HeatMap = () => {
     if (areaStatus && areaStatus.zones) {
       setShadesLocalValues(
         shades.reduce((acc, shade) => {
-          let val = shade.level;
-          if (typeof val === "string" && val.endsWith("%")) val = parseInt(val);
-          if (typeof val === "string") val = parseInt(val);
-          if (typeof val !== "number" || isNaN(val)) val = 0;
-          acc[shade.id] = Math.round(val); // Round to whole number
+          const zoneId = resolveShadeZoneId(shade);
+          if (zoneId == null) return acc;
+          acc[zoneId] = parseShadeLevel(shade.level);
           return acc;
         }, {})
       );
@@ -1195,26 +1099,11 @@ const HeatMap = () => {
 
   // Compute crop bbox from all area coordinates (trim PDF outer whitespace)
   useEffect(() => {
-    const areaSamples = (heatmapData.areas || []).slice(0, 3).map(area => ({
-      id: area.area_id || area.id,
-      name: area.name || area.area_name,
-      keys: Object.keys(area || {}),
-      coordinatesLength: Array.isArray(area.coordinates) ? area.coordinates.length : null,
-      ringsLength: getPolygonRings(area).length,
-      flattenedLength: flattenAreaCoords(area).length,
-    }));
     const all = (heatmapData.areas || [])
       .flatMap(a => flattenAreaCoords(a)
         .filter(pt => typeof pt?.x === 'number' && typeof pt?.y === 'number'));
     if (!all.length) {
       setContentBBox(null);
-      // #region agent log
-      __fitDebug('HeatMap.jsx:contentBBoxEffect', 'no usable area.coordinates for bbox', {
-        areaCount: (heatmapData.areas || []).length,
-        areaSamples,
-        pageDims,
-      }, 'H6');
-      // #endregion
       return;
     }
     const raw = getPolygonBoundingBox(all);
@@ -1228,35 +1117,51 @@ const HeatMap = () => {
     const maxY = Math.min(maxHeight, raw.maxY + pad);
     const newBBox = { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
     setContentBBox(newBBox);
-    // #region agent log
-    __fitDebug('HeatMap.jsx:contentBBoxEffect', 'contentBBox computed', {
-      raw,
-      pad,
-      maxWidth,
-      maxHeight,
-      newBBox,
-      areaCount: (heatmapData.areas || []).length,
-      pointCount: all.length,
-    }, 'H2_H3');
-    // #endregion
   }, [heatmapData.areas, pageDims]);
 
+  // Refresh floor mode data only after controls change status on the *same* area.
+  // Area click/select must not re-hit light_status / occupancy / energy.
   useEffect(() => {
-    if (areaStatus && areaStatus.area_id && selectedFloorId) {
-      const refreshMapData = async () => {
-        try {
-          await dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
-          await dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
-          await dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
-        } catch (error) {
-          // Failed to refresh map data
-        }
-      };
+    if (!areaStatus?.area_id || !selectedFloorId) return;
 
-      const timeoutId = setTimeout(refreshMapData, 1000);
-      return () => clearTimeout(timeoutId);
+    const prev = lastAreaStatusSnapshotRef.current;
+    const next = {
+      areaId: areaStatus.area_id,
+      light: areaStatus.light_status,
+      occ: areaStatus.occupancy_status,
+      scene: areaStatus.active_scene,
+    };
+
+    if (prev.areaId !== next.areaId) {
+      lastAreaStatusSnapshotRef.current = next;
+      return;
     }
-  }, [areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId]);
+
+    const statusChanged =
+      prev.light !== next.light ||
+      prev.occ !== next.occ ||
+      prev.scene !== next.scene;
+
+    lastAreaStatusSnapshotRef.current = next;
+    if (!statusChanged) return;
+
+    const refreshMapData = async () => {
+      try {
+        if (displayMode === "Occupancy") {
+          await dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
+        } else if (displayMode === "Energy") {
+          await dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
+        } else {
+          await dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
+        }
+      } catch (error) {
+        // Failed to refresh map data
+      }
+    };
+
+    const timeoutId = setTimeout(refreshMapData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [areaStatus?.area_id, areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId, displayMode]);
 
   const handleZoom = (direction) => {
     setScale((prev) => {
@@ -1264,16 +1169,6 @@ const HeatMap = () => {
       const minScale = isTablet ? MIN_SCALE_TABLET : is2560Screen ? 0.05 : MIN_SCALE;
       const cap = Math.max(MAX_SCALE, getDynamicMaxScale());
       next = Math.max(minScale, Math.min(next, cap));
-      // #region agent log
-      __fitDebug('HeatMap.jsx:handleZoom', 'zoom button changed scale', {
-        direction,
-        prev,
-        next,
-        minScale,
-        cap,
-        SCALE_STEP,
-      }, 'H9');
-      // #endregion
       return next;
     });
   };
@@ -1295,25 +1190,9 @@ const HeatMap = () => {
   };
 
   const handleFit = () => {
-    // #region agent log
-    __fitDebug('HeatMap.jsx:handleFit', 'fit button pressed', {
-      pageDims,
-      scaleNow: scale,
-      panNow: pan,
-      hasFit,
-    }, 'H1_H2_H5');
-    // #endregion
     applyFitToScreen({ force: true });
   };
   const handleFitButtonClick = () => {
-    // #region agent log
-    __fitDebug('HeatMap.jsx:fitIconButton', 'fit icon button click received', {
-      pageDims,
-      scale,
-      pan,
-      contentBBox: contentBBox ? { minX: contentBBox.minX, minY: contentBBox.minY, w: contentBBox.width, h: contentBBox.height } : null,
-    }, 'H7');
-    // #endregion
     handleFit();
   };
   const getCentroid = (pts) => {
@@ -1348,6 +1227,10 @@ const HeatMap = () => {
   };
 
   const getFill = (area) => {
+    // Offline processor: leave PDF visible (no heat overlay) until area click shows message
+    if (isMapProcessorUnreachable(area)) {
+      return 'transparent';
+    }
     if (displayMode === 'Occupancy') {
       const occ = (area.occupancy_status || '').toLowerCase().trim();
       if (occ === 'occupied') {
@@ -1423,17 +1306,8 @@ const HeatMap = () => {
       return;
     }
 
+    // Area panel only — floor map already loaded by floor effect; do not re-hit light_status
     dispatch(fetchAreaStatus(area.area_id));
-
-    if (selectedFloorId) {
-      if (displayMode === "Light") {
-        dispatch(fetchFloorMapData({ floorId: selectedFloorId }));
-      } else if (displayMode === "Occupancy") {
-        dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
-      } else if (displayMode === "Energy") {
-        dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
-      }
-    }
   };
 
 
@@ -1444,12 +1318,16 @@ const HeatMap = () => {
   const refreshAllData = async () => {
     if (!areaStatus?.area_id || !areaStatus?.floor_id) return;
 
-    await Promise.all([
-      dispatch(fetchAreaStatus(areaStatus.area_id)),
-      dispatch(fetchFloorMapData({ floorId: areaStatus.floor_id })),
-      dispatch(fetchAreaEnergyConsumption({ floorId: areaStatus.floor_id })),
-      dispatch(fetchAreaOccupancyStatus({ floorId: areaStatus.floor_id }))
-    ]);
+    const floorId = areaStatus.floor_id;
+    const tasks = [dispatch(fetchAreaStatus(areaStatus.area_id))];
+    if (displayMode === "Occupancy") {
+      tasks.push(dispatch(fetchAreaOccupancyStatus({ floorId })));
+    } else if (displayMode === "Energy") {
+      tasks.push(dispatch(fetchAreaEnergyConsumption({ floorId })));
+    } else {
+      tasks.push(dispatch(fetchFloorMapData({ floorId })));
+    }
+    await Promise.all(tasks);
   };
 
   const refreshAllDataAndMap = async () => {
@@ -1458,7 +1336,8 @@ const HeatMap = () => {
     try {
       await dispatch(refreshAllHeatmapData({
         floorId: selectedFloorId,
-        areaId: areaStatus?.area_id || null
+        areaId: areaStatus?.area_id || null,
+        displayMode,
       })).unwrap();
     } catch (error) {
       // Failed to refresh heatmap data
@@ -1549,9 +1428,9 @@ const HeatMap = () => {
 
     setZoneUpdating(true);
 
-    // Only get zones that have been modified (have local values different from initial)
-    const zonesToUpdate = areaStatus.zones
-      .slice(zonePage * ZONES_PER_PAGE, (zonePage + 1) * ZONES_PER_PAGE)
+    // Only get zones on the current sidebar page that have been modified
+    const zonesToUpdate = buildSidebarZonesToShow(areaStatus.zones)
+      .slice(zonePage * SIDEBAR_ZONES_PER_PAGE, (zonePage + 1) * SIDEBAR_ZONES_PER_PAGE)
       .filter(zone => {
         const localValues = zoneLocalValues[zone.id];
         const initialValues = initialZoneValues[zone.id];
@@ -1757,7 +1636,9 @@ const HeatMap = () => {
   const handleShadesPreset = (percent) => {
     setShadesLocalValues(
       shades.reduce((acc, shade) => {
-        acc[shade.id] = percent;
+        const zoneId = resolveShadeZoneId(shade);
+        if (zoneId == null) return acc;
+        acc[zoneId] = percent;
         return acc;
       }, {})
     );
@@ -1771,34 +1652,7 @@ const HeatMap = () => {
 
     setShadesUpdating(true);
     try {
-      // Only get shades that have been modified (have local values different from original)
-      const shadesToUpdate = Object.entries(shadesLocalValues)
-        .filter(([id, position]) => {
-          const shade = shades.find(s => s.id === id);
-          if (!shade) return false;
-
-          // Get original level value
-          let originalLevel = shade.level;
-          if (typeof originalLevel === "string" && originalLevel.endsWith("%")) {
-            originalLevel = parseInt(originalLevel);
-          }
-          if (typeof originalLevel === "string") {
-            originalLevel = parseInt(originalLevel);
-          }
-          if (typeof originalLevel !== "number" || isNaN(originalLevel)) {
-            originalLevel = 0;
-          }
-
-          // Check if the position has actually changed
-          return Math.round(position) !== Math.round(originalLevel);
-        })
-        .map(([id, position]) => ({
-          zone_id: id,
-          zone_type: "Shade",
-          level: position
-        }));
-
-      // Only proceed if there are actually changes to apply
+      const shadesToUpdate = buildShadesUpdatePayload(shades, shadesLocalValues);
       if (shadesToUpdate.length === 0) {
         setShadesUpdating(false);
         return;
@@ -1819,25 +1673,20 @@ const HeatMap = () => {
     }
   };
 
-  const switchedZones = areaStatus?.zones?.filter(z => isSwitched(z.type)) || [];
-  const whiteTuneZones = areaStatus?.zones?.filter(z => isWhitening(z.type)) || [];
-  const dimmedZones = areaStatus?.zones?.filter(z => isDimmed(z.type)) || [];
+  const zonesToShow = buildSidebarZonesToShow(areaStatus?.zones);
+  const zonesPerPage = SIDEBAR_ZONES_PER_PAGE;
+  const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage) || 1;
+  const visibleSidebarZones = zonesToShow.slice(
+    zonePage * zonesPerPage,
+    (zonePage + 1) * zonesPerPage
+  );
 
-  // Show ALL reconciled zones on the sidebar:
-  // - CCT/WhiteTune first
-  // - then Dimmed
-  // - then Switched
-  // This ensures newly reconciled switching zones (e.g. SW_2/4) are visible outside the Edit Scene dialog.
-  const zonesToShow = [...whiteTuneZones, ...dimmedZones, ...switchedZones];
-
-  // Pagination: keep existing responsive behavior
-  let zonesPerPage = ZONES_PER_PAGE;
-  if (is1440Screen || isUltraWide || is2560Screen) {
-    zonesPerPage = 4;
-  } else {
-    zonesPerPage = 2;
-  }
-  const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage);
+  useEffect(() => {
+    const maxPage = Math.max(0, totalZonePages - 1);
+    if (zonePage > maxPage) {
+      setZonePage(maxPage);
+    }
+  }, [zonePage, totalZonePages]);
 
   const fofpOverlayConfig = useMemo(() => {
     const fromFloor = heatmapData?.fofp_config;
@@ -1864,15 +1713,9 @@ const HeatMap = () => {
 
       const jumpToZonePage = (zones) => {
         if (!zones?.length) return;
-        let zonesPerPageForFofp = ZONES_PER_PAGE;
-        if (is1440Screen || isUltraWide || is2560Screen) {
-          zonesPerPageForFofp = 4;
-        } else {
-          zonesPerPageForFofp = 2;
-        }
         const idx = findFofpZoneIndexInPanelList(zones, highlight);
         if (idx >= 0) {
-          setZonePage(Math.floor(idx / zonesPerPageForFofp));
+          setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
         }
       };
 
@@ -1886,7 +1729,7 @@ const HeatMap = () => {
 
       dispatch(fetchAreaStatus(Number(areaId)));
     },
-    [dispatch, areaStatus, is1440Screen, isUltraWide, is2560Screen, ZONES_PER_PAGE]
+    [dispatch, areaStatus]
   );
 
   // Helper function to check if an area has active alerts
@@ -1978,21 +1821,18 @@ const HeatMap = () => {
         className="heatmap-container"
         sx={{
           width: '100%',
-          height: availableHeight ? `${availableHeight}px` : 'calc(100vh - 180px)', // Slightly increased height to match settings better
+          height: availableHeight ? `${availableHeight}px` : 'calc(100vh - 88px)',
           display: 'flex',
           flexDirection: 'row',
           overflow: 'hidden',
           p: 0,
           m: 0,
           bgcolor: 'transparent',
-          // Ensure no gaps between columns
           gap: 0,
-          // Force full width utilization
           maxWidth: '100%',
           boxSizing: 'border-box',
-          // Ensure the container takes full available height
-          minHeight: 'calc(100vh - 180px)', // Slightly increased height to match settings better
-          position: 'relative', // Add relative positioning for absolute legends
+          minHeight: 0,
+          position: 'relative',
         }}
       >
         {/* Heatmap and Legends/Navigation Column */}
@@ -2092,6 +1932,11 @@ const HeatMap = () => {
                 pb: { xs: 2, sm: 3, md: 4 }, // Bottom padding
               }}
             >
+              {heatmapError ? (
+                <Alert severity="error" sx={{ maxWidth: 480, m: 2 }}>
+                  {heatmapError}
+                </Alert>
+              ) : (
               <HeatmapPdfSvgViewer
                 containerRef={containerRef}
                 pdfUrl={pdfUrl}
@@ -2127,6 +1972,7 @@ const HeatMap = () => {
                 onFofpZoneClick={handleFofpZoneClick}
                 highlightedFofpZone={highlightedFofpZone}
               />
+              )}
             </Box>
 
             {/* Legends and Floor navigation - Positioned directly on heatmap container */}
@@ -2326,33 +2172,35 @@ const HeatMap = () => {
         {/* Status Panel - responsive based on screen size */}
         {selectedAreaId && (
           <Box
+            className="heatmap-area-sidebar"
             sx={{
-              flex: '0 0 auto', // Don't grow or shrink, maintain fixed width
+              flex: '0 0 auto',
               width: {
-                xs: '28%',  // Mobile - slightly wider for better usability
-                sm: '25%',  // Small tablets
-                md: '22%',  // Medium screens
-                lg: '20%',  // Large screens
-                xl: '18%'   // Ultra-wide screens
+                xs: '28%',
+                sm: '25%',
+                md: '22%',
+                lg: '20%',
+                xl: '18%'
               },
               minWidth: {
-                xs: 280,  // Mobile minimum width
-                sm: 300,  // Small tablet minimum width
-                md: 320,  // Medium screen minimum width
-                lg: 360,  // Large screen minimum width
-                xl: 400   // Ultra-wide minimum width
+                xs: 280,
+                sm: 300,
+                md: 320,
+                lg: 360,
+                xl: 400
               },
               maxWidth: {
-                xs: 320,  // Mobile maximum width
-                sm: 350,  // Small tablet maximum width
-                md: 380,  // Medium screen maximum width
-                lg: 420,  // Large screen maximum width
-                xl: 480   // Ultra-wide maximum width
+                xs: 320,
+                sm: 350,
+                md: 380,
+                lg: 420,
+                xl: 480
               },
-              height: '100%', // Same height as floorplan
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
+              // Fill the heatmap-container height; container is viewport-bound via index.css.
+              // Vertical scroll is enabled on this panel (see .heatmap-area-sidebar in index.css).
+              height: '100%',
+              maxHeight: '100%',
+              alignSelf: 'stretch',
               boxShadow: '-2px 0 8px rgba(0,0,0,0.10)',
               background: '#fff',
               borderLeft: '2px solid #1E74C5',
@@ -2363,11 +2211,11 @@ const HeatMap = () => {
               zIndex: 2,
               transition: 'width 0.3s',
               borderRadius: '10px 0 0 10px',
-              position: 'static',
             }}
           >
-            {/* Header */}
+            {/* Sticky header while panel scrolls */}
             <Box sx={{
+              ...HEATMAP_SIDEBAR_STICKY_HEADER_SX,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -2375,9 +2223,8 @@ const HeatMap = () => {
               py: { xs: 0.5, sm: 0.75, md: 1 },
               minHeight: { xs: 25, sm: 28, md: 32 },
               bgcolor: '#1E74C5',
-              flexShrink: 0,
               width: '100%',
-              gap: 1, // Add gap between elements
+              gap: 1,
             }}>
               {/* Left side with toggle and area name */}
               <Box sx={{
@@ -2486,16 +2333,19 @@ const HeatMap = () => {
               </Box>
             </Box>
 
-            {/* Main Content - scroll when sections exceed sidebar height */}
-            <Box sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: { xs: 0.1, sm: 0.15, md: 0.2, lg: 0.25 },
-              p: { xs: 0.5, sm: 0.75, md: 1 },
-              boxSizing: 'border-box',
-              position: 'relative',
-              ...HEATMAP_SIDEBAR_MAIN_SCROLL_SX,
-            }}>
+            {/* Content below sticky header (parent sidebar scrolls) */}
+            <Box
+              className="heatmap-area-sidebar-body"
+              sx={{
+                ...HEATMAP_SIDEBAR_MAIN_SCROLL_SX,
+                gap: { xs: 0.1, sm: 0.15, md: 0.2, lg: 0.25 },
+                p: { xs: 0.5, sm: 0.75, md: 1 },
+                pr: { xs: 1, sm: 1.25, md: 1.5 },
+                pb: { xs: 10, md: 12 },
+                boxSizing: 'border-box',
+                position: 'relative',
+              }}
+            >
               {areaStatusLoading ? (
                 <Box sx={{
                   position: 'absolute',
@@ -2511,6 +2361,10 @@ const HeatMap = () => {
                 }}>
                   <CircularProgress size={isMobile ? 24 : 36} />
                 </Box>
+              ) : areaStatusError ? (
+                <Alert severity="warning" sx={{ m: 1.5 }}>
+                  {areaStatusError}
+                </Alert>
               ) : (
                 <>
                   {/* Scene Section */}
@@ -2805,16 +2659,14 @@ const HeatMap = () => {
                         {zonesToShow.length > 0 ? (
                           <>
                             <Box sx={{
-                              ...HEATMAP_ZONES_LIST_SCROLL_SX,
+                              ...(totalZonePages > 1 ? HEATMAP_ZONES_LIST_PAGINATED_SX : HEATMAP_ZONES_LIST_SCROLL_SX),
                               display: 'flex',
                               flexDirection: 'column',
                               gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 },
                               alignItems: 'stretch',
                               width: '100%',
                             }}>
-                              {zonesToShow
-                                .slice(zonePage * zonesPerPage, (zonePage + 1) * zonesPerPage)
-                                .map((zone) => {
+                              {visibleSidebarZones.map((zone) => {
                                   const values = zoneLocalValues[zone.id] || getDefaultZoneValues(zone);
                                   return (
                                     <ZoneControlCard
@@ -2887,23 +2739,24 @@ const HeatMap = () => {
                           gap: 0.5,
                           minWidth: 40,
                         }}>
-                          {zonePage > 0 ? (
+                          {zonePage > 0 && (
                             <IconButton
                               size="small"
-                              onClick={() => setZonePage(zonePage - 1)}
+                              onClick={() => setZonePage((page) => page - 1)}
                               sx={{ ...navIconSx }}
                             >
                               <ArrowBackIosNewIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
                             </IconButton>
-                          ) : zonePage < totalZonePages - 1 ? (
+                          )}
+                          {zonePage < totalZonePages - 1 && (
                             <IconButton
                               size="small"
-                              onClick={() => setZonePage(zonePage + 1)}
+                              onClick={() => setZonePage((page) => page + 1)}
                               sx={{ ...navIconSx }}
                             >
                               <ArrowForwardIosIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
                             </IconButton>
-                          ) : null}
+                          )}
                         </Box>
                       )}
                     </Box>
@@ -3072,214 +2925,20 @@ const HeatMap = () => {
 
                   {/* Shades Section - Only show if shades are present */}
                   {shades.length > 0 && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'row',
-                        alignItems: 'stretch',
-                        bgcolor: '#f5f7fb',
-                        border: '2px solid #1E74C5',
-                        borderRadius: 0,
-                        minHeight: { xs: 110, md: 130 },
-                        flexShrink: 0,
-                        p: 0,
-                        m: 0,
-                        boxSizing: 'border-box',
-                        position: 'relative',
-                      }}
-                    >
-                      {/* Vertical label */}
-                      <Box sx={{
-                        writingMode: 'vertical-rl',
-                        fontWeight: 'bold',
-                        fontSize: { xs: 10, md: 12 },
-                        color: '#1E74C5',
-                        px: 0.5,
-                        py: 0.2,
-                        minWidth: { xs: 20, md: 24 },
-                        textAlign: 'center',
-                        bgcolor: '#fff',
-                        borderRadius: '0 12px 12px 0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transform: 'rotate(180deg)',
-                        mr: 1,
-                      }}>
-                        Shades
-                      </Box>
-
-                      {/* Preset buttons */}
-                      <Box sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: { xs: 0.1, md: 0.2 },
-                        mr: 0.5,
-                        justifyContent: 'center',
-                        mb: { xs: 3, md: 4 }
-                      }}>
-                        {[100, 75, 25, 0].map((percent) => (
-                          <Button
-                            key={percent}
-                            variant="contained"
-                            onClick={() => handleShadesPreset(percent)}
-                            disabled={!canUpdateAreaStatus()}
-                            sx={{
-                              background: !canUpdateAreaStatus() ? '#ddd' : '#222',
-                              color: !canUpdateAreaStatus() ? '#999' : '#fff',
-                              borderRadius: 0.8,
-                              fontSize: { xs: 8, md: 10 },
-                              fontWeight: 400,
-                              px: { xs: 0.3, md: 0.5 },
-                              py: { xs: 0.05, md: 0.1 },
-                              textTransform: 'none',
-                              boxShadow: 1,
-                              minWidth: { xs: 32, md: 40 },
-                              minHeight: { xs: 14, md: 16 },
-                              lineHeight: 1.1,
-                              padding: { xs: 0.6, md: 0.8 },
-                              opacity: !canUpdateAreaStatus() ? 0.5 : 1,
-                              cursor: !canUpdateAreaStatus() ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            {percent}% open
-                          </Button>
-                        ))}
-                      </Box>
-
-                      {/* Sliders with paging */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          flex: 1,
-                          minHeight: 0,
-                          justifyContent: 'flex-start',
-                          position: 'relative',
-                          height: '100%',
-                        }}
-                      >
-                        {/* Left arrow */}
-                        {shadesPage > 0 && (
-                          <IconButton
-                            size="small"
-                            onClick={() => setShadesPage(shadesPage - 1)}
-                            sx={{ ...navIconSx, mr: 0.5 }}
-                          >
-                            <ArrowBackIosNewIcon sx={{ color: 'black', fontSize: { xs: 14, md: 18 } }} />
-                          </IconButton>
-                        )}
-
-                        {/* Sliders */}
-                        {pagedShades.map((shade) => (
-                          <Box
-                            key={shade.id}
-                            sx={{
-                              bgcolor: 'black',
-                              borderRadius: 0.5,
-                              minWidth: { xs: 32, md: 40 },
-                              maxWidth: { xs: 42, md: 50 },
-                              height: { xs: 80, md: 100 },
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              boxShadow: 2,
-                              justifyContent: 'center',
-                              p: { xs: 0.1, md: 0.2 },
-                              mb: { xs: 3, md: 4 }
-                            }}
-                          >
-                            <Typography
-                              fontSize={{ xs: 8, md: 10 }}
-                              fontWeight={500}
-                              sx={{
-                                mb: 0.1,
-                                textAlign: 'center',
-                                lineHeight: 1.1,
-                                maxWidth: { xs: 32, md: 40 },
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {shade.name || 'Group'}
-                            </Typography>
-                            <div
-                              style={{
-                                height: isMobile ? 70 : 90,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <input
-                                type="range"
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={100 - (shadesLocalValues[shade.id] ?? 0)}
-                                onChange={e => handleShadeSlider(shade.id, 100 - Number(e.target.value))}
-                                disabled={shadesUpdating || !canUpdateAreaStatus()}
-                                style={{
-                                  writingMode: "vertical-lr",
-                                  direction: "rtl",
-                                  width: isMobile ? 10 : 12,
-                                  height: isMobile ? 45 : 55,
-                                  margin: 0,
-                                  accentColor: "#222",
-                                  transform: 'scaleY(-1)'
-                                }}
-                              />
-                            </div>
-                            <Typography fontSize={{ xs: 8, md: 10 }} fontWeight={500}>
-                              {Math.round(shadesLocalValues[shade.id] ?? 0)}%
-                            </Typography>
-                          </Box>
-                        ))}
-
-                        {/* Right arrow */}
-                        {shades.length > SHADES_PER_PAGE &&
-                          (shadesPage + 1) * SHADES_PER_PAGE < shades.length && (
-                            <IconButton
-                              size="small"
-                              onClick={() => setShadesPage(shadesPage + 1)}
-                              sx={{ ...navIconSx, ml: 0.5 }}
-                            >
-                              <ArrowForwardIosIcon sx={{ color: '#222', fontSize: { xs: 14, md: 18 } }} />
-                            </IconButton>
-                          )}
-                      </Box>
-
-                      {/* Apply Button */}
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          right: { xs: 12, md: 16 },
-                          bottom: 1,
-                          zIndex: 2,
-                          display: 'flex',
-                          justifyContent: 'flex-end',
-                          width: 'auto',
-                        }}
-                      >
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={handleApplyShades}
-                          disabled={shadesUpdating || !canUpdateAreaStatus()}
-                          sx={{
-                            ...applyButtonSx,
-                            opacity: !canUpdateAreaStatus() ? 0.5 : 1,
-                            cursor: !canUpdateAreaStatus() ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          {shadesUpdating ? 'Applying...' : 'Apply'}
-                        </Button>
-                      </Box>
-                    </Box>
+                    <HeatmapShadesPanel
+                      variant="basic"
+                      shades={shades}
+                      shadesLocalValues={shadesLocalValues}
+                      onShadeChange={handleShadeSlider}
+                      onPreset={handleShadesPreset}
+                      onApply={handleApplyShades}
+                      shadesUpdating={shadesUpdating}
+                      canUpdate={canUpdateAreaStatus()}
+                      isMobile={isMobile}
+                      applyButtonSx={applyButtonSx}
+                      navIconSx={navIconSx}
+                      themeOverrides={shadeSectionTheme}
+                    />
                   )}
                 </>
               )}
@@ -4094,6 +3753,7 @@ function HeatmapPdfSvgViewer({
   highlightedFofpZone = null,
 }) {
 
+  const pdfFile = useMemo(() => buildPdfDocumentFile(pdfUrl), [pdfUrl]);
 
   // Use A4 dimensions as fallback for consistent rendering
   const A4_WIDTH = 794;
@@ -4111,16 +3771,6 @@ function HeatmapPdfSvgViewer({
   const handleMouseDown = (e) => {
     if (e.button === 0) { // Left mouse button
       const canPan = scale > (fitScale || 0) + 0.001;
-      // #region agent log
-      __fitDebug('HeatMap.jsx:viewerMouseDown', 'viewer drag start', {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        pan,
-        scale,
-        fitScale,
-        canPan,
-      }, 'H11');
-      // #endregion
       if (!canPan) return;
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -4135,16 +3785,6 @@ function HeatmapPdfSvgViewer({
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y
       };
-      // #region agent log
-      __fitDebug('HeatMap.jsx:viewerMouseMove', 'viewer drag moved pan', {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        dragStart,
-        oldPan: pan,
-        newPan,
-        scale,
-      }, 'H11');
-      // #endregion
       setPan(newPan);
       e.preventDefault();
     }
@@ -4152,14 +3792,6 @@ function HeatmapPdfSvgViewer({
 
   const handleMouseUp = (e) => {
     if (isDragging) {
-      // #region agent log
-      __fitDebug('HeatMap.jsx:viewerMouseUp', 'viewer drag end', {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        pan,
-        scale,
-      }, 'H11');
-      // #endregion
       setIsDragging(false);
       e.preventDefault();
     }
@@ -4212,15 +3844,6 @@ function HeatmapPdfSvgViewer({
     const newPanY = mouseRelativeToCenterY - pdfPointY * newScale;
 
     // Apply the new scale and pan
-    // #region agent log
-    __fitDebug('HeatMap.jsx:handleWheel', 'wheel zoom changed scale/pan', {
-      deltaY: e.deltaY,
-      prevScale: scale,
-      newScale,
-      prevPan: pan,
-      newPan: { x: newPanX, y: newPanY },
-    }, 'H10');
-    // #endregion
     setScale(newScale);
     setPan({ x: newPanX, y: newPanY });
   };
@@ -4259,30 +3882,6 @@ function HeatmapPdfSvgViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scale, pan]);
 
-  // #region agent log
-  useEffect(() => {
-    if (!containerRef.current || !transformedContentRef.current) return;
-    const outer = containerRef.current.getBoundingClientRect();
-    const transformed = transformedContentRef.current.getBoundingClientRect();
-    __fitDebug('HeatMap.jsx:viewerBounds', 'actual transformed DOM bounds', {
-      outer: {
-        left: outer.left,
-        top: outer.top,
-        width: outer.width,
-        height: outer.height,
-      },
-      transformed: {
-        left: transformed.left,
-        top: transformed.top,
-        width: transformed.width,
-        height: transformed.height,
-      },
-      scale,
-      pan,
-      pageDims,
-    }, 'H8');
-  }, [scale, pan, pageDims]);
-  // #endregion
 
   return (
     <Box
@@ -4338,7 +3937,7 @@ function HeatmapPdfSvgViewer({
           }}
         >
           {pdfUrl ? (
-            <Document file={pdfUrl} key={pdfUrl}>
+            <Document file={pdfFile} key={pdfUrl}>
               <Page
                 pageNumber={1}
                 width={pageDims ? pageDims.width : A4_WIDTH}

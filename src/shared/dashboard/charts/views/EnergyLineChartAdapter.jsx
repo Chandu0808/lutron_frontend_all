@@ -17,14 +17,18 @@ import { energyLineChartPropsAreEqual } from './energyLineChartMemoCompare';
  * Shared energy line chart adapter — transforms + presentation.
  * Data fetching/selectors remain in Dashboard.jsx; passed via props/context.
  */
+const DEFAULT_CONSUMPTION_LINE_COLORS = ['#e57373', '#64b5f6', '#81c784', '#ffd54f'];
+const DEFAULT_SAVINGS_LINE_COLORS = ['#50c878', '#90EE90', '#98FB98', '#87CEEB'];
+
 function EnergyLineChartAdapterInner({
   title,
   data,
-  colors = ['#e57373', '#64b5f6', '#81c784', '#ffd54f'],
+  colors,
   isLoading = false,
   chartSurface = 'dark',
   emptyStateVariant = 'message',
   legendSeriesName = null,
+  energyMode = null,
   transformDataForCharts,
   selectedDuration,
   currentDate,
@@ -47,8 +51,19 @@ function EnergyLineChartAdapterInner({
   loaderHeight = '100%',
   loaderLight = false,
 }) {
-  const chartKind = resolveEnergyLineChartKind({ title, legendSeriesName });
+  const chartKind =
+    energyMode === 'savings'
+      ? 'savings'
+      : energyMode === 'consumption'
+        ? 'consumption'
+        : resolveEnergyLineChartKind({ title, legendSeriesName });
   const chartType = chartKind === 'consumption' ? 'consumption' : 'other';
+  const resolvedColors =
+    Array.isArray(colors) && colors.length > 0
+      ? colors
+      : chartKind === 'savings'
+        ? DEFAULT_SAVINGS_LINE_COLORS
+        : DEFAULT_CONSUMPTION_LINE_COLORS;
 
   const theme = useMemo(() => {
     if (shellVariant === 'advanced-card') {
@@ -88,16 +103,29 @@ function EnergyLineChartAdapterInner({
 
   const seriesColors = useMemo(() => {
     const paletteKind = chartKind === 'savings' ? 'savings' : chartKind;
-    return resolveEnergyLineSeriesColors(seriesNames, colors, (count) =>
+    const resolved = resolveEnergyLineSeriesColors(seriesNames, resolvedColors, (count) =>
       generateEnergyLineColorPalette(count, {
         chartKind: paletteKind,
         selectedAreaCount: selectedAreas.length,
         resolveThemePalette,
       })
     );
-  }, [seriesNames, colors, chartKind, selectedAreas.length, resolveThemePalette]);
+    if (legendSeriesName != null && shellVariant === 'customized-builtin' && resolved.length > 0) {
+      const primary = resolved[0];
+      return seriesNames.map(() => primary);
+    }
+    return resolved;
+  }, [
+    seriesNames,
+    resolvedColors,
+    chartKind,
+    selectedAreas.length,
+    resolveThemePalette,
+    legendSeriesName,
+    shellVariant,
+  ]);
 
-  const chartKey = `linechart-${title}-${selectedDuration}-${currentDate}`;
+  const chartKey = `linechart-${title}-${selectedDuration}-${currentDate}-${chartKind}-${resolvedColors[0] ?? 'default'}`;
 
   if (isLoading) {
     return (
@@ -112,7 +140,8 @@ function EnergyLineChartAdapterInner({
         loaderLight={loaderLight}
         LoaderComponent={ChartLoader}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
       />
     );
   }
@@ -129,7 +158,8 @@ function EnergyLineChartAdapterInner({
         emptyStateExtras={emptyStateExtras}
         blankChartPreview={blankChartPreview}
         outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-        titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+        titleStyleOverride={titleStyleOverride}
+        cardHeaderStyle={cardHeaderStyle}
         plotStyleOverride={shellVariant === 'customized-builtin' ? plotStyleOverride : undefined}
       />
     );
@@ -143,7 +173,8 @@ function EnergyLineChartAdapterInner({
       title={title}
       exportControl={exportControl}
       outerStyleOverride={shellVariant === 'customized-builtin' ? cardShellStyle : { ...outerStyleOverride, ...cardShellStyle }}
-      titleStyleOverride={shellVariant === 'customized-builtin' ? cardHeaderStyle : titleStyleOverride}
+      titleStyleOverride={titleStyleOverride}
+      cardHeaderStyle={cardHeaderStyle}
       plotStyleOverride={plotStyleOverride}
     >
       <EnergyLineChartView

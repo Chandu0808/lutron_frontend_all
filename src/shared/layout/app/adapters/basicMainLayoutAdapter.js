@@ -8,38 +8,25 @@ import {
   isActivityReportRoute,
   isScheduleRoute,
   isQuickControlsRoute,
-  isSettingsMainLayoutRoute,
   isLutronWebsiteRoute,
   normalizeLayoutPathname,
 } from "../appLayoutPathUtils";
-
-function getSettingsSectionLabelForBreadcrumb(pathname) {
-  if (!pathname || typeof pathname !== "string") return "";
-  const p = normalizeLayoutPathname(pathname);
-  if (p === "/main") return "Home";
-  if (p === "/alerts" || p.startsWith("/alerts/")) return "Alerts";
-  if (p === "/email-server" || p.startsWith("/email-server/")) return "Email Server";
-  if (p === "/theme-change" || p.startsWith("/theme-change/")) return "Theme";
-  if (p === "/users" || p.startsWith("/users/")) return "User Management";
-  if (p === "/area-size-load" || p.startsWith("/area-size-load/")) return "Area Size for Energy";
-  if (p === "/manage-area-groups" || p.startsWith("/manage-area-groups/")) return "Area Groups";
-  if (p === "/rename-widget" || p.startsWith("/rename-widget/")) return "Widgets";
-  if (p === "/floor" || p.startsWith("/floor/")) return "Floors";
-  if (p === "/processors" || p.startsWith("/processors/")) return "Processors";
-  if (p === "/fofp" || p.startsWith("/fofp/")) return "FOFP";
-  if (p === "/create-help" || p.startsWith("/create-help/")) return "Help";
-  if (p === "/manage-sensors" || p.startsWith("/manage-sensors/")) return "Manage Sensors";
-  if (p === "/manage-modules" || p.startsWith("/manage-modules/")) return "Manage Modules";
-  return "";
-}
+import {
+  BASIC_SETTINGS_HOME_PATH,
+  BASIC_SETTINGS_SIDEBAR_PATHS,
+  getBasicSettingsSectionLabel,
+  isBasicMaintenanceRoute,
+  isBasicSettingsAppRoute,
+} from "../../../../variants/basic/utils/basicSettingsPaths";
 
 export const basicMainLayoutAdapter = {
   variant: "basic",
 
   getFrameSx(ctx) {
+    const useNaturalHeight = ctx.isDashboard || ctx.isSettingsLayout;
     return {
       width: "100%",
-      minHeight: ctx.isDashboard ? "auto" : "calc(100vh - 100px)",
+      minHeight: useNaturalHeight ? "auto" : "calc(100vh - 100px)",
       backgroundColor: ctx.layoutShellBg,
       backgroundImage: "var(--app-background-image, none)",
       backgroundSize: "cover",
@@ -80,25 +67,35 @@ export const basicMainLayoutAdapter = {
     const whiteChrome = isWhiteAreaPickerChrome(contentColor);
     const isActivityReport = isActivityReportRoute(location.pathname);
     const isDashboard = isDashboardRoute(location.pathname);
+    const isSettingsLayout = isBasicSettingsAppRoute(
+      location.pathname,
+      BASIC_SETTINGS_HOME_PATH
+    );
     const useWhiteContentShell =
       whiteChrome &&
-      (isActivityReport || isSettingsMainLayoutRoute(location.pathname, "basic"));
+      (isActivityReport || isSettingsLayout);
     const layoutShellBg = useWhiteContentShell ? "#ffffff" : backgroundColor;
     const mainContentPanelBg =
       useWhiteContentShell || whiteChrome ? "#ffffff" : contentColor;
     const showBlueHeaderStripForWhiteTheme =
       whiteChrome &&
       (isScheduleRoute(location.pathname) || isQuickControlsRoute(location.pathname));
+    const isBasicMaintenanceRouteActive = isBasicMaintenanceRoute(location.pathname);
+    const isLutronWebsite = isLutronWebsiteRoute(location.pathname);
     const showSecondaryRibbon =
       isActivityReport ||
       location.pathname === "/get-help" ||
-      isSettingsMainLayoutRoute(location.pathname, "basic") ||
+      location.pathname.startsWith("/get-help/") ||
+      isBasicMaintenanceRouteActive ||
+      isSettingsLayout ||
+      isLutronWebsite ||
       showBlueHeaderStripForWhiteTheme;
 
-    const { getSettingsHomeTabLabelFromSearch, getSettingsUsersActionSuffixFromSearch } =
-      breadcrumbUtils;
+    const { getSettingsUsersActionSuffixFromSearch } = breadcrumbUtils;
 
     const secondaryRibbonBreadcrumbText = (() => {
+      if (isLutronWebsite) return "Home";
+      if (isBasicMaintenanceRouteActive) return "Settings > Maintenance";
       if (isActivityReport) return "Activity Report";
       if (
         location.pathname === "/get-help" ||
@@ -106,23 +103,22 @@ export const basicMainLayoutAdapter = {
       ) {
         return "Help";
       }
-      if (isSettingsMainLayoutRoute(location.pathname, "basic")) {
-        const section = getSettingsSectionLabelForBreadcrumb(location.pathname);
+      if (isScheduleRoute(location.pathname)) return "Schedule";
+      if (isQuickControlsRoute(location.pathname)) return "Quick Control";
+      if (isSettingsLayout) {
+        const section = getBasicSettingsSectionLabel(location.pathname);
         let text = section ? `Settings > ${section}` : "Settings";
-        if (normalizeLayoutPathname(location.pathname) === "/main") {
-          text += ` > ${getSettingsHomeTabLabelFromSearch(location.search)}`;
-        }
         if (
-          normalizeLayoutPathname(location.pathname) === "/users" ||
-          normalizeLayoutPathname(location.pathname).startsWith("/users/")
+          normalizeLayoutPathname(location.pathname) === BASIC_SETTINGS_SIDEBAR_PATHS.Users ||
+          normalizeLayoutPathname(location.pathname).startsWith(
+            `${BASIC_SETTINGS_SIDEBAR_PATHS.Users}/`
+          )
         ) {
           const usersSuffix = getSettingsUsersActionSuffixFromSearch(location.search);
           if (usersSuffix) text += ` > ${usersSuffix}`;
         }
         return text;
       }
-      if (isScheduleRoute(location.pathname)) return "Schedule";
-      if (isQuickControlsRoute(location.pathname)) return "Quick Control";
       return "";
     })();
 
@@ -132,6 +128,7 @@ export const basicMainLayoutAdapter = {
 
     return {
       isDashboard,
+      isSettingsLayout,
       layoutShellBg,
       mainContentPanelBg,
       whiteChrome,
@@ -143,13 +140,13 @@ export const basicMainLayoutAdapter = {
       useFixedContentViewport:
         location.pathname === "/lutronwebsite-page" || isHeatmapRoute(location.pathname),
       isHeatmap: isHeatmapRoute(location.pathname),
-      isLutronWebsite: isLutronWebsiteRoute(location.pathname),
+      isLutronWebsite,
     };
   },
 
   getContentPaddingTop(ctx) {
     return ctx.showSecondaryRibbon && !ctx.isHeatmap
-      ? { xs: "84px", sm: "84px", md: "86px", lg: "86px" }
+      ? { xs: "98px", sm: "98px", md: "98px", lg: "98px" }
       : "50px";
   },
 
@@ -159,6 +156,57 @@ export const basicMainLayoutAdapter = {
 
   useDashboardRouteClass(ctx) {
     return ctx.isDashboard;
+  },
+
+  getContentPanelSx({ ctx, location, contentPanelRadius }) {
+    const pathname = location.pathname;
+
+    if (ctx.isSettingsLayout) {
+      return {
+        width: "100%",
+        mx: "auto",
+        backgroundColor: ctx.mainContentPanelBg,
+        borderRadius: contentPanelRadius,
+        flexGrow: 0,
+        overflowY: "visible",
+        overflowX: "hidden",
+        height: "auto",
+        maxHeight: "none",
+        minHeight: "auto",
+        mb: 0,
+        p: 0,
+      };
+    }
+
+    return {
+      width: "100%",
+      mx: "auto",
+      backgroundColor: ctx.mainContentPanelBg,
+      borderRadius: contentPanelRadius,
+      flexGrow: 1,
+      overflowY: ctx.useFixedContentViewport ? "hidden" : "auto",
+      overflowX: "hidden",
+      height: ctx.useFixedContentViewport ? "calc(100vh - 187px)" : "auto",
+      maxHeight: ctx.useFixedContentViewport ? "calc(100vh - 187px)" : "none",
+      minHeight:
+        pathname === "/dashboard"
+          ? "calc(100vh - 50px)"
+          : pathname === "/lutronwebsite-page"
+            ? "calc(100vh - 187px)"
+            : pathname === "/heatmap"
+              ? "calc(100vh - 167px)"
+              : pathname === "/lutron"
+                ? "calc(100vh - 141px)"
+                : "calc(100vh - 107px)",
+      mb:
+        pathname === "/dashboard" || pathname === "/lutron"
+          ? { xs: 1, sm: 1, md: 2, lg: 2, xl: 3, xxl: 4, "3xl": 5, "4xl": 6 }
+          : 0,
+      p:
+        pathname === "/dashboard" || pathname === "/lutron" || pathname === "/schedule"
+          ? { xs: 2, sm: 2, md: 3, lg: 3, xl: 4, xxl: 5, "3xl": 6, "4xl": 7 }
+          : 0,
+    };
   },
 };
 

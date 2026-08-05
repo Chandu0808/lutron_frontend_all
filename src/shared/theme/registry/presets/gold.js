@@ -163,6 +163,8 @@ export function applyGoldPreset(root, context) {
   root.style.setProperty("--users-input-bg", "#ffffff");
   root.style.setProperty("--users-select-menu-bg", "#ffffff");
   root.style.setProperty("--users-select-menu-hover", GOLD_THEME_LIGHT_SECTION_BG);
+  root.style.setProperty("--users-select-menu-checkbox-color", "rgba(44, 40, 32, 0.55)");
+  root.style.setProperty("--users-select-menu-checkbox-checked-color", GOLD_THEME_BUTTON_SOLID);
   root.style.setProperty("--users-chip-bg", GOLD_THEME_LIGHT_SECTION_BG);
   root.style.setProperty("--users-confirm-dialog-bg", GOLD_THEME_LIGHT_PANEL_BG);
   root.style.setProperty("--users-border", "rgba(74, 67, 52, 0.28)");
@@ -170,6 +172,8 @@ export function applyGoldPreset(root, context) {
   root.style.setProperty("--area-groups-inner-bg", "#ffffff");
   root.style.setProperty("--area-groups-chip-bg", GOLD_THEME_LIGHT_SECTION_BG);
   root.style.setProperty("--area-groups-border", "rgba(74, 67, 52, 0.28)");
+  root.style.setProperty("--area-group-on-surface-text", GOLD_THEME_LIGHT_SURFACE_TEXT);
+  root.style.setProperty("--area-group-inner-text", GOLD_THEME_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--settings-form-section-bg", GOLD_THEME_LIGHT_SECTION_BG);
   root.style.setProperty("--settings-form-control-bg", "#ffffff");
   root.style.setProperty("--settings-form-control-text", GOLD_THEME_LIGHT_SURFACE_TEXT);

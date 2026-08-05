@@ -64,6 +64,30 @@ describe('transformDataForCharts parity', () => {
     expect(out[0]).toHaveProperty('Floor 10', 10);
   });
 
+  it('customized: preserves Combined Areas when five floors are selected', () => {
+    const payload = {
+      'x-axis': ['Mon 0', 'Tue 0'],
+      'y-axis': { 'Combined Areas': [10, 20] },
+    };
+    const options = {
+      ...customizedTransformOptions,
+      selectedFloorIds: [1, 2, 3, 4, 5],
+      floors: [1, 2, 3, 4, 5].map((id) => ({ id, floor_name: `Floor ${id}` })),
+    };
+    const out = transformDataForCharts(payload, 'consumption', options);
+    expect(out[0]).toEqual({ date: 'Mon 0', 'Combined Areas': 10 });
+  });
+
+  it('preserves explicit area series when the payload already contains them', () => {
+    const payload = {
+      'x-axis': ['Mon 0', 'Tue 0'],
+      'y-axis': { 'Area One': [10, 20], 'Area Two': [30, 40] },
+    };
+    const out = transformDataForCharts(payload, 'consumption', basicTransformOptions);
+    expect(out[0]).toHaveProperty('Area One', 10);
+    expect(out[0]).toHaveProperty('Area Two', 30);
+  });
+
   it('returns empty for invalid payload', () => {
     expect(transformDataForCharts(null, 'consumption', basicTransformOptions)).toEqual([]);
   });
@@ -113,6 +137,29 @@ describe('consumptionSavingMergedData parity', () => {
     expect(merged[0].consumption).toBe(10);
     expect(merged[0].savings).toBe(2);
     expect(merged[0].connectedLoad).toBe(12);
+  });
+
+  it('preserves individual area keys and calculates their specific metrics', () => {
+    const consumption = [{ date: '1/1', Lobby: 10, Office: 20 }];
+    const savings = [{ date: '1/1', Lobby: 2, Office: 3 }];
+    const merged = consumptionSavingMergedData(consumption, savings);
+    expect(merged).toHaveLength(1);
+    
+    // Totals should still be computed as the sum of areas
+    expect(merged[0].consumption).toBe(30);
+    expect(merged[0].savings).toBe(5);
+    expect(merged[0].connectedLoad).toBe(35);
+    
+    // Individual area metrics should be preserved
+    expect(merged[0].Lobby_consumption).toBe(10);
+    expect(merged[0].Lobby_savings).toBe(2);
+    expect(merged[0].Lobby_connectedLoad).toBe(12);
+    expect(merged[0].Office_consumption).toBe(20);
+    expect(merged[0].Office_savings).toBe(3);
+    expect(merged[0].Office_connectedLoad).toBe(23);
+    
+    // areaKeys property should be attached to array
+    expect(merged.areaKeys).toEqual(['Lobby', 'Office']);
   });
 });
 

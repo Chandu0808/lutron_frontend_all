@@ -224,7 +224,7 @@ describe('SpaceStackedBar theme variant differences', () => {
       },
       showChartsTab: true,
     });
-    expect(theme.plotHeightStyle).toBe('chartsTabClamp');
+    expect(theme.plotHeightStyle).toBe('basicChartsTabClamp');
   });
 
   it('advanced uses theme-aware stacked bar colors', () => {

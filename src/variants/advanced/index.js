@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import '../shared/ipadPro11Layout.css';
 import { Provider } from 'react-redux';
 import { store } from '../src/redux/store'
 import { BrowserRouter } from 'react-router-dom';

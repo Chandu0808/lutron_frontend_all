@@ -1,41 +1,9 @@
 /** Shared user login slice — Phase 5.1 */
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { getToken, validateToken, getValidToken } from "../../auth/authToken";
+import { resetBootstrapFetchGuards } from "../../utils/bootstrapFetchGuards";
 
 export function createUserLoginModule({ BaseUrl, clearDashboardData, clearHeatmapUserData, clearAlertsState }) {
-
-  // your Axios instance
-  // Get the token from localStorage, so that once signIn succeeds we can call /auth/me
-  const getToken = () => localStorage.getItem("lutron");
-
-  // Validate if the current token is valid and matches the expected format
-  const validateToken = (token) => {
-    if (!token) return false;
-    
-    try {
-      // Basic JWT structure validation (3 parts separated by dots)
-      const parts = token.split('.');
-      if (parts.length !== 3) return false;
-      
-      // Check if token is not expired (basic check)
-      const payload = JSON.parse(atob(parts[1]));
-      const currentTime = Math.floor(Date.now() / 1000);
-      
-      // If token has exp field, check if it's not expired
-      if (payload.exp && payload.exp < currentTime) {
-        return false;
-      }
-      
-      return true;
-    } catch (error) {
-      return false;
-    }
-  };
-
-  // Get token with validation
-  const getValidToken = () => {
-    const token = getToken();
-    return validateToken(token) ? token : null;
-  };
 
   const getAuthHeaders = () => ({
     headers: { Authorization: `Bearer ${getToken()}` }
@@ -53,6 +21,7 @@ export function createUserLoginModule({ BaseUrl, clearDashboardData, clearHeatma
         dispatch(clearDashboardData());
         dispatch(clearHeatmapUserData());
         dispatch(clearAlertsState());
+        resetBootstrapFetchGuards();
         
         const response = await BaseUrl.post("/auth/login", credentials);
         return response.data; // e.g. { access_token: "…" }
@@ -220,6 +189,8 @@ export function createUserLoginModule({ BaseUrl, clearDashboardData, clearHeatma
           localStorage.removeItem("role"); // Clear role
           localStorage.removeItem("permission"); // Clear permission
           localStorage.removeItem("userEmail"); // Clear saved email
+
+          resetBootstrapFetchGuards();
           
           // Logout successful
         })
@@ -234,6 +205,8 @@ export function createUserLoginModule({ BaseUrl, clearDashboardData, clearHeatma
           localStorage.removeItem("role");
           localStorage.removeItem("permission");
           localStorage.removeItem("userEmail");
+
+          resetBootstrapFetchGuards();
           
           // Logout API failed, but local state cleared
         })

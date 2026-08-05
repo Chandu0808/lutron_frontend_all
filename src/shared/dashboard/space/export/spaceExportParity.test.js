@@ -104,6 +104,21 @@ describe('space export thunk routing parity', () => {
       { showChartsTab: true, dropdownKey: 'table', chartTitle: 'Utilization By Area' },
       thunks
     ));
+    expect(resolved.downloadThunk).toBe(thunks.downloadSpaceUtilizationPerFromLogs);
+  });
+
+  it('utilization_by_area routes by table key when title is renamed', () => {
+    const charts = resolveSpaceExportActions(
+      { showChartsTab: true, dropdownKey: 'table', chartTitle: 'Custom Area Label' },
+      thunks
+    );
+    expect(charts.downloadThunk).toBe(thunks.downloadSpaceUtilizationPerFromLogs);
+
+    const main = resolveSpaceExportActions(
+      { showChartsTab: false, dropdownKey: 'table', chartTitle: 'Custom Area Label' },
+      thunks
+    );
+    expect(main.downloadThunk).toBe(thunks.downloadSpaceUtilizationPer);
   });
 
   it('instant_occupancy_count', () => {
@@ -189,7 +204,7 @@ describe('space export runners', () => {
     );
   });
 
-  it('runSpaceDownloadExport shows advanced success message', async () => {
+  it('runSpaceDownloadExport shows advanced chart-title success message', async () => {
     dispatch.mockReturnValueOnce({ type: 'download/fulfilled', payload: {} });
     const messages = resolveSpaceExportMessages('advanced');
 
@@ -198,12 +213,15 @@ describe('space export runners', () => {
       downloadThunk: jest.fn(),
       apiParams: { areaIds: [1] },
       showSnackbar,
-      successMessage: messages.downloadSuccess('ignored'),
+      successMessage: messages.downloadSuccess('Utilization By Area'),
       rejectedFallback: messages.downloadRejected,
       catchMessage: messages.downloadCatch,
     });
 
-    expect(showSnackbar).toHaveBeenCalledWith('Download started successfully!', 'success');
+    expect(showSnackbar).toHaveBeenCalledWith(
+      'Utilization By Area report downloaded successfully!',
+      'success'
+    );
   });
 
   it('runSpaceEmailExport surfaces payload error', async () => {
@@ -254,10 +272,15 @@ describe('space export menu helpers', () => {
     expect(DEFAULT_SPACE_EXPORT_DROPDOWN_BASIC.instantCombined).toBe(false);
   });
 
-  it('message presets differ for basic vs advanced download copy', () => {
-    expect(SPACE_EXPORT_MESSAGE_PRESETS.basic.downloadSuccess('Chart')).toContain('Chart');
+  it('message presets use chart title for download success on all variants', () => {
+    expect(SPACE_EXPORT_MESSAGE_PRESETS.basic.downloadSuccess('Chart')).toBe(
+      'Chart report downloaded successfully!'
+    );
     expect(SPACE_EXPORT_MESSAGE_PRESETS.advanced.downloadSuccess('Chart')).toBe(
-      'Download started successfully!'
+      'Chart report downloaded successfully!'
+    );
+    expect(SPACE_EXPORT_MESSAGE_PRESETS.customized.downloadSuccess('Chart')).toBe(
+      'Chart report downloaded successfully!'
     );
   });
 });

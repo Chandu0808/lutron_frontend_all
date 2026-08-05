@@ -4,6 +4,7 @@
  */
 
 import { hexToRgb, interpolateHexColor } from "../../utils/colorScale";
+import { isMapProcessorUnreachable } from "../../../../shared/heatmap/processorReachable";
 
 export const LIGHT_OFF_GREY_HEX = "#5f5f5f";
 export const LIGHT_FILL_OPACITY = 0.5;
@@ -45,6 +46,10 @@ export function getLightLevelFillColor(
  * Prefers light_level gradient; falls back to light_status on/off.
  */
 export function resolveLightModeFill(area, lightColorHex) {
+  if (isMapProcessorUnreachable(area)) {
+    return "transparent";
+  }
+
   const level = clampLightLevel(area?.light_level);
   if (level !== null) {
     return getLightLevelFillColor(level, lightColorHex);

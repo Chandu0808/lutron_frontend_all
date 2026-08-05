@@ -18,6 +18,8 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
+import { onContentColors } from "../../theme/utils/themeOnSurface";
+
 /**
  * @param {object} props
  * @param {boolean} props.open
@@ -38,6 +40,10 @@ export function SharedSidebar({
   const theme = useTheme();
   const navigate = useNavigate();
 
+  const paperBg = theme.palette.background.paper;
+  const inactiveOn = onContentColors(paperBg);
+  const activeOn = onContentColors(theme.palette.primary.main);
+
   return (
     <Drawer
       anchor="left"
@@ -45,6 +51,7 @@ export function SharedSidebar({
       onClose={onClose}
       data-testid="shared-sidebar-drawer"
       PaperProps={{
+        className: "shared-sidebar-drawer-paper",
         sx: {
           width: {
             xs: "250px",
@@ -57,8 +64,10 @@ export function SharedSidebar({
             "5xl": "420px",
             "6xl": "450px",
           },
-          backgroundColor: theme.palette.background.paper,
+          backgroundColor: paperBg,
           zIndex: 10003,
+          "--shared-sidebar-inactive-text": inactiveOn.primary,
+          "--shared-sidebar-active-text": activeOn.primary,
           ...paperSx,
         },
       }}
@@ -70,7 +79,7 @@ export function SharedSidebar({
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
       >
-        <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+        <Typography variant="h6" sx={{ color: inactiveOn.primary }}>
           {title}
         </Typography>
       </Box>
@@ -80,6 +89,11 @@ export function SharedSidebar({
           return (
             <ListItem key={`${item.label}-${item.path}`} disablePadding>
               <ListItemButton
+                className={
+                  isActive
+                    ? "shared-sidebar-nav-item shared-sidebar-nav-item--active"
+                    : "shared-sidebar-nav-item"
+                }
                 onClick={() => {
                   navigate(item.path);
                   onClose();
@@ -98,9 +112,7 @@ export function SharedSidebar({
                 <ListItemText
                   primary={item.label}
                   sx={{
-                    color: isActive
-                      ? theme.palette.primary.contrastText
-                      : theme.palette.text.primary,
+                    color: isActive ? activeOn.primary : inactiveOn.primary,
                     fontWeight: isActive ? 600 : 400,
                   }}
                 />

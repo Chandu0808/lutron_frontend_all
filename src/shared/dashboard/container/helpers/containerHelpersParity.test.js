@@ -376,6 +376,15 @@ describe('dashboard container helpers parity', () => {
       const inside = createClosestEvent(['.chart-export-dropdown']);
       expect(shouldCloseExportMenusOnOutsideClick(inside, profile)).toBe(false);
     });
+
+    it('customized legacy profile keeps export button and panel clicks open', () => {
+      const profile = EXPORT_MENU_OUTSIDE_CLICK_PROFILES.customizedLegacy;
+      const exportButton = createClosestEvent(['button[data-export-menu="true"]']);
+      const exportPanel = createClosestEvent(['[data-export-dropdown-panel]']);
+
+      expect(shouldCloseExportMenusOnOutsideClick(exportButton, profile)).toBe(false);
+      expect(shouldCloseExportMenusOnOutsideClick(exportPanel, profile)).toBe(false);
+    });
   });
 
   describe('widget memo stabilizers', () => {

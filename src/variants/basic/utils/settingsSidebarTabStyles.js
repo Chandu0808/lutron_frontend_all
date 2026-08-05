@@ -35,6 +35,7 @@ export const SETTINGS_SIDEBAR_ITEM_ORDER = [
   "Rename Widget",
   "Floor",
   "Processors",
+  "Maintenance",
   "FOFP",
   "Help",
   "Manage Sensors",

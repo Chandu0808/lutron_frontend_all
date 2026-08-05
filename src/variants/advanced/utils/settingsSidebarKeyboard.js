@@ -104,7 +104,7 @@ function handleSettingsSidebarWindowKeyDown(event) {
 
   if (event.key === "ArrowRight" && currentLabel === "Home") {
     const normalizedPath = api.pathname.replace(/\/$/, "") || "/";
-    if (normalizedPath === "/main") {
+    if (normalizedPath === "/main" || normalizedPath === "/setting/main") {
       event.preventDefault();
       event.stopPropagation();
       api.onRightFromHome?.();

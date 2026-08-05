@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AreaTreeDialog from "./AreaTreeDialog";
 import Action from "./Action";
 import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
+import { dispatchFetchFloorsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 import { selectAreaScenes } from "../../redux/slice/settingsslice/heatmap/areaSettingsSlice";
 import { createQuickControl, fetchQuickControls } from "../../redux/slice/quickcontrols/quickControlSlice";
 import { useNavigate } from "react-router-dom";
@@ -12,24 +13,36 @@ import { selectProfile } from "../../redux/slice/auth/userlogin";
 import { BaseUrl } from "../../BaseUrl";
 import { MenuItem, Select } from "@mui/material";
 import {
-  scheduleFormCardStyle,
-  scheduleHeaderLinkStyle,
-  scheduleLocationRowStyle,
-  scheduleLocationTextStyle,
   schedulePanelLabel,
   schedulePrimaryButtonStyle,
-  scheduleRightHeaderStyle,
-  scheduleRightListScrollStyle,
-  scheduleRightPanelStyle,
   scheduleSmallActionButtonStyle,
   scheduleTextInputStyle,
-  scheduleFixedActionBarStyle,
-  schedulePageWithFixedActionBarStyle,
 } from "../../utils/scheduleCreateStyles";
 import {
-  scheduleFilterMenuProps,
+  getAdvancedQuickControlDetailsActionBarStyle,
+  getAdvancedQuickControlDetailsShellStyle,
+  getAdvancedQuickControlDetailsTableCardStyle,
+  getAdvancedQuickControlDetailsTablePanelStyle,
+  quickControlDetailsActionColStyle,
+  quickControlDetailsHeaderTrailingColStyle,
+  quickControlDetailsListScrollStyle,
+  quickControlDetailsListScrollWrapStyle,
+  quickControlDetailsLocationColStyle,
+  quickControlDetailsStickyHeaderStyle,
+  quickControlDetailsTableHeaderRowStyle,
+  quickControlDetailsTableRowStyle,
+} from "../../utils/quickControlTableLayout";
+import { detailsRowActionControlsStyle } from "../../../../utils/detailsRowActionControlsStyle";
+import {
+  scheduleModalFilterMenuProps,
   scheduleSelectFieldSx,
 } from "../../utils/scheduleSelectMenuProps";
+import {
+  renderQuickControlModalLayer,
+  quickControlModalOverlaySx,
+  quickControlModalPanelSx,
+  quickControlModalTitleSx,
+} from "../../utils/quickControlModalStyles";
 import {
   QC_MODAL_LABEL,
   QC_RADIO_BORDER,
@@ -41,6 +54,16 @@ import {
   stripActionSource,
   withIndividualSource,
 } from "../../utils/scheduleActionPriority";
+import ActionChooserModal from "../../../../shared/quickcontrols/ActionChooserModal";
+import { getQuickControlActionShortLabel } from "../../../../shared/quickcontrols/quickControlActionLabels";
+import {
+  convertApiActionToUiAction,
+  expandQuickControlActionData,
+  lightStatusSettingsFromAreaAction,
+  locationHasSceneAction,
+  locationHasZoneAction,
+  mergeExpandedActionsIntoLocation,
+} from "../../../../shared/quickcontrols/zoneActionHelpers";
 
 const CreateQuickControl = () => {
   const dispatch = useDispatch();
@@ -48,8 +71,13 @@ const CreateQuickControl = () => {
   const floors = useSelector(selectFloors);
   const areaScenes = useSelector(selectAreaScenes);
   const buttonColor = "var(--app-button)";
-  const modalBg = 'var(--schedule-modal-bg, #d6dde8)';
-  const modalTitleColor = 'var(--schedule-modal-title-color, #000000)';
+  const schedulePanelInputStyle = (enabled) => ({
+    border: "1px solid var(--schedule-panel-border, #ccc)",
+    background: "var(--schedule-select-bg, #fff)",
+    color: enabled ? buttonColor : schedulePanelLabel,
+    outline: "none",
+    boxSizing: "border-box",
+  });
   
   // Get user authentication and role
   const { role } = UseAuth();
@@ -85,13 +113,19 @@ const CreateQuickControl = () => {
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [actionDialogIdx, setActionDialogIdx] = useState(null);
   const [selectedActionData, setSelectedActionData] = useState(null);
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editAllMode, setEditAllMode] = useState(false);
+  const [actionChooser, setActionChooser] = useState(null); // { mode, locationIdx }
   
   // Add confirmation dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
+  const [showDeleteActionDialog, setShowDeleteActionDialog] = useState(false);
+  const [actionToDelete, setActionToDelete] = useState(null);
 
   // New state for common action functionality
   const [showCommonActionDialog, setShowCommonActionDialog] = useState(false);
+  const [editingAreaStatus, setEditingAreaStatus] = useState(null);
   const [selectedCommonActionType, setSelectedCommonActionType] = useState('light_status');
   const [selectedOccupancySetting, setSelectedOccupancySetting] = useState(null);
   const [selectedZoneType, setSelectedZoneType] = useState('switched');
@@ -100,6 +134,14 @@ const CreateQuickControl = () => {
     dimmed: { brightness: 50, fadeTime: '02', delayTime: '00' },
     whitetune: { brightness: 50, cct: 2700, fadeTime: '02', delayTime: '00' }
   });
+
+  const resetCommonActionDialog = () => {
+    setShowCommonActionDialog(false);
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+  };
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -119,10 +161,65 @@ const CreateQuickControl = () => {
 
   const isLargeScreen = windowSize.width >= 1920;
   const isDesktop = windowSize.width >= 1366;
+  const isTablet = windowSize.width >= 768 && windowSize.width <= 1024;
+
+  const listScrollRef = useRef(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
+  const updateScrollDownVisibility = useCallback(() => {
+    const el = listScrollRef.current;
+    if (!el) {
+      setShowScrollDown(false);
+      return;
+    }
+    setShowScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
+
+  useLayoutEffect(() => {
+    const syncScrollDown = () => updateScrollDownVisibility();
+    syncScrollDown();
+    const rafId = requestAnimationFrame(syncScrollDown);
+    const t50 = window.setTimeout(syncScrollDown, 50);
+    const t300 = window.setTimeout(syncScrollDown, 300);
+
+    const el = listScrollRef.current;
+    if (!el) {
+      return () => {
+        cancelAnimationFrame(rafId);
+        window.clearTimeout(t50);
+        window.clearTimeout(t300);
+      };
+    }
+
+    el.addEventListener("scroll", syncScrollDown, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncScrollDown) : null;
+    resizeObserver?.observe(el);
+    window.addEventListener("resize", syncScrollDown);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(t50);
+      window.clearTimeout(t300);
+      el.removeEventListener("scroll", syncScrollDown);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncScrollDown);
+    };
+  }, [locations, updateScrollDownVisibility]);
+
+  const handleScrollDown = () => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (remaining <= 0) return;
+    const step = Math.max(el.clientHeight * 0.75, 120);
+    el.scrollBy({ top: Math.min(step, remaining), behavior: "smooth" });
+    window.setTimeout(updateScrollDownVisibility, 300);
+  };
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, floors?.length]);
 
   // Add location(s) from dialog
   const handleAddLocations = (areas) => {
@@ -152,33 +249,141 @@ const CreateQuickControl = () => {
 
   // Open action dialog
   const handleOpenActionDialog = (idx) => {
+    setEditingActionIdx(null);
+    setEditAllMode(false);
     setActionDialogIdx(idx);
     setSelectedActionData(null);
   };
 
-  // Add action to location
+  // Add / update action(s) on a location (supports All Zones expand + multi-action merge)
   const handleAddAction = (idx, actionData) => {
-    setLocations(prev => prev.map((loc, i) => {
-      if (i !== idx) return loc;
-
-      let newAction = actionData;
-
-      // Normalize shade action to shade_group_status
-      if (actionData.type === "shade" && actionData.shade) {
-        newAction = {
-          type: "shade_group_status",
-          shade_group_id: actionData.shade.id || actionData.shade.zone_id,
-          shade_group_name: actionData.shade.name,
-          shade_level: Number(actionData.value) // value should be 0-100, 0=closed, 100=open
+    const expanded = expandQuickControlActionData(actionData);
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== idx) return loc;
+        return {
+          ...loc,
+          actions: mergeExpandedActionsIntoLocation(loc.actions, expanded, {
+            editingActionIdx: editAllMode ? null : editingActionIdx,
+            editAllMode,
+            withSource: withIndividualSource,
+          }),
         };
-      }
-
-      // Remove previous action of the same type
-      const filtered = (loc.actions || []).filter(a => a.type !== newAction.type);
-      return { ...loc, actions: [...filtered, withIndividualSource(newAction)] };
-    }));
+      })
+    );
     setActionDialogIdx(null);
     setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
+  };
+
+  const openEditForAction = (locationIdx, actionIdx) => {
+    const location = locations[locationIdx];
+    const action = location?.actions?.[actionIdx];
+    if (!action) return;
+
+    if (action.type === 'area_status') {
+      setEditingAreaStatus({ locationIdx });
+      setSelectedCommonActionType('light_status');
+      setSelectedOccupancySetting(null);
+      setSelectedZoneType('switched');
+      setLightStatusSettings((prev) => ({
+        ...prev,
+        ...lightStatusSettingsFromAreaAction(action),
+      }));
+      setShowCommonActionDialog(true);
+      return;
+    }
+
+    const convertedAction = convertApiActionToUiAction(action);
+    setEditingActionIdx(actionIdx);
+    setEditAllMode(false);
+    setSelectedActionData(convertedAction);
+    setActionDialogIdx(locationIdx);
+  };
+
+  const handleEditButtonClick = (locationIdx) => {
+    const location = locations[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      handleOpenActionDialog(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      openEditForAction(locationIdx, 0);
+      return;
+    }
+    setActionChooser({ mode: 'edit', locationIdx });
+  };
+
+  const handleDeleteButtonClick = (locationIdx) => {
+    const location = locations[locationIdx];
+    const actions = location?.actions || [];
+    if (actions.length === 0) {
+      setLocationToDelete({ index: locationIdx, location });
+      setShowDeleteDialog(true);
+      return;
+    }
+    if (actions.length === 1) {
+      setActionToDelete({
+        locationIdx,
+        location,
+        actionIndex: 0,
+        action: actions[0],
+      });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    setActionChooser({ mode: 'delete', locationIdx });
+  };
+
+  const handleChooserPickEdit = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    if (pick === 'all') {
+      setEditAllMode(true);
+      setEditingActionIdx(null);
+      setSelectedActionData(null);
+      setActionDialogIdx(locationIdx);
+      return;
+    }
+    openEditForAction(locationIdx, pick);
+  };
+
+  const handleChooserPickDelete = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    const location = locations[locationIdx];
+    if (pick === 'all') {
+      setLocations((prev) =>
+        prev.map((loc, i) => (i === locationIdx ? { ...loc, actions: [] } : loc))
+      );
+      return;
+    }
+    setActionToDelete({
+      locationIdx,
+      location,
+      actionIndex: pick,
+      action: location.actions[pick],
+    });
+    setShowDeleteActionDialog(true);
+  };
+
+  const confirmDeleteAction = () => {
+    if (!actionToDelete) return;
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== actionToDelete.locationIdx) return loc;
+        return {
+          ...loc,
+          actions: (loc.actions || []).filter((_, ai) => ai !== actionToDelete.actionIndex),
+        };
+      })
+    );
+    setShowDeleteActionDialog(false);
+    setActionToDelete(null);
   };
 
   
@@ -274,11 +479,16 @@ const CreateQuickControl = () => {
           }
           // SHADE
           if (action.type === "shade_group_status" && action.shade_group_id) {
+            const rawLevel = action.shade_level;
+            const shadeLevel =
+              typeof rawLevel === "string" && rawLevel.includes("%")
+                ? rawLevel
+                : `${rawLevel}%`;
             return {
               type: "shade_group_status",
               shade_group_id: Number(action.shade_group_id),
               shade_group_name: action.shade_group_name,
-              shade_level: `${action.shade_level}%`
+              shade_level: shadeLevel
             };
           }
           // Default: return as is
@@ -289,11 +499,11 @@ const CreateQuickControl = () => {
 
 
     try {
-      await dispatch(createQuickControl(payload));
-      await dispatch(fetchQuickControls()); // <-- Ensure the list is refreshed
+      await dispatch(createQuickControl(payload)).unwrap();
+      await dispatch(fetchQuickControls());
       navigate("/quickcontrols");
     } catch (error) {
-      // Failed to create quick control
+      // Error alert is shown by createQuickControl thunk; stay on create page.
     }
   };
 
@@ -333,7 +543,22 @@ const CreateQuickControl = () => {
   // Apply common action to all areas
   const handleApplyCommonAction = () => {
     if (locations.length === 0) {
-      setShowCommonActionDialog(false);
+      resetCommonActionDialog();
+      return;
+    }
+
+    if (editingAreaStatus != null && selectedCommonActionType === 'light_status') {
+      const { locationIdx } = editingAreaStatus;
+      const commonAction = {
+        type: "area_status",
+        area_status: lightStatusSettings.switched.on_off
+      };
+      setLocations(prev => prev.map((location, i) =>
+        i === locationIdx
+          ? { ...location, actions: applyCommonActionToActions(location.actions, commonAction) }
+          : location
+      ));
+      resetCommonActionDialog();
       return;
     }
     
@@ -361,10 +586,7 @@ const CreateQuickControl = () => {
     }
     
     // Close the dialog and reset
-    setShowCommonActionDialog(false);
-    setSelectedCommonActionType('light_status');
-    setSelectedOccupancySetting(null);
-    setSelectedZoneType('switched');
+    resetCommonActionDialog();
   };
 
   // Don't auto-apply when dialog opens - wait for "Apply to All" button
@@ -376,388 +598,349 @@ const CreateQuickControl = () => {
 
   return (
     <div
-      style={{
-        padding: isLargeScreen ? 40 : isDesktop ? 32 : 24,
-        borderRadius: 20,
-        minHeight: 500,
-        display: "flex",
-        gap: isLargeScreen ? 32 : isDesktop ? 24 : 20,
-        alignItems: "flex-start",
-        maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,
-        width: "100%",
-        boxSizing: "border-box",
-        ...schedulePageWithFixedActionBarStyle(isLargeScreen, isDesktop),
-      }}
+      className="quick-control-create-shell"
+      style={getAdvancedQuickControlDetailsShellStyle(isLargeScreen, isDesktop, isTablet)}
     >
       <div
         style={{
-          flex: "0 1 400px",
-          minWidth: isLargeScreen ? 380 : isDesktop ? 360 : 340,
-          maxWidth: isLargeScreen ? 480 : isDesktop ? 440 : 420,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          flexDirection: "row",
+          gap: isTablet ? 12 : 0,
+          flexShrink: 0,
         }}
       >
         <div
           style={{
-            marginBottom: isLargeScreen ? 15 : isDesktop ? 12 : 10,
-            ...scheduleFormCardStyle(isLargeScreen, isDesktop),
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            width: "auto",
+            flex: isTablet ? "1" : "auto",
           }}
         >
-          <label
-            style={{
-              fontWeight: 500,
-              color: schedulePanelLabel,
-              display: "block",
-              marginBottom: isLargeScreen ? 10 : 8,
-              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-            }}
-          >
-            Quick Control Name
-          </label>
           <input
             type="text"
             value={quickControlName}
             onChange={(e) => setQuickControlName(e.target.value)}
             placeholder="Quick Control Name"
-            style={scheduleTextInputStyle(isLargeScreen, isDesktop, buttonColor)}
+            style={{
+              fontSize: isTablet ? 20 : isLargeScreen ? 24 : isDesktop ? 22 : 20,
+              fontWeight: 700,
+              marginBottom: isTablet ? 16 : 24,
+              minWidth: isTablet ? 200 : 300,
+              width: "auto",
+              ...scheduleTextInputStyle(isLargeScreen, isDesktop, buttonColor),
+              ...schedulePanelInputStyle(true),
+            }}
           />
         </div>
       </div>
 
-      <div style={scheduleRightPanelStyle(isLargeScreen, isDesktop)}>
-        <div style={scheduleRightHeaderStyle(isLargeScreen, isDesktop)}>
-          <span
-            style={scheduleHeaderLinkStyle}
-            onClick={() => setShowLocationDialog(true)}
-          >
-            + Add Location
-          </span>
-          <span
-            style={{
-              flex: 2,
-              textAlign: "left",
-              minWidth: 100,
-              color: schedulePanelLabel,
-            }}
-          >
-            Add Action
-          </span>
-          <span
-            style={{
-              flex: 1,
-              cursor: "pointer",
-              textAlign: "start",
-              minWidth: 160,
-              whiteSpace: "nowrap",
-              marginLeft: 15,
-              color: schedulePanelLabel,
-            }}
-            onClick={() => setShowCommonActionDialog(true)}
-          >
-            + Add Common Action
-          </span>
-        </div>
-
-        <div style={scheduleRightListScrollStyle}>
-      {locations.map((loc, idx) => {
-        const locationText = `${loc.floorName} > ${loc.areaName}`;
-        const isLongName = locationText.length > 40;
-        return (
-        <div key={idx} style={{
-          ...scheduleLocationRowStyle(isLongName),
-          alignItems: "center",
-          gap: 16,
-        }}>
-          <div
-            style={{
-              flex: "0 0 280px",
-              ...scheduleLocationTextStyle,
-              whiteSpace: "normal",
-              wordBreak: "break-word",
-            }}
-          >
-            {locationText}
-          </div>
-          <div style={{
-            flex: 1,
-            ...scheduleLocationTextStyle,
-            minWidth: 120,
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px",
-          }}>
-            {(loc.actions && loc.actions.length > 0)
-              ? loc.actions.map((a, i) => {
-                  // AREA_STATUS (from common action for On/Off)
-                  if (a.type === "area_status") {
-                    const status = a.area_status || "Off";
-                    return (
-                      <div key={i}>
-                        Area Status: {status}
-                      </div>
-                    );
-                  }
-                  // ZONE_STATUS (from common action with specific zone controls)
-                  if (a.type === "zone_status") {
-                    const zoneType = a.zone_type;
-                    const zoneStatus = a.zone_status || a.switched_state || "Off";
-                    
-                    // For zone_status with zone_id, show zone details
-                    if (a.zone_id) {
-                      const zoneName = a.zone_name || `Zone ${a.zone_id}`;
-                      if (zoneType === "switched") {
-                        const switchedState = a.switched_state || a.zone_status || "Off";
-                        return (
-                          <div key={i}>
-                            Zone: {zoneName} ({switchedState})
-                          </div>
-                        );
-                      } else if (zoneType === "dimmed") {
-                        const switchedState = a.zone_status || "On";
-                        const brightness = a.zone_brightness || "";
-                        return (
-                          <div key={i}>
-                            Zone: {zoneName} ({switchedState}{brightness ? `, ${brightness}` : ""})
-                          </div>
-                        );
-                      } else if (zoneType === "whitetune") {
-                        const switchedState = a.zone_status || "On";
-                        const brightness = a.zone_brightness || "";
-                        const temperature = a.zone_temperature || "";
-                        return (
-                          <div key={i}>
-                            Zone: {zoneName} ({switchedState}{brightness ? `, ${brightness}` : ""}{temperature ? `, ${temperature}` : ""})
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={i}>
-                            Zone: {zoneName} ({zoneStatus})
-                          </div>
-                        );
-                      }
-                    }
-                    // Fallback for zone_status without zone_id
-                    return (
-                      <div key={i}>
-                        Area Status: {zoneStatus}
-                      </div>
-                    );
-                  }
-                  // ZONE (from Action component)
-                  if (a.type === "zone" && a.zone) {
-                    if (
-                      a.zone.type &&
-                      ["switched", "switch"].includes(a.zone.type.toLowerCase())
-                    ) {
-                      const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
-                      return (
-                        <div key={i}>
-                          Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.on_off || "OFF"})
-                        </div>
-                      );
-                    }
-                    if (
-                      a.zone.type &&
-                      [
-                        "whitetune",
-                        "white tune",
-                        "white_tune",
-                        "cct"
-                      ].includes(a.zone.type.toLowerCase())
-                    ) {
-                      const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
-                      return (
-                        <div key={i}>
-                          Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.brightness ?? 0}% brightness, {a.values?.cct ?? 2700}K CCT)
-                        </div>
-                      );
-                    }
-                    if (
-                      a.zone.type &&
-                      ["dimmer", "dimmed"].includes(a.zone.type.toLowerCase())
-                    ) {
-                      const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
-                      return (
-                        <div key={i}>
-                          Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.brightness ?? 0}% brightness)
-                        </div>
-                      );
-                    }
-                    const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
-                    return (
-                      <div key={i}>
-                        Zone: {zoneName}{zoneName ? ' -' : ''}
-                      </div>
-                    );
-                  }
-                  // OCCUPANCY (from common action)
-                  if (a.type === "occupancy") {
-                    let occLabel = "";
-                    // Check both action and occupancy_setting
-                    const setting = a.occupancy_setting || a.action;
-                    if (setting) {
-                      if (setting.toLowerCase() === "disabled") occLabel = "Disabled";
-                      else if (setting.toLowerCase() === "auto") occLabel = "Auto";
-                      else if (setting.toLowerCase() === "vacancy") occLabel = "Vacancy";
-                      else occLabel = setting;
-                    }
-                    return <div key={i}>Occupancy Setting: {occLabel}</div>;
-                  }
-                  // SCENE
-                  if (a.type === "scene" && a.scene) {
-                    return <div key={i}>Scene: {a.scene.name}</div>;
-                  }
-                  // SHADE
-              
-                    if (a.type === "shade_group_status" && a.shade_group_id) {
-                      const shadeName = a.shade_group_name || a.shade_group_id || '';
-                      const shadeValue = typeof a.shade_level === "string"
-                        ? Number(a.shade_level.replace('%', '').trim())
-                        : Number(a.shade_level);
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                          <div style={{ minWidth: 120 }}>
-                            Shade: {shadeName}{shadeName ? ' -' : ''}
-                          </div>
-                          <span style={{ minWidth: 60, fontWeight: 600 }}>
-                            {shadeValue}% Open
-                          </span>
-                        </div>
-                      );
-                    }
-
-                  // DEVICE
-                  if (a.type === "device" && a.device) {
-                    return <div key={i}>Device: {a.device.name}{a.device.name ? ' -' : ''}</div>;
-                  }
-                  return null;
-                })
-              : <button
-                  style={scheduleSmallActionButtonStyle(buttonColor)}
-                  onClick={() => handleOpenActionDialog(idx)}
-                >Add Action</button>
-            }
-          </div>
-          <div
-            style={{
-              flex: "0 0 50px",
-              textAlign: "right",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "flex-end",
-              paddingLeft: "10px",
-            }}
-          >
-            <button
-              onClick={() => handleDelete(idx)}
-              style={{
-                background: buttonColor,
-                border: "none",
-                borderRadius: 4,
-                color: "#fff",
-                padding: "6px 10px",
-                cursor: "pointer",
-                fontSize: "14px",
-                minWidth: "32px",
-                height: "32px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >🗑️</button>
-          </div>
-          {actionDialogIdx === idx && (
-            <div style={{
-              position: 'fixed',
-              left: 0, top: 0, right: 0, bottom: 0,
-              background: "rgba(0,0,0,0.25)",
-              zIndex: 1000,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          width: "100%",
+        }}
+      >
+        <div style={getAdvancedQuickControlDetailsTablePanelStyle(isLargeScreen, isDesktop)}>
+          <div style={getAdvancedQuickControlDetailsTableCardStyle(isLargeScreen, isDesktop)}>
+            <div className="quick-control-details-list-scroll-wrap" style={quickControlDetailsListScrollWrapStyle}>
               <div
-                className="quick-control-modal"
-                style={{
-                background: modalBg,
-                borderRadius: 18,
-                padding: 28,
-                minWidth: 340,
-                boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-                position: "relative",
-                color: modalTitleColor
-              }}
+                ref={listScrollRef}
+                className="quick-control-details-list-scroll"
+                style={quickControlDetailsListScrollStyle}
               >
-                <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: modalTitleColor }}>Add Action</div>
-                <Action
-                  areaId={loc.areaId}
-                  onActionSelect={action => setSelectedActionData(action)}
-                />
-                <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
-                  <button
+                <div
+                  style={{
+                    ...quickControlDetailsTableHeaderRowStyle,
+                    ...quickControlDetailsStickyHeaderStyle(),
+                  }}
+                >
+                  <span
+                    style={{
+                      ...quickControlDetailsLocationColStyle,
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setShowLocationDialog(true)}
+                  >
+                    + Add Location
+                  </span>
+                  <span style={quickControlDetailsActionColStyle}>Add Action</span>
+                  <span
+                    style={{
+                      ...quickControlDetailsHeaderTrailingColStyle,
+                      cursor: "pointer",
+                    }}
                     onClick={() => {
-                      if (selectedActionData && selectedActionData.type) {
-                        handleAddAction(idx, selectedActionData);
-                      }
-                    }}
-                    disabled={
-                      !selectedActionData ||
-                      !selectedActionData.type ||
-                      (selectedActionData.type === "scene" && !selectedActionData.scene) ||
-                      (selectedActionData.type === "shade" && !selectedActionData.shade)
-                    }
-                    style={{
-                      padding: "10px 28px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? buttonColor : "#888",
-                      color: "#fff",
-                      fontWeight: 500,
-                      cursor: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? "pointer" : "not-allowed"
+                      setEditingAreaStatus(null);
+                      setSelectedCommonActionType('light_status');
+                      setSelectedOccupancySetting(null);
+                      setSelectedZoneType('switched');
+                      setLightStatusSettings((prev) => ({
+                        ...prev,
+                        switched: { on_off: 'On' },
+                      }));
+                      setShowCommonActionDialog(true);
                     }}
                   >
-                    Add Action
-                  </button>
-                  <button
-                    onClick={() => { setActionDialogIdx(null); setSelectedActionData(null); }}
-                    style={{
-                      padding: "10px 28px",
-                      borderRadius: 8,
-                      border: `1px solid ${buttonColor}`,
-                      background: "#fff",
-                      color: buttonColor,
-                      fontWeight: 500,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Cancel
-                  </button>
+                    + Add Common Action
+                  </span>
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-      })}
-        </div>
 
-        <div style={scheduleFixedActionBarStyle(isLargeScreen, isDesktop)}>
-          <button
-            onClick={handleCancel}
-            style={schedulePrimaryButtonStyle(isLargeScreen, isDesktop)}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saveDisabled}
-            style={schedulePrimaryButtonStyle(isLargeScreen, isDesktop, {
-              disabled: saveDisabled,
-            })}
-          >
-            Save
-          </button>
+                {locations.map((loc, idx) => {
+                  const locationText = `${loc.floorName} / ${loc.areaName}`;
+                  const hasActions = loc.actions && loc.actions.length > 0;
+                  return (
+                    <div key={idx} style={quickControlDetailsTableRowStyle}>
+                      <div style={quickControlDetailsLocationColStyle}>{locationText}</div>
+                      <div
+                        style={{
+                          ...quickControlDetailsActionColStyle,
+                          minWidth: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                        }}
+                      >
+                        {hasActions
+                          ? (
+                            <>
+                              {loc.actions.map((a, i) => {
+                              if (a.type === "area_status") {
+                                const status = a.area_status || "Off";
+                                return (
+                                  <div key={i}>
+                                    Area Status: {status}
+                                  </div>
+                                );
+                              }
+                              if (a.type === "zone_status") {
+                                const zoneType = a.zone_type;
+                                const zoneStatus = a.zone_status || a.switched_state || "Off";
+
+                                if (a.zone_id) {
+                                  const zoneName = a.zone_name || `Zone ${a.zone_id}`;
+                                  if (zoneType === "switched") {
+                                    const switchedState = a.switched_state || a.zone_status || "Off";
+                                    return (
+                                      <div key={i}>
+                                        Zone: {zoneName} ({switchedState})
+                                      </div>
+                                    );
+                                  } else if (zoneType === "dimmed") {
+                                    const switchedState = a.zone_status || "On";
+                                    const brightness = a.zone_brightness || "";
+                                    return (
+                                      <div key={i}>
+                                        Zone: {zoneName} ({switchedState}{brightness ? `, ${brightness}` : ""})
+                                      </div>
+                                    );
+                                  } else if (zoneType === "whitetune") {
+                                    const switchedState = a.zone_status || "On";
+                                    const brightness = a.zone_brightness || "";
+                                    const temperature = a.zone_temperature || "";
+                                    return (
+                                      <div key={i}>
+                                        Zone: {zoneName} ({switchedState}{brightness ? `, ${brightness}` : ""}{temperature ? `, ${temperature}` : ""})
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div key={i}>
+                                        Zone: {zoneName} ({zoneStatus})
+                                      </div>
+                                    );
+                                  }
+                                }
+                                return (
+                                  <div key={i}>
+                                    Area Status: {zoneStatus}
+                                  </div>
+                                );
+                              }
+                              if (a.type === "zone" && a.zone) {
+                                if (
+                                  a.zone.type &&
+                                  ["switched", "switch"].includes(a.zone.type.toLowerCase())
+                                ) {
+                                  const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
+                                  return (
+                                    <div key={i}>
+                                      Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.on_off || "OFF"})
+                                    </div>
+                                  );
+                                }
+                                if (
+                                  a.zone.type &&
+                                  [
+                                    "whitetune",
+                                    "white tune",
+                                    "white_tune",
+                                    "cct"
+                                  ].includes(a.zone.type.toLowerCase())
+                                ) {
+                                  const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
+                                  return (
+                                    <div key={i}>
+                                      Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.brightness ?? 0}% brightness, {a.values?.cct ?? 2700}K CCT)
+                                    </div>
+                                  );
+                                }
+                                if (
+                                  a.zone.type &&
+                                  ["dimmer", "dimmed"].includes(a.zone.type.toLowerCase())
+                                ) {
+                                  const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
+                                  return (
+                                    <div key={i}>
+                                      Zone: {zoneName}{zoneName ? ' -' : ''} ({a.values?.brightness ?? 0}% brightness)
+                                    </div>
+                                  );
+                                }
+                                const zoneName = a.zone_name || (a.zone && a.zone.name) || a.zone_id || '';
+                                return (
+                                  <div key={i}>
+                                    Zone: {zoneName}{zoneName ? ' -' : ''}
+                                  </div>
+                                );
+                              }
+                              if (a.type === "occupancy") {
+                                let occLabel = "";
+                                const setting = a.occupancy_setting || a.action;
+                                if (setting) {
+                                  if (setting.toLowerCase() === "disabled") occLabel = "Disabled";
+                                  else if (setting.toLowerCase() === "auto") occLabel = "Auto";
+                                  else if (setting.toLowerCase() === "vacancy") occLabel = "Vacancy";
+                                  else occLabel = setting;
+                                }
+                                return <div key={i}>Occupancy Setting: {occLabel}</div>;
+                              }
+                              if (a.type === "scene" && a.scene) {
+                                return <div key={i}>Scene: {a.scene.name}</div>;
+                              }
+                              if (a.type === "set_scene") {
+                                return <div key={i}>Scene: {a.scene_name}</div>;
+                              }
+                              if (a.type === "shade_group_status" && a.shade_group_id) {
+                                const shadeName = a.shade_group_name || a.shade_group_id || '';
+                                const shadeValue = typeof a.shade_level === "string"
+                                  ? Number(a.shade_level.replace('%', '').trim())
+                                  : Number(a.shade_level);
+                                return (
+                                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                                    <div style={{ minWidth: 120 }}>
+                                      Shade: {shadeName}{shadeName ? ' -' : ''}
+                                    </div>
+                                    <span style={{ minWidth: 60, fontWeight: 600 }}>
+                                      {shadeValue}% Open
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              if (a.type === "device" && a.device) {
+                                return <div key={i}>Device: {a.device.name}{a.device.name ? ' -' : ''}</div>;
+                              }
+                              return null;
+                            })}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenActionDialog(idx)}
+                                style={{
+                                  ...scheduleSmallActionButtonStyle(buttonColor),
+                                  background: 'transparent',
+                                  color: buttonColor,
+                                  border: `1px solid ${buttonColor}`,
+                                  alignSelf: 'flex-start',
+                                  marginTop: 4,
+                                }}
+                              >
+                                + Add Action
+                              </button>
+                            </>
+                          )
+                          : (
+                            <button
+                              style={scheduleSmallActionButtonStyle(buttonColor)}
+                              onClick={() => handleOpenActionDialog(idx)}
+                            >
+                              Add Action
+                            </button>
+                          )
+                        }
+                      </div>
+                      <div style={detailsRowActionControlsStyle(180)}>
+                        {hasActions && (
+                          <button
+                            onClick={() => handleEditButtonClick(idx)}
+                            style={scheduleSmallActionButtonStyle(buttonColor)}
+                          >
+                            Edit Action
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteButtonClick(idx)}
+                          style={{
+                            background: buttonColor,
+                            border: "none",
+                            borderRadius: 4,
+                            color: "#fff",
+                            padding: "6px 10px",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            minWidth: "32px",
+                            height: "32px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {showScrollDown && (
+                <button
+                  type="button"
+                  className="quick-control-details-scroll-btn"
+                  onClick={handleScrollDown}
+                  aria-label="Scroll down"
+                >
+                  ▼
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+      </div>
+
+      <div
+        className="quick-control-details-action-bar"
+        style={getAdvancedQuickControlDetailsActionBarStyle()}
+      >
+        <button
+          onClick={handleCancel}
+          style={schedulePrimaryButtonStyle(isLargeScreen, isDesktop)}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saveDisabled}
+          style={schedulePrimaryButtonStyle(isLargeScreen, isDesktop, {
+            disabled: saveDisabled,
+          })}
+        >
+          Save
+        </button>
       </div>
 
       <AreaTreeDialog
@@ -766,34 +949,91 @@ const CreateQuickControl = () => {
         onAdd={handleAddLocations}
       />
 
+      {renderQuickControlModalLayer(
+        true,
+        actionDialogIdx !== null && (
+          <div style={quickControlModalOverlaySx}>
+            <div style={{ ...quickControlModalPanelSx, minWidth: 340 }}>
+              <div style={quickControlModalTitleSx}>
+                {selectedActionData ? 'Edit Action' : 'Add Action'}
+              </div>
+              <Action
+                areaId={locations[actionDialogIdx]?.areaId}
+                onActionSelect={(action) => setSelectedActionData(action)}
+                initialAction={selectedActionData}
+                menuProps={scheduleModalFilterMenuProps}
+                hideZoneOption={
+                  !editAllMode &&
+                  editingActionIdx == null &&
+                  locationHasSceneAction(locations[actionDialogIdx]?.actions)
+                }
+                hideSceneOption={
+                  !editAllMode &&
+                  editingActionIdx == null &&
+                  locationHasZoneAction(locations[actionDialogIdx]?.actions)
+                }
+              />
+              <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => {
+                    if (selectedActionData && selectedActionData.type) {
+                      handleAddAction(actionDialogIdx, selectedActionData);
+                    }
+                  }}
+                  disabled={
+                    !selectedActionData ||
+                    !selectedActionData.type ||
+                    (selectedActionData.type === "scene" && !selectedActionData.scene) ||
+                    (selectedActionData.type === "shade" && !selectedActionData.shade)
+                  }
+                  style={{
+                    padding: "10px 28px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? buttonColor : "#888",
+                    color: "#fff",
+                    fontWeight: 500,
+                    cursor: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {selectedActionData ? 'Update' : 'Add'} Action
+                </button>
+                <button
+                  onClick={() => { setActionDialogIdx(null); setSelectedActionData(null); setEditingActionIdx(null); setEditAllMode(false); }}
+                  style={{
+                    padding: "10px 28px",
+                    borderRadius: 8,
+                    border: `1px solid ${buttonColor}`,
+                    background: "#fff",
+                    color: buttonColor,
+                    fontWeight: 500,
+                    cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
+
       {/* Common Action Dialog */}
-      {showCommonActionDialog && (
-        <div style={{
-          position: 'fixed',
-          left: 0, top: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.25)",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }}>
+      {renderQuickControlModalLayer(
+        true,
+        showCommonActionDialog && (
+        <div style={quickControlModalOverlaySx}>
           <div
-            className="quick-control-modal"
             style={{
-            background: modalBg,
-            borderRadius: 18,
-            padding: 28,
+            ...quickControlModalPanelSx,
             minWidth: 400,
             maxWidth: 600,
             maxHeight: '80vh',
             overflow: 'auto',
-            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-            position: "relative",
-            color: modalTitleColor
           }}
           >
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: modalTitleColor }}>
-              Add Common Action
+            <div style={quickControlModalTitleSx}>
+              {editingAreaStatus ? 'Edit Action' : 'Add Common Action'}
             </div>
             
             {/* Action Type Dropdown */}
@@ -804,11 +1044,12 @@ const CreateQuickControl = () => {
                 value={selectedCommonActionType}
                 onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
                 fullWidth
-                MenuProps={scheduleFilterMenuProps}
+                disabled={!!editingAreaStatus}
+                MenuProps={scheduleModalFilterMenuProps}
                 sx={scheduleSelectFieldSx}
               >
                 <MenuItem value="light_status">Light Status</MenuItem>
-                <MenuItem value="occupancy">Occupancy Setting</MenuItem>
+                {!editingAreaStatus && <MenuItem value="occupancy">Occupancy Setting</MenuItem>}
               </Select>
             </div>
 
@@ -918,15 +1159,10 @@ const CreateQuickControl = () => {
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "pointer" : "not-allowed"
                 }}
               >
-                Apply to All
+                {editingAreaStatus ? 'Update' : 'Apply to All'}
               </button>
               <button
-                onClick={() => { 
-                  setShowCommonActionDialog(false); 
-                  setSelectedCommonActionType('light_status'); 
-                  setSelectedOccupancySetting(null);
-                  setSelectedZoneType('switched');
-                }}
+                onClick={resetCommonActionDialog}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
@@ -942,6 +1178,7 @@ const CreateQuickControl = () => {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Delete Location Confirmation Dialog */}
@@ -954,6 +1191,33 @@ const CreateQuickControl = () => {
           setShowDeleteDialog(false);
           setLocationToDelete(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={showDeleteActionDialog}
+        title="Delete Action"
+        message={`Are you sure you want to delete "${getQuickControlActionShortLabel(actionToDelete?.action)}" from "${actionToDelete?.location?.areaName}"?`}
+        onConfirm={confirmDeleteAction}
+        onCancel={() => {
+          setShowDeleteActionDialog(false);
+          setActionToDelete(null);
+        }}
+      />
+
+      <ActionChooserModal
+        open={Boolean(actionChooser)}
+        mode={actionChooser?.mode || 'edit'}
+        actions={
+          actionChooser != null
+            ? locations[actionChooser.locationIdx]?.actions || []
+            : []
+        }
+        buttonColor={buttonColor}
+        onPick={(pick) => {
+          if (actionChooser?.mode === 'delete') handleChooserPickDelete(pick);
+          else handleChooserPickEdit(pick);
+        }}
+        onCancel={() => setActionChooser(null)}
       />
 
       <ConfirmDialog

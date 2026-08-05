@@ -33,6 +33,7 @@ import {
 import { DASHBOARD_DEFAULT_PATH } from "../../utils/dashboardLanding";
 import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
+import { dispatchFetchThemeSettingsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 import { resolveAuthPageBackgroundUrl } from "../../../../utils/themeBackgroundImage";
 
 const Login = () => {
@@ -66,7 +67,7 @@ const Login = () => {
 
   useEffect(() => {
     resetAuthRedirectGuard();
-    dispatch(fetchThemeSettings());
+    dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings);
     const token = localStorage.getItem("lutron");
     if (!token) {
       setAutoRdirect(false);

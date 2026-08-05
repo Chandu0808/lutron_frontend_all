@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Box, Button, Typography, useTheme } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { ADVANCED_MANAGE_AREA_GROUPS_PATH } from '../../../utils/advancedSettingsPaths';
 import HexColorPicker from '../../../utils/HexColorPicker';
 import '../../../styles/HexColorPicker.css';
 import {
@@ -22,6 +23,13 @@ import { ThemeContext } from '../theme/ThemeContext';
 import { UseAuth } from '../../../customhooks/UseAuth';
 import { getLutronDataClient } from '../../../redux/slice/home/homeSlice';
 import {
+    dispatchFetchApplicationThemeOnce,
+    dispatchFetchBackgroundImageOnce,
+    dispatchFetchClientOnce,
+    dispatchFetchHeatMapThemeOnce,
+    dispatchFetchThemeSettingsOnce,
+} from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
     isLightSurface,
     PRODUCT_DEFAULT_APP_BACKGROUND,
     PRODUCT_DEFAULT_APP_BUTTON,
@@ -29,14 +37,25 @@ import {
     PRODUCT_DEFAULT_THEME_COLOR_MAP,
 } from '../../../utils/themeOnSurface';
 import SettingsLayout from '../SettingsLayout';
-import { themePickerCardCellSx, themePickerCardsGridSx, themePickerCardColumnSx, themePickerCardSurfaceSx } from './themePickerLayout';
+import { themePickerCardCellSx, themePickerCardsGridSx, themePickerCardColumnSx, themePickerCardSurfaceSx, ADVANCED_THEME_PICKER_HEX, themePickerActionsSx } from './themePickerLayout';
 import FofpThemeColorCard from './FofpThemeColorCard';
-import { THEME_BACKGROUND_PRESETS } from '../../../config/themeConstants';
+import { THEME_BACKGROUND_PRESETS, ADVANCED_THEME_RESET_BACKGROUND_SWATCH } from '../../../config/themeConstants';
 import {
     normalizeThemeHex,
     resolveThemeButtonStyle,
 } from '../../../utils/themePageBackground';
 import UiVariantSelector from '../../../../../components/UiVariantSelector';
+
+const THEME_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+/** Absolute URL for API/static media; leave blob/data/http unchanged. */
+function resolveThemeMediaUrl(path) {
+    if (path == null) return null;
+    const p = String(path).trim();
+    if (!p) return null;
+    if (/^(https?:|blob:|data:)/i.test(p)) return p;
+    return `${THEME_API_URL}${p.startsWith('/') ? p : `/${p}`}`;
+}
 
 const ThemeChange = () => {
     const normalizeColor = (color) => {
@@ -104,7 +123,10 @@ const ThemeChange = () => {
     );
     const [dynamicButtonColor, setDynamicButtonColor] = useState(themeButtonStyle.solid);
     useEffect(() => {
-        dispatch(getLutronDataClient());
+        dispatchFetchClientOnce(dispatch, getLutronDataClient);
+    }, [dispatch]);
+
+    useEffect(() => {
         const resolved = resolveThemeButtonStyle(
             appTheme?.application_theme?.button || PRODUCT_DEFAULT_APP_BUTTON,
             themeColorMap?.Background
@@ -119,18 +141,18 @@ const ThemeChange = () => {
     // setBackgroundImage(backendUrl);
 
     useEffect(() => {
-        // Only fetch if not already loaded
+        // Only fetch if not already loaded (join layout/topbar in-flight)
         if (!appTheme || !appTheme.application_theme) {
-            dispatch(fetchApplicationTheme());
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
         }
         if (!heatMapTheme || !heatMapTheme.application_theme) {
-            dispatch(fetchHeatMapTheme());
+            dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
         }
         const bgApiLoaded =
             apibgImage &&
             (apibgImage.status != null || Object.prototype.hasOwnProperty.call(apibgImage, 'background_image'));
         if (!bgApiLoaded) {
-            dispatch(fetchBackgroundImage());
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
     useEffect(() => {
@@ -247,7 +269,11 @@ const ThemeChange = () => {
     //     setSnackbarOpen(true);
     // };
     const handleThemeReset = async () => {
-        const defaultColors = { ...DEFAULT_THEME_COLORS };
+        const resetBackgroundColor = normalizeThemeHex(ADVANCED_THEME_RESET_BACKGROUND_SWATCH);
+        const defaultColors = {
+            ...DEFAULT_THEME_COLORS,
+            Background: resetBackgroundColor,
+        };
 
         const payload = {
             background: normalizeColor(defaultColors.Background),
@@ -258,7 +284,7 @@ const ThemeChange = () => {
         try {
             await dispatch(updateApplicationTheme(payload)).unwrap();
             setThemeColorMap(defaultColors);
-            setSelectedThemeColor(normalizeColor(defaultColors.Background));
+            setSelectedThemeColor(resetBackgroundColor);
             setThemePickerKey((k) => k + 1);
             reloadTheme(payload, backgroundImage);
             setSnackbarMessage("Theme colors reset to default.");
@@ -300,7 +326,7 @@ const ThemeChange = () => {
                 backgroundRemovedRef.current = false;
                 dispatch(updateApplicationTheme({ background_image: backendPath }));
                 const bgResponse = await dispatch(fetchBackgroundImage()).unwrap();
-                dispatch(fetchThemeSettings());
+                dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
                 const bgUrl = bgResponse?.background_image?.trim();
                 if (bgUrl) {
                     reloadTheme(
@@ -339,9 +365,9 @@ const ThemeChange = () => {
                 },
                 ''
             );
-            dispatch(fetchThemeSettings());
-            dispatch(fetchBackgroundImage());
-            dispatch(fetchApplicationTheme());
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
+            dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage, { force: true });
+            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
             setSnackbarSeverity('success');
             setSnackbarMessage('Background image removed.');
             setSnackbarOpen(true);
@@ -357,7 +383,6 @@ const ThemeChange = () => {
     };
 
     const themePickerCardSx = themePickerCardSurfaceSx;
-    const themePickerActionsSx = { mt: 'auto', pt: 2, minHeight: 40, display: 'flex', alignItems: 'center' };
 
     const renderTabs = (labels, active, setActive, colorMap, setSelectedColor) => (
         <Box className="pill-tab-container">
@@ -380,10 +405,14 @@ const ThemeChange = () => {
 
     const normalizedRole = role ? role.toLowerCase() : '';
     const canAccessTheme = normalizedRole === 'superadmin' || normalizedRole === 'super admin' || normalizedRole === 'admin';
+    // FOFP marker palette is Superadmin-only; Admin keeps Background + heatmap pickers.
+    // Keep a 3-column grid so Admin's two cards stay the same width as Superadmin's.
+    const canEditFofpThemeColor =
+        normalizedRole === 'superadmin' || normalizedRole === 'super admin';
 
     useEffect(() => {
         if (!canAccessTheme) {
-            navigate('/manage-area-groups', { replace: true });
+            navigate(ADVANCED_MANAGE_AREA_GROUPS_PATH, { replace: true });
         }
     }, [canAccessTheme, navigate]);
 
@@ -399,6 +428,7 @@ const ThemeChange = () => {
     return (
         <>
         <SettingsLayout>
+                <Box className="advanced-theme-page">
                 <Box sx={{ margin: '1em', marginBottom: 0 }}>
                     <UiVariantSelector lightChrome={uiSelectorLightChrome} />
                 </Box>
@@ -418,9 +448,9 @@ const ThemeChange = () => {
                                     selectedColor={selectedThemeColor}
                                     setSelectedColor={setSelectedThemeColor}
                                     activeTarget="Background"
-                                    width={200}
-                                    height={220}
-                                    hexRadius={8}
+                                    width={ADVANCED_THEME_PICKER_HEX.width}
+                                    height={ADVANCED_THEME_PICKER_HEX.height}
+                                    hexRadius={ADVANCED_THEME_PICKER_HEX.hexRadius}
                                     themePresetSwatches={THEME_BACKGROUND_PRESETS.map((p) => p.color)}
                                 />
                                 <Box sx={{ ...themePickerActionsSx, justifyContent: 'space-between', px: 2, gap: 2 }}>
@@ -468,9 +498,9 @@ const ThemeChange = () => {
                                     selectedColor={selectedHeatmapColor}
                                     setSelectedColor={setSelectedHeatmapColor}
                                     activeTarget={activeHeatmapTab}
-                                    width={200}
-                                    height={220}
-                                    hexRadius={8}
+                                    width={ADVANCED_THEME_PICKER_HEX.width}
+                                    height={ADVANCED_THEME_PICKER_HEX.height}
+                                    hexRadius={ADVANCED_THEME_PICKER_HEX.hexRadius}
                                 />
                                 <Box sx={{ ...themePickerActionsSx, justifyContent: 'center' }}>
                                     <Button
@@ -492,15 +522,17 @@ const ThemeChange = () => {
                         </Box>
                     </Box>
 
-                    <FofpThemeColorCard
-                        renderTabs={renderTabs}
-                        dynamicButtonColor={dynamicButtonColor}
-                        actionButtonLabel={actionButtonLabel}
-                        onSaveMessage={(message) => {
-                            setSnackbarMessage(message);
-                            setSnackbarOpen(true);
-                        }}
-                    />
+                    {canEditFofpThemeColor && (
+                        <FofpThemeColorCard
+                            renderTabs={renderTabs}
+                            dynamicButtonColor={dynamicButtonColor}
+                            actionButtonLabel={actionButtonLabel}
+                            onSaveMessage={(message) => {
+                                setSnackbarMessage(message);
+                                setSnackbarOpen(true);
+                            }}
+                        />
+                    )}
                 </Box>
                 <Box sx={{ mt: 4, p: 2, width: '100%' }}>
                     <Typography
@@ -529,7 +561,7 @@ const ThemeChange = () => {
                     >
                         {backgroundImage ? (
                             <img
-                                src={backgroundImage}
+                                src={resolveThemeMediaUrl(backgroundImage)}
                                 alt="Background Preview"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
@@ -600,6 +632,7 @@ const ThemeChange = () => {
                             Remove Background
                         </Button>
                     </Box>
+                </Box>
                 </Box>
         </SettingsLayout>
             <Snackbar

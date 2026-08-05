@@ -1,29 +1,27 @@
 import React from 'react';
+import {
+  resolveSpaceChartTooltipBoxStyle,
+  resolveSpaceChartTooltipHeadBorder,
+  resolveSpaceChartTooltipTextColor,
+} from '../tooltips/resolveSpaceChartTooltipStyle';
 
 export function SpaceStackedBarTooltip({ active, payload, label, theme }) {
   if (!active || !payload || !payload.length) {
     return null;
   }
 
+  const tooltipTextColor = resolveSpaceChartTooltipTextColor(theme);
+  const tooltipHeadBorder = resolveSpaceChartTooltipHeadBorder(theme);
+
   return (
-    <div
-      style={{
-        backgroundColor: theme.tooltipBg,
-        background: theme.tooltipBg,
-        border: theme.tooltipBorder,
-        borderRadius: '4px',
-        padding: '10px',
-        color: theme.tooltipText,
-        fontSize: '12px',
-        ...(theme.shellStyle || {}),
-      }}
-    >
+    <div style={resolveSpaceChartTooltipBoxStyle(theme)}>
       <p
         style={{
           margin: '0 0 8px 0',
           fontWeight: 'bold',
-          borderBottom: `1px solid ${theme.tooltipHeadBorder}`,
+          borderBottom: `1px solid ${tooltipHeadBorder}`,
           paddingBottom: '4px',
+          color: tooltipTextColor,
         }}
       >
         {label}
@@ -33,8 +31,8 @@ export function SpaceStackedBarTooltip({ active, payload, label, theme }) {
           key={index}
           style={{
             margin: '4px 0',
-            color: entry.color,
-            fontWeight: '500',
+            color: theme.useCssTooltipVars ? tooltipTextColor : entry.color,
+            fontWeight: '600',
           }}
         >
           {entry.name}: {entry.value}%

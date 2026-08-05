@@ -203,7 +203,7 @@ describe('InstantOccupancy theme variant differences', () => {
       showChartsTab: true,
     });
     expect(theme.chartRenderMode).toBe('area');
-    expect(theme.plotHeightStyle).toBe('instantChartsTabClamp');
+    expect(theme.plotHeightStyle).toBe('basicInstantChartsTabClamp');
     expect(theme.line).toBe('#1565C0');
   });
 
@@ -225,11 +225,16 @@ describe('InstantOccupancy theme variant differences', () => {
       preset: INSTANT_OCCUPANCY_THEME_PRESETS.customized,
       isFullscreen: false,
     });
+    const chartsTab = resolveInstantOccupancyTheme({
+      preset: INSTANT_OCCUPANCY_THEME_PRESETS.customized,
+      showChartsTab: true,
+    });
     const fullscreen = resolveInstantOccupancyTheme({
       preset: INSTANT_OCCUPANCY_THEME_PRESETS.customized,
       isFullscreen: true,
     });
     expect(normal.plotHeightStyle).toBe('flexFill');
+    expect(chartsTab.plotHeightStyle).toBe('instantChartsTabClamp');
     expect(normal.plotBg).toBe('#767061');
     expect(normal.line).toBe('#87CEEB');
     expect(fullscreen.line).toBe('#00B0FF');

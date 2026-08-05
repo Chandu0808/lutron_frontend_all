@@ -100,7 +100,7 @@ function UtilizationByAreaListInner({
     );
   }
 
-  return (
+  const listBody = (
     <Box sx={listShellSx}>
       {rows.map((area, index) => (
         <UtilizationByAreaRow
@@ -110,6 +110,24 @@ function UtilizationByAreaListInner({
           isLargeScreen={isLargeScreen}
         />
       ))}
+    </Box>
+  );
+
+  if (shellVariant !== UTILIZATION_BY_AREA_THEME_PRESETS.advanced) {
+    return listBody;
+  }
+
+  return (
+    <Box
+      sx={{
+        ...shellSx,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+      }}
+    >
+      {listBody}
     </Box>
   );
 }

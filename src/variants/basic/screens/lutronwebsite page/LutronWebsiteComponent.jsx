@@ -35,10 +35,10 @@ const MODES = [
 const CARD_HEIGHT_RESPONSIVE = {
   maxHeight: {
     xs: 'none',
-    sm: 'calc(100vh - 360px)',
-    md: 'calc(100vh - 370px)',
-    lg: 'calc(100vh - 370px)',
-    xl: 'calc(100vh - 370px)'
+    sm: 'calc(100vh - 394px)',
+    md: 'calc(100vh - 404px)',
+    lg: 'calc(100vh - 404px)',
+    xl: 'calc(100vh - 404px)'
   }
 };
 
@@ -312,7 +312,7 @@ const LutronWebsiteComponent = () => {
   return (
     <Box className="lutron-website-container" sx={{ 
       width: '100%', 
-      minHeight: 'calc(100vh - 200px)', 
+      minHeight: 'calc(100vh - 234px)', 
       height: 'auto',
       maxHeight: 'none',
       display: 'flex', 

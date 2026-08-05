@@ -88,6 +88,18 @@ export function resolveUtilizationByAreaTheme({
   }
 
   if (preset === UTILIZATION_BY_AREA_THEME_PRESETS.advanced) {
+    if (chartSurface === 'light') {
+      return {
+        preset,
+        shellBorder: '1px solid #e5e7eb',
+        shellBg: '#ffffff',
+        textColor: '#111827',
+        rowBorder: 'rgba(15, 23, 42, 0.08)',
+        dividerColor: 'rgba(15, 23, 42, 0.12)',
+        spinOuter: '#cbd5e1',
+        spinTop: '#1565C0',
+      };
+    }
     return {
       preset,
       shellBorder: '1px solid #ddd',
@@ -101,6 +113,18 @@ export function resolveUtilizationByAreaTheme({
   }
 
   if (preset === UTILIZATION_BY_AREA_THEME_PRESETS.customized) {
+    if (chartSurface === 'light') {
+      return {
+        preset,
+        shellBorder: '1px solid #e5e7eb',
+        shellBg: '#ffffff',
+        textColor: '#111827',
+        rowBorder: 'rgba(15, 23, 42, 0.08)',
+        dividerColor: 'rgba(15, 23, 42, 0.12)',
+        spinOuter: '#cbd5e1',
+        spinTop: '#1565C0',
+      };
+    }
     const isWhite = customizedTheme === 'default_white';
     return {
       preset,

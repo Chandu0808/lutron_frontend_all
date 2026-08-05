@@ -11,6 +11,11 @@ const GREEN_COMBINED = [
   '#16A34A', '#15803D', '#166534', '#14532D', '#052e16', '#0f172a',
 ];
 
+const SAVINGS_LINE_COLORS = [
+  '#50c878', '#10B981', '#059669', '#90EE90', '#98FB98', '#87CEEB',
+  '#22C55E', '#16A34A', '#4ade80', '#6ee7b7', '#047857', '#065f46',
+];
+
 const RED_COMBINED = [
   '#EF4444', '#DC2626', '#B91C1C', '#991B1B', '#7f1d1d', '#F87171',
   '#FCA5A5', '#FECACA', '#FEE2E2', '#FEF2F2', '#450a0a', '#7f1d1d',
@@ -54,6 +59,9 @@ export function generateEnergyLineColorPalette(count, options = {}) {
   if (themePalette) return themePalette;
 
   if (selectedAreaCount < 5) {
+    if (isSavings) {
+      return expandPalette(SAVINGS_LINE_COLORS, count);
+    }
     return expandPalette(DIVERSE_COLORS, count);
   }
 

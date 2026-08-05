@@ -88,13 +88,24 @@ export function createHomeModule({ BaseUrl }) {
       }
   );
 
+  const DASHBOARD_OVERVIEW_TIMEOUT_MS = 30000;
+
   const getDashboardOverview = createAsyncThunk(
       "home/getDashboardOverview",
-      async (_, { rejectWithValue }) => {
+      async (_, { rejectWithValue, signal }) => {
           try {
-              const response = await BaseUrl.get("/home/dashboard");
+              const response = await BaseUrl.get("/home/dashboard", {
+                  timeout: DASHBOARD_OVERVIEW_TIMEOUT_MS,
+                  signal,
+              });
               return response.data;
           } catch (error) {
+              if (error?.code === "ERR_CANCELED" || error?.name === "CanceledError") {
+                  return rejectWithValue("Request cancelled");
+              }
+              if (error?.code === "ECONNABORTED") {
+                  return rejectWithValue("Dashboard overview request timed out. Check that the API server is running.");
+              }
               return rejectWithValue(error.response?.data || error.message);
           }
       }

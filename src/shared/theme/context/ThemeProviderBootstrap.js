@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { dispatchFetchThemeSettingsOnce } from "../../utils/bootstrapFetchGuards";
 import { useThemeReload } from "./useThemeReload";
 
 /**
@@ -35,9 +36,9 @@ export function useThemeProviderBootstrap({
   }, [applyCssVariables, mountCssBackground]);
 
   useEffect(() => {
-    if (!themeSettings) {
-      dispatch(fetchThemeSettings());
-    }
+    dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, {
+      alreadyLoaded: Boolean(themeSettings),
+    });
   }, [dispatch, themeSettings, fetchThemeSettings]);
 
   useEffect(() => {

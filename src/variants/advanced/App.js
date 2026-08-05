@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { getLutronDataClient } from './redux/slice/home/homeSlice';
 import { selectProfile } from './redux/slice/auth/userlogin';
 import { store } from './redux/store';
+import { dispatchFetchClientOnce } from '../../shared/utils/bootstrapFetchGuards';
 import Login from './screens/auth/Login';
 import ChangePassword from './screens/auth/ChangePassword';
 import MainLayout from './layouts/MainLayout';
@@ -49,6 +50,7 @@ import ManageSensors from './screens/settings/sensors/ManageSensors'
 import ManageModules from './screens/settings/modules/ManageModules'
 import AlertsComponent from './screens/settings/alerts/AlertsComponent'
 import ProcessorsSettings from './screens/settings/processors/ProcessorsSettings'
+import Maintenance from './screens/settings/maintenance/Maintenance'
 
 
 const HeatMap = lazy(() => import('./screens/heatmap/HeatMap'));
@@ -61,15 +63,10 @@ const App = () => {
     // Only call this if user is authenticated and client data is not already loaded
     const token = localStorage.getItem("lutron");
     if (token && profile) {
-      // Check if client data is already loaded in Redux store
       const state = store.getState();
       const clientData = state.home?.homeClient;
-      // Only fetch if we haven't tried recently (prevent multiple failed calls)
-      const lastFetchTime = sessionStorage.getItem('clientDataFetchTime');
-      const now = Date.now();
-      if ((!clientData || !clientData.name) && (!lastFetchTime || (now - parseInt(lastFetchTime)) > 60000)) {
-        sessionStorage.setItem('clientDataFetchTime', now.toString());
-        dispatch(getLutronDataClient()).catch(() => {
+      if (!clientData || !clientData.name) {
+        dispatchFetchClientOnce(dispatch, getLutronDataClient).catch(() => {
           // Silently handle errors - endpoint might not be available
         });
       }
@@ -91,19 +88,17 @@ const App = () => {
           <Route path="/auth/change_password" element={<ChangePassword />} />
           {/* Protected routes with layout */}
           <Route element={<MainLayout />}>
+            {/* Single Dashboard element so Energy/Space/Alerts tab navigations do not remount the page */}
             <Route path="/dashboard" element={<Navigate to="/dashboard/overview" replace />} />
-            <Route path="/dashboard/overview" element={<Dashboard />} />
-            <Route path="/dashboard/alerts" element={<Dashboard />} />
-            <Route path="/dashboard/energy" element={<Dashboard />} />
-            <Route path="/dashboard/spaceutilization" element={<Dashboard />} />
             <Route path="/dashboard/space-utilization" element={<Navigate to="/dashboard/spaceutilization" replace />} />
-            <Route path="/users" element={<UsersComponent />} />
+            <Route path="/dashboard/:tab" element={<Dashboard />} />
+            <Route path="/users" element={<Navigate to="/setting/users" replace />} />
             <Route path="/createusers" element={<CreateUser />} />
             <Route path="/heatmap" element={<Suspense fallback={<div>Loading...</div>}><HeatMap /></Suspense>} />
             <Route path="/create-area-model" element={<CreateAreaModelComponent />} />
-            <Route path="/main" element={<HomeComponent />} />
+            <Route path="/main" element={<Navigate to="/setting/main" replace />} />
             <Route path="/heatmap" element={<GroupOccupancyModel />} />
-            <Route path="/floor" element={<FloorComponent />} />
+            <Route path="/floor" element={<Navigate to="/setting/floor" replace />} />
             <Route path="/createfloor" element={<CreateFloor />} />
             <Route path="/lutron" element={<LutronPublicHome />} />
             <Route path="/create-area-model" element={<CreateAreaModelComponent />} />
@@ -114,17 +109,18 @@ const App = () => {
             <Route path="/quickcontrols" element={<AuthGuard><QuickControls /></AuthGuard>} />
             <Route path="/quickcontrols/create" element={<AuthGuard><CreateQuickControl /></AuthGuard>} />
             <Route path="/quickcontrols/:id" element={<AuthGuard><QuickControlDetails /></AuthGuard>} />
-            <Route path="/theme-change" element={<ChangeThemeDetails />} />
+            <Route path="/theme-change" element={<Navigate to="/setting/theme-change" replace />} />
             <Route path="/schedule/details/:id" element={<ScheduleDetails />} />
-            <Route path="/manage-area-groups" element={<ManageAreaGroupDetails />} />
+            <Route path="/manage-area-groups" element={<Navigate to="/setting/manage-area-groups" replace />} />
             <Route path="/update-area-groups/:id" element={<UpdateAreaGroupDetails />} />
             <Route path="/update-area-group/:id" element={<UpdateUserAreaGroupDetails />} />
             <Route path="/create-area-groups/" element={<CreateAreaGroup />} />
             <Route path="/create-area-group/" element={<CreateUserAreaGroup />} />
             <Route path="/create-area-group/" element={<CreateUserAreaGroup />} />
-            <Route path="/email-server/" element={<EmailServerDetails />} />
-            <Route path="/area-size-load/" element={<AreaSizeLoadDetails />} />
-            <Route path="/create-help/" element={<CreateHelpDetails />} />
+            <Route path="/email-server/" element={<Navigate to="/setting/email-server/" replace />} />
+            <Route path="/area-size-load/" element={<Navigate to="/setting/area-size-load" replace />} />
+            <Route path="/area-size-load" element={<Navigate to="/setting/area-size-load" replace />} />
+            <Route path="/create-help/" element={<Navigate to="/setting/create-help/" replace />} />
             <Route path="/get-help/" element={<GetHelpDetails />} />
             <Route path="/activity-report" element={<AuthGuard allowedRoles={["Superadmin", "Admin", "Operator"]}><ActivityReport /></AuthGuard>} />
 
@@ -133,13 +129,30 @@ const App = () => {
             <Route path="/area-calculation/:floorId" element={<AreaCalculationPage />} />
 
 
-            <Route path="/rename-widget/" element={<RenameWidgetDetails />} />
-            <Route path="/manage-sensors" element={<AuthGuard allowedRoles={["Superadmin"]}><ManageSensors /></AuthGuard>} />
-            <Route path="/manage-modules" element={<AuthGuard allowedRoles={["Superadmin"]}><ManageModules /></AuthGuard>} />
-            <Route path="/alerts" element={<AuthGuard allowedRoles={["Superadmin"]}><AlertsComponent /></AuthGuard>} />
-            <Route path="/processors" element={<AuthGuard allowedRoles={["Superadmin"]}><ProcessorsSettings /></AuthGuard>} />
+            <Route path="/rename-widget/" element={<Navigate to="/setting/rename-widget/" replace />} />
+            <Route path="/manage-sensors" element={<Navigate to="/setting/manage-sensors" replace />} />
+            <Route path="/manage-modules" element={<Navigate to="/setting/manage-modules" replace />} />
+            <Route path="/alerts" element={<Navigate to="/setting/alerts" replace />} />
+            <Route path="/processors" element={<Navigate to="/setting/processors" replace />} />
+            <Route path="/maintenance" element={<Navigate to="/setting/maintenance" replace />} />
+            <Route path="/fofp" element={<Navigate to="/setting/fofp" replace />} />
+
+            <Route path="/setting/main" element={<HomeComponent />} />
+            <Route path="/setting/users" element={<UsersComponent />} />
+            <Route path="/setting/floor" element={<FloorComponent />} />
+            <Route path="/setting/theme-change" element={<ChangeThemeDetails />} />
+            <Route path="/setting/manage-area-groups" element={<ManageAreaGroupDetails />} />
+            <Route path="/setting/email-server/" element={<EmailServerDetails />} />
+            <Route path="/setting/area-size-load" element={<AreaSizeLoadDetails />} />
+            <Route path="/setting/create-help/" element={<CreateHelpDetails />} />
+            <Route path="/setting/rename-widget/" element={<RenameWidgetDetails />} />
+            <Route path="/setting/manage-sensors" element={<AuthGuard allowedRoles={["Superadmin"]}><ManageSensors /></AuthGuard>} />
+            <Route path="/setting/manage-modules" element={<AuthGuard allowedRoles={["Superadmin"]}><ManageModules /></AuthGuard>} />
+            <Route path="/setting/alerts" element={<AuthGuard allowedRoles={["Superadmin"]}><AlertsComponent /></AuthGuard>} />
+            <Route path="/setting/processors" element={<AuthGuard allowedRoles={["Superadmin"]}><ProcessorsSettings /></AuthGuard>} />
+            <Route path="/setting/maintenance" element={<AuthGuard allowedRoles={["Superadmin"]}><Maintenance /></AuthGuard>} />
             <Route
-              path="/fofp"
+              path="/setting/fofp"
               element={
                 <AuthGuard allowedRoles={["Superadmin"]}>
                   <Suspense fallback={<Box sx={{ display: 'flex', height: '50vh', alignItems: 'center', justifyContent: 'center' }}><CircularProgress /></Box>}>

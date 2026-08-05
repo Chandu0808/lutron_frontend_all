@@ -22,6 +22,7 @@ import {
 import { normalizeTotalConsumptionByGroupPayload } from "../../utils/normalizeTotalConsumptionByGroupPayload";
 import { inferUnitFromApiPath, inferUnitFromChartTitle } from "../../utils/inferDashboardUnitFallback";
 import { DASHBOARD_CHART_PLOT_BACKGROUND } from "../../utils/dashboardChartPlotSurface";
+import { resolveEnergyChartTheme } from "../../../../shared/dashboard/charts/themes/energyChartTheme";
 import { isAreaGroupChartScope } from "../../utils/filterGroupIdsByAreaGroupScope";
 import CustomGroupScopeTooltip, { buildAreaNameToGroupNameMap } from "../charts/CustomGroupScopeTooltip";
 import ChartSizeBox from "./ChartSizeBox";
@@ -268,6 +269,10 @@ export default function EnergyCustomGraphCard({
   areaIdToFloorId,
   floors,
   dashboardApiParams,
+  shellVariant = 'customized',
+  advancedSurface = null,
+  /** basic only: `light` matches standalone white-theme charts; `dark` keeps legacy brown card */
+  chartSurface = 'dark',
 }) {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportBusy, setExportBusy] = useState({ email: false, download: false });
@@ -318,6 +323,83 @@ export default function EnergyCustomGraphCard({
 
   const canExport = typeof onExport === "function";
   const graphKey = useMemo(() => String(g?.id ?? g?.name ?? ""), [g?.id, g?.name]);
+
+  const cardChrome = useMemo(() => {
+    if (shellVariant === 'advanced') {
+      const surface = advancedSurface || {};
+      return {
+        shell: {
+          background: surface.cardBackground || 'var(--dashboard-card-background, #232323)',
+          borderRadius: '8px',
+          padding: '18px',
+          boxShadow: surface.cardShadow || '0 2px 4px rgba(0,0,0,0.1)',
+          height: '100%',
+          minHeight: 0,
+          boxSizing: 'border-box',
+          border: surface.cardBorder || '1px solid #ccc',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+        plot: {
+          backgroundColor: 'transparent',
+          border: '1px solid rgba(255,255,255,0.16)',
+          color: chartHeaderStyle?.color || '#fff',
+        },
+        exportColor: '#fff',
+        exportBorder: '1px solid rgba(255,255,255,0.22)',
+      };
+    }
+    if (shellVariant === 'basic') {
+      const theme = resolveEnergyChartTheme({ chartSurface });
+      return {
+        shell: {
+          backgroundColor: theme.outerBg,
+          borderRadius: '8px',
+          padding: '20px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          height: '100%',
+          minHeight: 0,
+          boxSizing: 'border-box',
+          border: theme.outerBorder,
+          display: 'flex',
+          flexDirection: 'column',
+        },
+        plot: {
+          backgroundColor: theme.plotBg,
+          border: theme.plotBorder,
+          color: theme.header,
+        },
+        exportColor: theme.exportBtn,
+        exportBorder:
+          chartSurface === 'light'
+            ? '1px solid rgba(0,0,0,0.12)'
+            : '1px solid rgba(255,255,255,0.22)',
+        chartTheme: theme,
+      };
+    }
+    return {
+      shell: {
+        background: 'linear-gradient(180deg, rgba(128,120,100,0.55) 0%, rgba(128,120,100,0.40) 100%)',
+        borderRadius: '14px',
+        padding: '18px',
+        boxShadow: '0 10px 28px rgba(0,0,0,0.18)',
+        height: '100%',
+        minHeight: 0,
+        boxSizing: 'border-box',
+        border: '1px solid rgba(255,255,255,0.16)',
+        display: 'flex',
+        flexDirection: 'column',
+        backdropFilter: 'blur(6px)',
+      },
+      plot: {
+        backgroundColor: DASHBOARD_CHART_PLOT_BACKGROUND,
+        border: '1px solid rgba(255,255,255,0.10)',
+        color: '#fff',
+      },
+      exportColor: '#fff',
+      exportBorder: '1px solid rgba(255,255,255,0.22)',
+    };
+  }, [shellVariant, advancedSurface, chartHeaderStyle?.color, chartSurface]);
 
   /** Prefer widget + dashboard area ids when the same display name exists on multiple floors. */
   const scopedAreaIdsForLabels = useMemo(() => {
@@ -412,21 +494,7 @@ export default function EnergyCustomGraphCard({
   };
 
   return (
-    <div
-      style={{
-        background: "linear-gradient(180deg, rgba(128,120,100,0.55) 0%, rgba(128,120,100,0.40) 100%)",
-        borderRadius: "14px",
-        padding: "18px",
-        boxShadow: "0 10px 28px rgba(0,0,0,0.18)",
-        height: "100%",
-        minHeight: 0,
-        boxSizing: "border-box",
-        border: "1px solid rgba(255,255,255,0.16)",
-        display: "flex",
-        flexDirection: "column",
-        backdropFilter: "blur(6px)",
-      }}
-    >
+    <div style={cardChrome.shell}>
       <div
         style={{
           display: "flex",
@@ -445,6 +513,10 @@ export default function EnergyCustomGraphCard({
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              color:
+                shellVariant === 'basic'
+                  ? cardChrome.chartTheme?.header ?? chartHeaderStyle?.color
+                  : chartHeaderStyle?.color,
             }}
           >
             {g?.name ? (g.name.charAt(0).toUpperCase() + g.name.slice(1)) : "Custom Graph"}
@@ -458,8 +530,8 @@ export default function EnergyCustomGraphCard({
               onClick={() => setExportMenuOpen((v) => !v)}
               style={{
                 background: "none",
-                color: "#fff",
-                border: "1px solid rgba(255,255,255,0.22)",
+                color: cardChrome.exportColor,
+                border: cardChrome.exportBorder,
                 borderRadius: 10,
                 padding: "7px 12px",
                 fontWeight: 800,
@@ -541,12 +613,12 @@ export default function EnergyCustomGraphCard({
           alignItems: "stretch",
           justifyContent: "center",
           width: "100%",
-          backgroundColor: DASHBOARD_CHART_PLOT_BACKGROUND,
-          borderRadius: "14px",
-          color: "#fff",
+          backgroundColor: cardChrome.plot.backgroundColor,
+          borderRadius: shellVariant === 'customized' ? '14px' : '4px',
+          color: cardChrome.plot.color,
           fontSize: "14px",
           padding: "12px",
-          border: "1px solid rgba(255,255,255,0.10)",
+          border: cardChrome.plot.border,
           boxSizing: "border-box",
         }}
       >
@@ -557,6 +629,13 @@ export default function EnergyCustomGraphCard({
           let normalizedRaw = raw;
           const isLoading = id ? !!customGraphLoading[id] : false;
           const err = id ? customGraphError[id] : null;
+          const ct = cardChrome.chartTheme;
+          const tickFill = ct?.tick ?? "#fff";
+          const gridStroke = ct?.grid ?? "rgba(255,255,255,0.08)";
+          const legendColor = ct?.legend ?? "#fff";
+          const emptyTextColor = ct?.emptyText ?? "#fff";
+          const scrollThumb =
+            chartSurface === 'light' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)';
 
           const toNumberOrNull = (v) => {
             if (v === null || v === undefined) return 0;
@@ -585,7 +664,7 @@ export default function EnergyCustomGraphCard({
                 boxSizing: "border-box",
               }}
             >
-              <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: emptyTextColor }}>{title}</div>
               {subtitle ? (
                 <div style={{ opacity: 0.8, fontSize: 12, lineHeight: 1.35 }}>{subtitle}</div>
               ) : null}
@@ -1051,7 +1130,7 @@ export default function EnergyCustomGraphCard({
                     overflowX: needsScroll ? "auto" : "visible",
                     overflowY: "hidden",
                     scrollbarWidth: "thin",
-                    scrollbarColor: "rgba(255,255,255,0.2) transparent"
+                    scrollbarColor: `${scrollThumb} transparent`
                   }}>
                     <div style={{
                       width: needsScroll ? `${scrollWidth}px` : "100%",
@@ -1063,10 +1142,10 @@ export default function EnergyCustomGraphCard({
                           data={effectiveChartData}
                           margin={{ top: 10, right: 30, bottom: 45, left: 10 }}
                         >
-                          <CartesianGrid stroke="rgba(255,255,255,0.08)" />
+                          <CartesianGrid stroke={gridStroke} />
                           <XAxis
                             dataKey={isFloorAggregatedBarChart ? "name" : "date"}
-                            tick={{ fill: "#fff", fontSize: 10 }}
+                            tick={{ fill: tickFill, fontSize: 10 }}
                             interval={type === "line" && effectiveChartData.length > 10
                               ? Math.ceil(effectiveChartData.length / 6) - 1
                               : 0}
@@ -1075,12 +1154,12 @@ export default function EnergyCustomGraphCard({
                             height={45}
                           />
                           <YAxis
-                            tick={{ fill: "#fff", fontSize: 10 }}
+                            tick={{ fill: tickFill, fontSize: 10 }}
                             label={tooltipUnit ? {
                               value: tooltipUnit,
                               angle: -90,
                               position: 'insideLeft',
-                              fill: '#ccc',
+                              fill: tickFill,
                               fontSize: 10,
                               offset: 10
                             } : null}
@@ -1143,7 +1222,7 @@ export default function EnergyCustomGraphCard({
                                       />
                                       <span
                                         onClick={() => handleLegendClick({ dataKey: name, value: name })}
-                                        style={{ fontSize: 11, color: '#fff', opacity: Boolean(focused) && String(name) !== String(focused) ? 0.3 : 1 }}
+                                        style={{ fontSize: 11, color: legendColor, opacity: Boolean(focused) && String(name) !== String(focused) ? 0.3 : 1 }}
                                       >
                                         {displayName}
                                       </span>
@@ -1408,7 +1487,7 @@ export default function EnergyCustomGraphCard({
                           <Label
                             value={`${avgDisplay} ${tooltipUnit}`}
                             position="center"
-                            fill="#fff"
+                            fill={tickFill}
                             style={{
                               fontSize: "24px",
                               fontWeight: "900",
@@ -1481,7 +1560,7 @@ export default function EnergyCustomGraphCard({
                                         }}
                                         title="Click to change color"
                                       />
-                                      <span style={{ fontSize: 11, color: '#fff' }}>{resolveJustAreaName(name)}</span>
+                                      <span style={{ fontSize: 11, color: legendColor }}>{resolveJustAreaName(name)}</span>
                                       {isPickerTarget && (
                                         <div
                                           onClick={(e) => e.stopPropagation()}

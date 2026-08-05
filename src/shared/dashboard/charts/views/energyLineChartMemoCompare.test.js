@@ -103,4 +103,10 @@ describe('energyLineChartPropsAreEqual vs legacy inline comparator', () => {
     };
     expect(energyLineChartPropsAreEqual(prev, next)).toBe(false);
   });
+
+  it('re-renders when exportControl changes', () => {
+    const prev = { ...baseProps, exportControl: { type: 'export-a' } };
+    const next = { ...baseProps, exportControl: { type: 'export-b' } };
+    expect(energyLineChartPropsAreEqual(prev, next)).toBe(false);
+  });
 });

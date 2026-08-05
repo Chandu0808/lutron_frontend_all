@@ -22,7 +22,7 @@ export const UNIFIED_ENERGY_ADAPTER_SHELL = {
   [UNIFIED_ENERGY_THEME_PRESETS.customized]: 'customized-builtin',
 };
 
-const BASIC_LIGHT_FULL_CARD_HEIGHT_PX = 648;
+const BASIC_LIGHT_FULL_CARD_HEIGHT_PX = 488;
 
 const CUSTOMIZED_BUILTIN_CARD = {
   backgroundColor: 'rgba(128, 120, 100, 0.6)',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Grid,
@@ -19,7 +19,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchFloors, correctCoordinates } from '../../../redux/slice/floor/floorSlice';
 import { fetchFloorMapData } from '../../../redux/slice/settingsslice/heatmap/HeatmapSlice';
 import { MdArrowBack, MdExpandMore } from 'react-icons/md';
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
+import { configurePdfJsWorker, buildPdfDocumentFile } from '../../../../../shared/pdf/floorPlanPdf';
 import { getPolygonRings, flattenAreaCoords } from '../../../utils/floorplanCoordinates';
 import { premiumSelectMenuProps } from '../Users/userSelectMenuProps';
 import {
@@ -35,8 +36,7 @@ import {
   floorToolApplyButtonSx,
 } from './floorToolStyles';
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+configurePdfJsWorker();
 
 export default function CorrectCoordinate() {
   const navigate = useNavigate();
@@ -61,6 +61,7 @@ export default function CorrectCoordinate() {
   const floorStatus = useSelector((state) => state.floor.status);
   const heatmapData = useSelector((state) => state.heatmap.heatmapData);
   const pdfUrl = useSelector((state) => state.heatmap.pdfUrl);
+  const pdfFile = useMemo(() => buildPdfDocumentFile(pdfUrl), [pdfUrl]);
   const heatmapLoading = useSelector((state) => state.heatmap.loading);
 
   const currentFloor = floors.find(floor => floor.id === parseInt(floorId));
@@ -206,7 +207,7 @@ export default function CorrectCoordinate() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <IconButton
-          onClick={() => navigate('/floor')}
+          onClick={() => navigate('/setting/floor')}
           sx={{ mr: 2, ...floorToolBackIconSx }}
         >
           <MdArrowBack />
@@ -252,7 +253,7 @@ export default function CorrectCoordinate() {
                     transition: 'transform 0.3s ease',
                   }}
                 >
-                  <Document file={pdfUrl} key={pdfUrl}>
+                  <Document file={pdfFile} key={pdfUrl}>
                     <Page
                       pageNumber={1}
                       width={pageDims.width}

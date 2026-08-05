@@ -13,6 +13,12 @@ import {
     normalizeFofpHex,
     resolveFofpThemePickerColor,
 } from '../../heatmap/fofpColorUtils';
+import {
+    CUSTOMIZED_THEME_PICKER_HEX,
+    themePickerCardCellSx,
+    themePickerCardColumnSx,
+    themePickerCardSx,
+} from './themePickerLayout';
 
 /**
  * FOFP marker color card for Settings → Theme (isolated from app/heatmap pickers).
@@ -58,8 +64,8 @@ const FofpThemeColorCard = ({
     };
 
     return (
-        <Box sx={{ display: 'flex', minWidth: 0, width: '100%' }}>
-            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={themePickerCardCellSx}>
+            <Box sx={themePickerCardColumnSx}>
             <Typography
                 variant="subtitle1"
                 fontWeight="bold"
@@ -70,7 +76,7 @@ const FofpThemeColorCard = ({
             </Typography>
             <Box
                 className="color-picker-card"
-                sx={{ backgroundColor: 'white', padding: '1em', borderRadius: '1em', width: '100%' }}
+                sx={themePickerCardSx}
                 data-testid="fofp-theme-color-card"
             >
                 {renderTabs(
@@ -96,9 +102,9 @@ const FofpThemeColorCard = ({
                     selectedColor={selectedFofpColor}
                     setSelectedColor={setSelectedFofpColor}
                     activeTarget={activeFofpTab}
-                    width={200}
-                    height={220}
-                    hexRadius={8}
+                    width={CUSTOMIZED_THEME_PICKER_HEX.width}
+                    height={CUSTOMIZED_THEME_PICKER_HEX.height}
+                    hexRadius={CUSTOMIZED_THEME_PICKER_HEX.hexRadius}
                 />
                 <Box mt={2} display="flex" justifyContent="center" alignItems="center" sx={{ minHeight: 40 }}>
                     <Button

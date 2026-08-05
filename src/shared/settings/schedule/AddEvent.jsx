@@ -1,8 +1,24 @@
 import { getScheduleSettingsBindings } from './bindScheduleSettingsModule';
-import React, { useEffect, useState } from "react";
+import { getScheduleFormTheme, scheduleFormSectionCard, scheduleFormSectionsColumn, scheduleFieldCardShell, scheduleModalPanelStyle, scheduleModalTitleStyle, scheduleModalLabelStyle, scheduleModalSelectStyle, scheduleModalRadioLabelStyle, scheduleLegacyModalPanelStyle, scheduleLegacyModalTitleStyle } from './scheduleFormTheme';
+import { renderScheduleModalLayer, SCHEDULE_MODAL_OVERLAY_Z_INDEX } from './scheduleModalLayer';
+import { scheduleFilterMenuProps, scheduleModalFilterMenuProps, resolveScheduleModalFilterMenuProps, scheduleSelectFieldSx } from './scheduleSelectMenuProps';
+import { MenuItem, Select } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import ScheduleLocationsPanel from './ScheduleLocationsPanel';
+import ActionChooserModal from '../../quickcontrols/ActionChooserModal';
+import { getQuickControlActionShortLabel } from '../../quickcontrols/quickControlActionLabels';
+import {
+  convertApiActionToUiAction,
+  expandQuickControlActionData,
+  lightStatusSettingsFromAreaAction,
+  locationHasSceneAction,
+  locationHasZoneAction,
+  mergeExpandedActionsIntoLocation,
+} from '../../quickcontrols/zoneActionHelpers';
 import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome, onContentColors } from "../../theme/utils/themeOnSurface";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
+import { dispatchFetchFloorsOnce } from "../../utils/bootstrapFetchGuards";
 // <-- Add fetchSchedules import
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -148,7 +164,20 @@ const AddEvent = () => {
     themeSlice: { selectApplicationTheme },
     fixedActionBarStyles: { scheduleFixedActionBarStyle, schedulePageWithFixedActionBarStyle },
     scheduleActionPriority: { applyCommonActionToActions, stripActionSource, tagLoadedActions, withIndividualSource },
+    scheduleCalendarChrome = 'dark',
+    scheduleAdvancedLocationsPanel = null,
+    useFixedPageActionBar = false,
+    hideScheduleTrailingAddAction = false,
   } = getScheduleSettingsBindings();
+  // Use Quick Control–style merging for all variants (basic/advanced/customized):
+  // - Common "Apply to All" replaces any existing action of the same type.
+  // - Individual actions replace only the same backend action type.
+  // - Payload strips internal `source` field before saving.
+  const useQuickControlActionMerging = true;
+  const formTheme = getScheduleFormTheme(scheduleCalendarChrome);
+  const isLightScheduleForm = formTheme.isLight;
+  const isAdvancedScheduleForm = Boolean(formTheme.useAdvancedFormChrome);
+  const usePortaledScheduleModals = isAdvancedScheduleForm || scheduleCalendarChrome === 'customized';
   const { ConfirmDialog, Toast } = FeedbackUI;
   const { selectProfile } = userlogin;
   const { createSchedule, fetchSchedules, fetchScheduleGroups } = scheduleSlice;
@@ -185,13 +214,19 @@ const AddEvent = () => {
   const isLargeScreen = windowSize.width >= 1920; // 4K and large screens
   const isDesktop = windowSize.width >= 1366; // Desktop screens
   const isLaptop = windowSize.width >= 1024; // Laptop screens
-  const buttonColor = 'var(--app-button)';
+  const buttonColor = formTheme.buttonColor;
+  const useAdvancedLocationsPanel =
+    isAdvancedScheduleForm && Boolean(scheduleAdvancedLocationsPanel);
+  const {
+    getAdvancedQuickControlDetailsActionBarStyle,
+    schedulePrimaryButtonStyle: advancedPrimaryButtonStyle,
+  } = scheduleAdvancedLocationsPanel || {};
 
   // Form state
   const [scheduleName, setScheduleName] = useState("");
   const [scheduleGroup, setScheduleGroup] = useState(""); // Changed from "Schedule Groups" to empty string
   const [scheduleType, setScheduleType] = useState("weekly");
-  const [selectedDays, setSelectedDays] = useState(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  const [selectedDays, setSelectedDays] = useState([]);
   const [timeHours, setTimeHours] = useState("");
   const [timeMinutes, setTimeMinutes] = useState("");
   const [keepUntil, setKeepUntil] = useState("forever");
@@ -204,9 +239,17 @@ const AddEvent = () => {
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [actionDialogIdx, setActionDialogIdx] = useState(null);
   const [selectedActionData, setSelectedActionData] = useState(null);
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editAllMode, setEditAllMode] = useState(false);
+  const [actionChooser, setActionChooser] = useState(null); // { mode, locationIdx }
+  const [showDeleteLocationDialog, setShowDeleteLocationDialog] = useState(false);
+  const [locationToDelete, setLocationToDelete] = useState(null);
+  const [showDeleteActionDialog, setShowDeleteActionDialog] = useState(false);
+  const [actionToDelete, setActionToDelete] = useState(null);
 
   // NEW: Add state for common action functionality
   const [showCommonActionDialog, setShowCommonActionDialog] = useState(false);
+  const [editingAreaStatus, setEditingAreaStatus] = useState(null);
   const [selectedCommonActionType, setSelectedCommonActionType] = useState('light_status');
   const [selectedOccupancySetting, setSelectedOccupancySetting] = useState(null);
   const [selectedZoneType, setSelectedZoneType] = useState('switched');
@@ -215,6 +258,14 @@ const AddEvent = () => {
     dimmed: { brightness: 50, fadeTime: '02', delayTime: '00' },
     whitetune: { brightness: 50, cct: 2700, fadeTime: '02', delayTime: '00' }
   });
+
+  const resetCommonActionDialog = () => {
+    setShowCommonActionDialog(false);
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+  };
 
   // --- Add these new states ---
  
@@ -225,14 +276,15 @@ const AddEvent = () => {
   const groupLoading = useSelector(state => state.schedule.groupsLoading);
   const groupError = useSelector(state => state.schedule.groupsError);
 
-  // Refresh groups when component mounts
+  // Fetch groups once on mount. Do NOT key off groupList.length — an empty
+  // groups[] from the API is valid and would otherwise infinite-loop.
   useEffect(() => {
     dispatch(fetchScheduleGroups());
   }, [dispatch]);
 
   useEffect(() => {
-    dispatch(fetchFloors());
-  }, [dispatch]);
+    dispatchFetchFloorsOnce(dispatch, fetchFloors, Boolean(floors?.length));
+  }, [dispatch, fetchFloors, floors?.length]);
 
   // Backend already handles floor filtering based on user permissions
   const accessibleFloors = floors;
@@ -252,13 +304,6 @@ const AddEvent = () => {
     
     return false;
   };
-
-  // Make sure you're fetching groups in AddEvent as well
-  useEffect(() => {
-    if (!groupList || groupList.length === 0) {
-      dispatch(fetchScheduleGroups());
-    }
-  }, [dispatch, groupList]);
 
   // Handle day selection
   const handleDayToggle = (day) => {
@@ -280,97 +325,157 @@ const AddEvent = () => {
     ]);
   };
 
-  // Delete location
-  const handleDelete = (index) => setLocations(prev => prev.filter((_, i) => i !== index));
-
-  // Open action dialog
+  // Open action dialog (add new action)
   const handleOpenActionDialog = (idx) => {
+    setEditingActionIdx(null);
+    setEditAllMode(false);
     setActionDialogIdx(idx);
     setSelectedActionData(null);
   };
 
-  // Add action to location
+  // Add / update action(s) on a location (supports All Zones expand + multi-action merge)
   const handleAddAction = (idx, actionData) => {
-    setLocations(prev => prev.map((loc, i) => {
-      if (i !== idx) return loc;
-      
-      // Convert action data to the correct format for the API
-      let newAction = actionData;
-      
-      if (actionData.type === "scene" && actionData.scene) {
-        newAction = {
-          type: "set_scene",
-          scene_code: Number(actionData.scene.id),
-          scene_name: actionData.scene.name
+    const expanded = expandQuickControlActionData(actionData);
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== idx) return loc;
+        return {
+          ...loc,
+          actions: mergeExpandedActionsIntoLocation(loc.actions, expanded, {
+            editingActionIdx: editAllMode ? null : editingActionIdx,
+            editAllMode,
+            withSource: useQuickControlActionMerging ? withIndividualSource : null,
+          }),
         };
-      } else if (actionData.type === "zone" && actionData.zone) {
-        // Use the same logic as HeatMap for zone actions
-        const zone = actionData.zone;
-        const values = actionData.values || {};
-        
-        // Check if this is a simple On/Off for switched zone without zone_id (area-level control)
-        if (zone.type === "switched" && 
-            (!zone.id || zone.id === null) &&
-            values.on_off &&
-            !values.brightness &&
-            !values.cct) {
-          // Use area_status for simple On/Off area control (uses /area/zone_on-off API)
-          newAction = {
-            type: "area_status",
-            area_status: values.on_off
-          };
-        } else if (zone.type === "switched") {
-          newAction = {
-            type: "zone_status",
-            zone_id: Number(zone.id),
-            zone_type: "switched",
-            zone_name: zone.name,
-            zone_status: values.on_off || "Off"
-          };
-        } else if (zone.type === "dimmed") {
-          newAction = {
-            type: "zone_status",
-            zone_id: Number(zone.id),
-            zone_type: "dimmed",
-            zone_name: zone.name,
-            zone_status: "On",
-            zone_brightness: values.brightness ? (values.brightness.toString().includes('%') ? values.brightness : `${values.brightness}%`) : undefined,
-            fade_time: values.fadeTime || "02",
-            delay_time: values.delayTime || "00"
-          };
-        } else if (zone.type === "whitetune") {
-          newAction = {
-            type: "zone_status",
-            zone_id: Number(zone.id),
-            zone_type: "whitetune",
-            zone_name: zone.name,
-            zone_status: "On",
-            zone_brightness: values.brightness ? (values.brightness.toString().includes('%') ? values.brightness : `${values.brightness}%`) : undefined,
-            zone_temperature: values.cct ? (values.cct.toString().includes('K') ? values.cct : `${values.cct}K`) : undefined,
-            fade_time: values.fadeTime || "02",
-            delay_time: values.delayTime || "00"
-          };
-        }
-      } else if (actionData.type === "occupancy" && actionData.action) {
-        newAction = {
-          type: "occupancy",
-          occupancy_setting: actionData.action
-        };
-      } else if (actionData.type === "shade" && actionData.shade) {
-        newAction = {
-          type: "shade_group_status",
-          shade_group_id: Number(actionData.shade.id),
-          shade_group_name: actionData.shade.name,
-          shade_level: actionData.value.toString().includes('%') ? actionData.value : `${actionData.value}%`
-        };
-      }
-      
-      // Remove previous action of the same type and add the new one
-      const filtered = (loc.actions || []).filter(a => a.type !== actionData.type);
-      return { ...loc, actions: [...filtered, newAction] };
-    }));
+      })
+    );
     setActionDialogIdx(null);
     setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
+  };
+
+  const openEditForAction = (locationIdx, actionIdx) => {
+    const location = locations[locationIdx];
+    const action = location?.actions?.[actionIdx];
+    if (!action) return;
+
+    if (action.type === 'area_status') {
+      setEditingAreaStatus({ locationIdx });
+      setSelectedCommonActionType('light_status');
+      setSelectedOccupancySetting(null);
+      setSelectedZoneType('switched');
+      setLightStatusSettings((prev) => ({
+        ...prev,
+        ...lightStatusSettingsFromAreaAction(action),
+      }));
+      setShowCommonActionDialog(true);
+      return;
+    }
+
+    const convertedAction = convertApiActionToUiAction(action);
+    setEditingActionIdx(actionIdx);
+    setEditAllMode(false);
+    setSelectedActionData(convertedAction);
+    setActionDialogIdx(locationIdx);
+  };
+
+  const handleEditButtonClick = (locationIdx, actionsArg) => {
+    const actions = actionsArg ?? locations[locationIdx]?.actions ?? [];
+    if (actions.length === 0) {
+      handleOpenActionDialog(locationIdx);
+      return;
+    }
+    if (actions.length === 1) {
+      openEditForAction(locationIdx, 0);
+      return;
+    }
+    setActionChooser({ mode: 'edit', locationIdx });
+  };
+
+  const handleDeleteButtonClick = (locationIdx, actionsArg) => {
+    const location = locations[locationIdx];
+    const actions = actionsArg ?? location?.actions ?? [];
+    if (actions.length === 0) {
+      setLocationToDelete({ index: locationIdx, location });
+      setShowDeleteLocationDialog(true);
+      return;
+    }
+    if (actions.length === 1) {
+      setActionToDelete({
+        locationIdx,
+        location,
+        actionIndex: 0,
+        action: actions[0],
+      });
+      setShowDeleteActionDialog(true);
+      return;
+    }
+    setActionChooser({ mode: 'delete', locationIdx });
+  };
+
+  const handleChooserPickEdit = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    if (pick === 'all') {
+      setEditAllMode(true);
+      setEditingActionIdx(null);
+      setSelectedActionData(null);
+      setActionDialogIdx(locationIdx);
+      return;
+    }
+    openEditForAction(locationIdx, pick);
+  };
+
+  const handleChooserPickDelete = (pick) => {
+    const locationIdx = actionChooser?.locationIdx;
+    setActionChooser(null);
+    if (locationIdx == null) return;
+    const location = locations[locationIdx];
+    if (pick === 'all') {
+      setLocations((prev) =>
+        prev.map((loc, i) => (i === locationIdx ? { ...loc, actions: [] } : loc))
+      );
+      return;
+    }
+    setActionToDelete({
+      locationIdx,
+      location,
+      actionIndex: pick,
+      action: location.actions[pick],
+    });
+    setShowDeleteActionDialog(true);
+  };
+
+  const confirmDeleteLocation = () => {
+    if (locationToDelete) {
+      setLocations((prev) => prev.filter((_, i) => i !== locationToDelete.index));
+      setShowDeleteLocationDialog(false);
+      setLocationToDelete(null);
+    }
+  };
+
+  const confirmDeleteAction = () => {
+    if (!actionToDelete) return;
+    setLocations((prev) =>
+      prev.map((loc, i) => {
+        if (i !== actionToDelete.locationIdx) return loc;
+        return {
+          ...loc,
+          actions: (loc.actions || []).filter((_, ai) => ai !== actionToDelete.actionIndex),
+        };
+      })
+    );
+    setShowDeleteActionDialog(false);
+    setActionToDelete(null);
+  };
+
+  const closeActionDialog = () => {
+    setActionDialogIdx(null);
+    setSelectedActionData(null);
+    setEditingActionIdx(null);
+    setEditAllMode(false);
   };
 
   // NEW: Handle common action type selection
@@ -384,6 +489,18 @@ const AddEvent = () => {
       setSelectedOccupancySetting("auto");
     }
     // Don't auto-apply - wait for "Apply to All" button
+  };
+
+  const openCommonActionDialog = () => {
+    setEditingAreaStatus(null);
+    setSelectedCommonActionType('light_status');
+    setSelectedOccupancySetting(null);
+    setSelectedZoneType('switched');
+    setLightStatusSettings((prev) => ({
+      ...prev,
+      switched: { on_off: 'On' },
+    }));
+    setShowCommonActionDialog(true);
   };
 
   // NEW: Handle light status type selection
@@ -409,7 +526,27 @@ const AddEvent = () => {
   // NEW: Apply common action to all areas - UPDATED to ensure action is applied
   const handleApplyCommonAction = () => {
     if (locations.length === 0) {
-      setShowCommonActionDialog(false);
+      resetCommonActionDialog();
+      return;
+    }
+
+    if (editingAreaStatus != null && selectedCommonActionType === 'light_status') {
+      const { locationIdx } = editingAreaStatus;
+      const commonAction = {
+        type: "area_status",
+        area_status: lightStatusSettings.switched.on_off
+      };
+      setLocations(prev => prev.map((location, i) =>
+        i === locationIdx
+          ? {
+              ...location,
+              actions: useQuickControlActionMerging
+                ? applyCommonActionToActions(location.actions, commonAction)
+                : [commonAction]
+            }
+          : location
+      ));
+      resetCommonActionDialog();
       return;
     }
     
@@ -422,7 +559,9 @@ const AddEvent = () => {
       
       setLocations(prev => prev.map(location => ({
         ...location,
-        actions: [commonAction]
+        actions: useQuickControlActionMerging
+          ? applyCommonActionToActions(location.actions, commonAction)
+          : [commonAction]
       })));
     } else if (selectedCommonActionType === 'occupancy' && selectedOccupancySetting) {
       const commonAction = {
@@ -432,15 +571,14 @@ const AddEvent = () => {
       
       setLocations(prev => prev.map(location => ({
         ...location,
-        actions: [commonAction]
+        actions: useQuickControlActionMerging
+          ? applyCommonActionToActions(location.actions, commonAction)
+          : [commonAction]
       })));
     }
     
     // Close the dialog and reset
-    setShowCommonActionDialog(false);
-    setSelectedCommonActionType('light_status');
-    setSelectedOccupancySetting(null);
-    setSelectedZoneType('switched');
+    resetCommonActionDialog();
   };
 
   // Don't auto-apply when dialog opens - wait for "Apply to All" button
@@ -448,6 +586,11 @@ const AddEvent = () => {
   // --- Update handleSave ---
   const handleSave = async () => {
     if (!scheduleName.trim() || locations.length === 0) return;
+
+    if (scheduleType === "weekly" && selectedDays.length === 0) {
+      alert("Please select at least one day for a weekly schedule.");
+      return;
+    }
     
     // Check that all locations have at least one action
     const hasLocationsWithoutActions = locations.some(location => !location.actions || location.actions.length === 0);
@@ -479,6 +622,9 @@ const AddEvent = () => {
       floor_id: loc.floorId,
       area_id: loc.areaId,
       actions: (loc.actions || []).map(action => {
+        if (useQuickControlActionMerging) {
+          action = stripActionSource(action);
+        }
         // Transform actions to backend format
         if (action.type === "scene" && action.scene) {
           return {
@@ -939,21 +1085,119 @@ const AddEvent = () => {
   };
 
   // Note: We'll show the form but disable it based on permissions
+  const hasValidWeeklyDays = scheduleType !== "weekly" || selectedDays.length > 0;
+  const canSaveSchedule =
+    scheduleName.trim() &&
+    locations.length > 0 &&
+    !locations.some((location) => !location.actions || location.actions.length === 0) &&
+    hasValidWeeklyDays;
+
+  const addEventActionBar = (
+    <div
+      className={useAdvancedLocationsPanel ? 'quick-control-details-action-bar' : undefined}
+      style={
+        useFixedPageActionBar
+          ? scheduleFixedActionBarStyle(isLargeScreen, isDesktop)
+          : useAdvancedLocationsPanel && getAdvancedQuickControlDetailsActionBarStyle
+            ? getAdvancedQuickControlDetailsActionBarStyle()
+            : {
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: isLargeScreen ? 20 : isDesktop ? 18 : 16,
+                marginTop: isLargeScreen ? 40 : isDesktop ? 35 : 32,
+              }
+      }
+    >
+      <button
+        onClick={handleCancel}
+        style={
+          useFixedPageActionBar
+            ? {
+                padding: '10px 28px',
+                borderRadius: 8,
+                border: '1px solid #1565C0',
+                background: '#fff',
+                color: '#1565C0',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }
+            : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+              ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop)
+              : {
+                  padding: isLargeScreen ? '12px 32px' : isDesktop ? '11px 30px' : '10px 28px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: buttonColor,
+                  color: '#fff',
+                  fontWeight: 500,
+                  fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                  cursor: 'pointer',
+                }
+        }
+      >
+        Cancel
+      </button>
+      <button
+        onClick={handleSave}
+        disabled={!canSaveSchedule}
+        style={
+          useFixedPageActionBar
+            ? {
+                padding: '10px 28px',
+                borderRadius: 8,
+                border: canSaveSchedule ? '1px solid #1565C0' : '1px solid #888',
+                background: canSaveSchedule ? '#1565C0' : '#888',
+                color: '#fff',
+                fontWeight: 500,
+                cursor: canSaveSchedule ? 'pointer' : 'not-allowed',
+              }
+            : useAdvancedLocationsPanel && advancedPrimaryButtonStyle
+              ? advancedPrimaryButtonStyle(isLargeScreen, isDesktop, { disabled: !canSaveSchedule })
+              : {
+                  padding: isLargeScreen ? '12px 32px' : isDesktop ? '11px 30px' : '10px 28px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: canSaveSchedule ? buttonColor : '#888',
+                  color: '#fff',
+                  fontWeight: 500,
+                  fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                  cursor: canSaveSchedule ? 'pointer' : 'not-allowed',
+                }
+        }
+      >
+        Save
+      </button>
+    </div>
+  );
+
+  const pagePad = isLargeScreen ? 40 : isDesktop ? 32 : 24;
 
   return (
-    <div style={{
-      padding: isLargeScreen ? 40 : isDesktop ? 32 : 24,
+    <div
+      className={useAdvancedLocationsPanel ? 'schedule-form-shell' : undefined}
+      style={{
+      // Longhands only — fixed action bar also sets paddingBottom/paddingRight.
+      paddingTop: pagePad,
+      paddingLeft: pagePad,
+      paddingBottom: pagePad,
+      paddingRight: pagePad,
       borderRadius: 20,
-      minHeight:500,
+      minHeight: useAdvancedLocationsPanel ? 0 : 500,
       display: "flex",
       gap: isLargeScreen ? 32 : isDesktop ? 24 : 20,
-      alignItems: "flex-start",
+      alignItems: useAdvancedLocationsPanel ? "stretch" : "flex-start",
       position: "relative",
-      overflow: "hidden", // Prevent overflow
-      maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,     // Keep within main container
+      overflow: useAdvancedLocationsPanel ? "hidden" : "hidden",
+      maxWidth: isLargeScreen ? 1600 : isDesktop ? 1400 : 1200,
       margin: "0 auto",
       opacity: canCreateSchedule() ? 1 : 0.6,
-      pointerEvents: canCreateSchedule() ? "auto" : "none"
+      pointerEvents: canCreateSchedule() ? "auto" : "none",
+      ...(useAdvancedLocationsPanel ? {
+        flex: 1,
+        height: '100%',
+        boxSizing: 'border-box',
+      } : {}),
+      ...(useFixedPageActionBar ? schedulePageWithFixedActionBarStyle(isLargeScreen, isDesktop) : {}),
     }}>
       {/* Permission Notice for Disabled State */}
       {!canCreateSchedule() && (
@@ -996,15 +1240,30 @@ const AddEvent = () => {
         flex: "0 1 400px",
         minWidth: isLargeScreen ? 380 : isDesktop ? 360 : 340,
         maxWidth: isLargeScreen ? 480 : isDesktop ? 440 : 420,
-        padding: 0
+        padding: formTheme.panelShellPadding,
+        ...(useAdvancedLocationsPanel ? {
+          alignSelf: 'stretch',
+          minHeight: 0,
+          overflowY: 'auto',
+        } : {}),
+        ...(formTheme.useSeparateFieldCards ? {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: formTheme.fieldCardGap,
+        } : {}),
+        ...(formTheme.panelShellBg ? {
+          background: formTheme.panelShellBg,
+          borderRadius: 16,
+          boxSizing: 'border-box',
+        } : {}),
       }}>
       
         
         {/* Schedule Name */}
-        <div style={{ marginBottom: isLargeScreen ? 15 : isDesktop ? 12 : 10}}>
+        <div style={scheduleFieldCardShell(formTheme)}>
           <label style={{ 
             fontWeight: 500, 
-            color: 'black', 
+            color: formTheme.labelColor, 
             display: 'block', 
             marginBottom: isLargeScreen ? 10 : 8,
             fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14
@@ -1020,17 +1279,20 @@ const AddEvent = () => {
               width: '100%',
               padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
               borderRadius: 8,
-              border: '1px solid #ccc',
-              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14
+              border: formTheme.inputBorder || '1px solid #ccc',
+              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+              background: formTheme.dayUnselectedBg || '#ffffff',
+              color: formTheme.inputColor,
+              boxSizing: 'border-box',
             }}
           />
         </div>
 
         {/* Part of */}
-        <div style={{ marginBottom: isLargeScreen ? 15 : isDesktop ? 12 : 10 }}>
+        <div style={scheduleFieldCardShell(formTheme)}>
           <label style={{ 
             fontWeight: 500, 
-            color: 'black', 
+            color: formTheme.labelColor, 
             display: 'block', 
             marginBottom: isLargeScreen ? 10 : 8,
             fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14
@@ -1053,9 +1315,11 @@ const AddEvent = () => {
               width: '100%',
               padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
               borderRadius: 8,
-              border: '1px solid #ccc',
+              border: formTheme.inputBorder || '1px solid #ccc',
               fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-              backgroundColor: 'white'
+              backgroundColor: formTheme.dayUnselectedBg || '#ffffff',
+              color: formTheme.inputColor,
+              boxSizing: 'border-box',
             }}
           >
             {/* <option value="">Select Group</option> */}
@@ -1086,28 +1350,19 @@ const AddEvent = () => {
               />
             </div>
           )}
-          {groupLoading && <div style={{ color: 'black', fontSize: 14, marginTop: 4 }}>Loading groups...</div>}
+          {groupLoading && <div style={{ color: formTheme.labelColor, fontSize: 14, marginTop: 4 }}>Loading groups...</div>}
           {groupError && <div style={{ color: "red", fontSize: 14, marginTop: 4 }}>{groupError}</div>}
         </div>
 
         {/* Grouped Card for Day/Date, Time, Keep Until */}
-        <div style={{
-          background: 'white',
-          borderRadius: 12,
-          padding: isLargeScreen ? 24 : isDesktop ? 20 : 18,
-          marginBottom: 0,
-          marginTop: isLargeScreen ? 24 : isDesktop ? 20 : 18,
-          display: "flex",
-          flexDirection: "column",
-          gap: isLargeScreen ? 24 : isDesktop ? 20 : 18
-        }}>
+        <div style={scheduleFormSectionsColumn(formTheme, { isLargeScreen, isDesktop })}>
           {/* Select Day / Date */}
-          <div style={{ backgroundColor: '#807864', padding: 5, borderRadius: 5 }}>
-            <label style={{ fontWeight: 500, fontSize: 14, color: 'white', display: 'block', marginBottom: 5 }}>
+          <div style={scheduleFormSectionCard(formTheme)}>
+            <label style={{ fontWeight: 500, fontSize: 14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 5 }}>
               Select Day / Date
             </label>
             <div style={{ display: 'flex', fontSize: 14, gap: 10, marginBottom: 12, alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', color: 'white', marginRight: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor, marginRight: 10 }}>
                 <input
                   type="radio"
                   value="weekly"
@@ -1117,7 +1372,7 @@ const AddEvent = () => {
                 />
                 Weekly
               </label>
-              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white', marginRight: 6 }}>
+              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor, marginRight: 6 }}>
                 <input
                   type="radio"
                   value="annual"
@@ -1137,8 +1392,8 @@ const AddEvent = () => {
                       width: 22,
                       height: 22,
                       borderRadius: "50%",
-                      border: "1px solid #a89c81",
-                      background: "#f7f4ed",
+                      border: formTheme.annualAddBorder,
+                      background: formTheme.annualAddBg,
                       color: buttonColor,
                       fontWeight: 700,
                       fontSize: 16,
@@ -1167,8 +1422,8 @@ const AddEvent = () => {
                     style={{
                       padding: '5px 10px',
                       borderRadius: 6,
-                      border: '1px solid #ccc',
-                      background: selectedDays.includes(day) ? buttonColor : 'white',
+                      border: formTheme.dayUnselectedBorder,
+                      background: selectedDays.includes(day) ? buttonColor : (formTheme.dayUnselectedBg || 'white'),
                       color: selectedDays.includes(day) ? 'white' : buttonColor,
                       cursor: 'pointer',
                       fontSize: 12,
@@ -1213,7 +1468,7 @@ const AddEvent = () => {
                         fontWeight: 700,
                         fontSize: 13,
                         color: "#fff",
-                        background: "#a89c81",
+                        background: formTheme.annualChipRemoveBg,
                         borderRadius: "50%",
                         width: 16,
                         height: 16,
@@ -1231,8 +1486,8 @@ const AddEvent = () => {
           </div>
 
                      {/* Select Time */}
-           <div style={{backgroundColor:'#807864',padding:5,borderRadius:5}}>
-             <label style={{ fontWeight: 500,  fontSize:14,color: 'white', display: 'block', marginBottom: 8 }}>
+           <div style={scheduleFormSectionCard(formTheme)}>
+             <label style={{ fontWeight: 500,  fontSize:14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 8 }}>
              Time
              </label>
              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1257,7 +1512,7 @@ const AddEvent = () => {
                   color: buttonColor
                  }}
                />
-               <span style={{ color: 'white', fontSize: 18 }}>:</span>
+               <span style={{ color: formTheme.colonColor, fontSize: 18 }}>:</span>
                <input
                  type="text"
                  value={timeMinutes}
@@ -1283,12 +1538,12 @@ const AddEvent = () => {
            </div>
 
           {/* Keep Until */}
-          <div style={{ backgroundColor: '#807864', padding: 5, borderRadius: 5, marginTop: 18 }}>
-            <label style={{ fontWeight: 500, fontSize: 14, color: 'white', display: 'block', marginBottom: 8 }}>
+          <div style={scheduleFormSectionCard(formTheme)}>
+            <label style={{ fontWeight: 500, fontSize: 14, color: formTheme.sectionTextColor, display: 'block', marginBottom: 8 }}>
               Keep Until
             </label>
             <div style={{ display: 'flex', gap: 16 }}>
-              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white' }}>
+              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor }}>
                 <input
                   type="radio"
                   value="forever"
@@ -1302,7 +1557,7 @@ const AddEvent = () => {
                 />
                 Forever
               </label>
-              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: 'white' }}>
+              <label style={{ display: 'flex', fontSize: 14, alignItems: 'center', color: formTheme.sectionTextColor }}>
                 <input
                   type="radio"
                   value="custom"
@@ -1340,7 +1595,7 @@ const AddEvent = () => {
                         >
                           {minDate}
                         </div>
-                        <span style={{ color: 'white', alignSelf: 'center' }}>to</span>
+                        <span style={{ color: formTheme.colonColor, alignSelf: 'center' }}>to</span>
                         <div
                           style={{
                             padding: '8px 12px',
@@ -1376,7 +1631,7 @@ const AddEvent = () => {
                       }}
                       placeholder="Start Date"
                     />
-                    <span style={{ color: 'white', alignSelf: 'center' }}>to</span>
+                    <span style={{ color: formTheme.colonColor, alignSelf: 'center' }}>to</span>
                     <input
                       type="date"
                       value={customEndDate}
@@ -1437,236 +1692,68 @@ const AddEvent = () => {
       )}
 
       {/* Right Column - Locations and Actions */}
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        padding: 25,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "flex-start",
-        height: "100%",
-        overflow: "hidden",
-        maxWidth: isLargeScreen ? 800 : isDesktop ? 700 : 600
-      }}>
-        {/* Table-like header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          fontWeight: 500,
-          color: 'white',
-          borderBottom: '1px solid #ccc',
-          paddingBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
-          marginBottom: isLargeScreen ? 12 : isDesktop ? 10 : 8,
-          fontSize: isLargeScreen ? 17 : isDesktop ? 16 : 15,
-          ml: 10
-        }}>
-          <span
-            style={{ flex: 2, cursor: 'pointer', textAlign: 'left', minWidth: 120 }}
-            onClick={() => setShowLocationDialog(true)}
-          >
-            + Add Location
-          </span>
-          <span style={{ flex: 2, textAlign: 'left', minWidth: 100 }}>Add Action</span>
-          <span
-            style={{ 
-              flex: 1, 
-              cursor: 'pointer', 
-              textAlign: 'start', 
-              minWidth: 160,
-              whiteSpace: 'nowrap',
-              marginLeft: 15
-            }}
-            onClick={() => setShowCommonActionDialog(true)}
-          >
-            + Add Common Action
-          </span>
-        </div>
+      <ScheduleLocationsPanel
+        locations={locations}
+        formTheme={formTheme}
+        buttonColor={buttonColor}
+        isLargeScreen={isLargeScreen}
+        isDesktop={isDesktop}
+        useAdvancedLayout={useAdvancedLocationsPanel}
+        layoutHelpers={scheduleAdvancedLocationsPanel}
+        editMode
+        onAddLocation={() => setShowLocationDialog(true)}
+        onAddCommonAction={openCommonActionDialog}
+        onOpenActionDialog={handleOpenActionDialog}
+        onEditAction={handleEditButtonClick}
+        onDeleteLocation={handleDeleteButtonClick}
+        renderActionDisplay={renderActionDisplay}
+        actionBar={useFixedPageActionBar ? null : addEventActionBar}
+        actionHeaderLabel="Add Action"
+        hideTrailingAddAction={hideScheduleTrailingAddAction}
+      />
 
-        {/* Table-like list of locations and actions */}
-        <div>
-          {locations.map((loc, idx) => {
-            const locationText = `${loc.floorName} > ${loc.areaName}`;
-            const isLongName = locationText.length > 40; // Updated threshold to 40 characters
-            
-            return (
-              <div key={idx} style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                borderBottom: '1px solid #b2a98b',
-                padding: '8px 0',
-                minHeight: isLongName ? '60px' : '40px' // Increase height for long names
-              }}>
-                {/* Location - Updated to handle long names */}
-                <div style={{ 
-                  flex: '0 0 280px', // Reduced from 300px to give more space for actions
-                  fontSize: 15, 
-                  color: '#fff', 
-                  textAlign: 'left',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'flex-start',
-                  paddingRight: '10px' // Add some padding
-                }}>
-                  {isLongName ? (
-                    // Show in 2 lines for long names
-                    <div style={{ 
-                      lineHeight: '1.3',
-                      wordBreak: 'break-word',
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical'
-                    }}>
-                      {locationText}
-                    </div>
-                  ) : (
-                    // Show in single line for short names
-                    <div style={{ 
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {locationText}
-                    </div>
-                  )}
-                </div>
-                {/* Actions - Updated to have more space */}
-                <div style={{ 
-                  flex: 1, 
-                  fontSize: 15, 
-                  color: '#fff', 
-                  textAlign: 'left', 
-                  minWidth: 120, 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '4px',
-                  marginLeft: '10px' // Reduced negative margin
-                }}>
-                  {(loc.actions && loc.actions.length > 0)
-                    ? loc.actions.map((a, i) => (
-                        <div key={i} style={{ marginBottom: '4px' }}>
-                          {renderActionDisplay(a)}
-                        </div>
-                      ))
-                    : <button
-                        style={{
-                          color: 'white',
-                          padding: '5px 10px',
-                          borderRadius: 2,
-                          border: '1px solid #888',
-                          background: buttonColor,
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          alignSelf: 'flex-start',
-                          marginLeft: 0,
-                          whiteSpace: 'nowrap'
-                        }}
-                        onClick={() => handleOpenActionDialog(idx)}
-                      >
-                        Add Action
-                      </button>
-                  }
-                </div>
-                {/* Delete button - Ensure it's always visible */}
-                <div style={{ 
-                  flex: '0 0 50px', // Fixed width to ensure visibility
-                  textAlign: 'right', 
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'flex-end',
-                  paddingLeft: '10px'
-                }}>
-                  <button
-                    onClick={() => handleDelete(idx)}
-                    style={{
-                      background: buttonColor,
-                      border: 'none',
-                      borderRadius: 4,
-                      color: '#fff',
-                      padding: '6px 10px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      minWidth: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Move the buttons here, right-aligned */}
-        <div style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: isLargeScreen ? 20 : isDesktop ? 18 : 16,
-          marginTop: isLargeScreen ? 40 : isDesktop ? 35 : 32
-        }}>
-          <button
-            onClick={handleCancel}
-            style={{
-              padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-              borderRadius: 8,
-              border: "none",
-              background: buttonColor,
-              color: "#fff",
-              fontWeight: 500,
-              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-              cursor: "pointer"
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!scheduleName.trim() || locations.length === 0 || locations.some(location => !location.actions || location.actions.length === 0)}
-            style={{
-              padding: isLargeScreen ? "12px 32px" : isDesktop ? "11px 30px" : "10px 28px",
-              borderRadius: 8,
-              border: "none",
-              background: (scheduleName.trim() && locations.length > 0 && !locations.some(location => !location.actions || location.actions.length === 0)) ? buttonColor : "#888",
-              color: "#fff",
-              fontWeight: 500,
-              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-              cursor: (scheduleName.trim() && locations.length > 0 && !locations.some(location => !location.actions || location.actions.length === 0)) ? "pointer" : "not-allowed"
-            }}
-          >
-            Save
-          </button>
-        </div>
-      </div>
+      {useFixedPageActionBar ? addEventActionBar : null}
 
       {/* Action Dialog */}
-      {actionDialogIdx !== null && (
+      {renderScheduleModalLayer(
+        usePortaledScheduleModals,
+        actionDialogIdx !== null && (
         <div style={{
           position: 'fixed',
           left: 0, top: 0, right: 0, bottom: 0,
           background: "rgba(0,0,0,0.25)",
-          zIndex: 1000,
+          zIndex: usePortaledScheduleModals ? SCHEDULE_MODAL_OVERLAY_Z_INDEX : 1000,
           display: "flex",
           alignItems: "center",
           justifyContent: "center"
         }}>
-          <div style={{
-            background: "#CDC0A0",
-            borderRadius: 18,
-            padding: 28,
-            minWidth: 340,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-            position: "relative",
-            color: buttonColor
-          }}>
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: buttonColor }}>
-              Add Action
+          <div
+            style={isAdvancedScheduleForm
+              ? scheduleModalPanelStyle(formTheme, { minWidth: 340 })
+              : scheduleLegacyModalPanelStyle(formTheme, buttonColor, { minWidth: 340 })}
+          >
+            <div style={isAdvancedScheduleForm
+              ? scheduleModalTitleStyle(formTheme)
+              : scheduleLegacyModalTitleStyle(buttonColor)}>
+              {selectedActionData || editingActionIdx != null || editAllMode ? 'Edit Action' : 'Add Action'}
             </div>
             <Action
               areaId={locations[actionDialogIdx]?.areaId}
               onActionSelect={action => setSelectedActionData(action)}
+              initialAction={selectedActionData}
+              menuProps={usePortaledScheduleModals
+                ? resolveScheduleModalFilterMenuProps(scheduleCalendarChrome)
+                : scheduleFilterMenuProps}
+              hideZoneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasSceneAction(locations[actionDialogIdx]?.actions)
+              }
+              hideSceneOption={
+                !editAllMode &&
+                editingActionIdx == null &&
+                locationHasZoneAction(locations[actionDialogIdx]?.actions)
+              }
             />
             <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button
@@ -1686,10 +1773,10 @@ const AddEvent = () => {
                   cursor: (selectedActionData && selectedActionData.type && (selectedActionData.type !== "scene" || selectedActionData.scene)) ? "pointer" : "not-allowed"
                 }}
               >
-                Add Action
+                {selectedActionData || editingActionIdx != null || editAllMode ? 'Update' : 'Add'} Action
               </button>
               <button
-                onClick={() => { setActionDialogIdx(null); setSelectedActionData(null); }}
+                onClick={closeActionDialog}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
@@ -1705,65 +1792,92 @@ const AddEvent = () => {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Common Action Dialog */}
-      {showCommonActionDialog && (
+      {renderScheduleModalLayer(
+        usePortaledScheduleModals,
+        showCommonActionDialog && (
         <div style={{
           position: 'fixed',
           left: 0, top: 0, right: 0, bottom: 0,
           background: "rgba(0,0,0,0.25)",
-          zIndex: 1000,
+          zIndex: usePortaledScheduleModals ? SCHEDULE_MODAL_OVERLAY_Z_INDEX : 1000,
           display: "flex",
           alignItems: "center",
           justifyContent: "center"
         }}>
-          <div style={{
-            background: "#CDC0A0",
-            borderRadius: 18,
-            padding: 28,
-            minWidth: 400,
-            maxWidth: 600,
-            maxHeight: '80vh',
-            overflow: 'auto',
-            boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-            position: "relative",
-            color: buttonColor
-          }}>
-            <div style={{ marginBottom: 16, fontWeight: 600, fontSize: 18, color: buttonColor }}>
-              Add Common Action
+          <div
+            style={isAdvancedScheduleForm
+              ? scheduleModalPanelStyle(formTheme, {
+                minWidth: 400,
+                maxWidth: 600,
+                maxHeight: '80vh',
+                overflow: 'auto',
+              })
+              : scheduleLegacyModalPanelStyle(formTheme, buttonColor, {
+                minWidth: 400,
+                maxWidth: 600,
+                maxHeight: '80vh',
+                overflow: 'auto',
+              })}
+          >
+            <div style={isAdvancedScheduleForm
+              ? scheduleModalTitleStyle(formTheme)
+              : scheduleLegacyModalTitleStyle(buttonColor)}>
+              {editingAreaStatus ? 'Edit Action' : 'Add Common Action'}
             </div>
             
             {/* Action Type Dropdown */}
             <div style={{ marginBottom: 16 }}>
               {/* <div style={{ fontWeight: 600, marginBottom: 8 }}>Select Action Type</div> */}
-              <select
-                value={selectedCommonActionType}
-                onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  border: "1px solid #ccc",
-                  background: "white",
-                  fontSize: 14
-                }}
-              >
-                <option value="light_status">Light Status</option>
-                <option value="occupancy">Occupancy Setting</option>
-              </select>
+              {isAdvancedScheduleForm ? (
+                <Select
+                  className="schedule-filter-select"
+                  value={selectedCommonActionType}
+                  onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
+                  fullWidth
+                  disabled={!!editingAreaStatus}
+                  MenuProps={isAdvancedScheduleForm ? scheduleModalFilterMenuProps : scheduleFilterMenuProps}
+                  sx={scheduleSelectFieldSx}
+                >
+                  <MenuItem value="light_status">Light Status</MenuItem>
+                  {!editingAreaStatus && <MenuItem value="occupancy">Occupancy Setting</MenuItem>}
+                </Select>
+              ) : (
+                <select
+                  value={selectedCommonActionType}
+                  onChange={(e) => handleCommonActionTypeSelect(e.target.value)}
+                  disabled={!!editingAreaStatus}
+                  style={scheduleModalSelectStyle(formTheme)}
+                >
+                  <option value="light_status">Light Status</option>
+                  {!editingAreaStatus && <option value="occupancy">Occupancy Setting</option>}
+                </select>
+              )}
             </div>
 
             {/* Light Status Options */}
             {selectedCommonActionType === 'light_status' && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Light Status (On/Off)</div>
+                {isLightScheduleForm && (
+                  <div style={scheduleModalLabelStyle(formTheme)}>
+                    Light Status (On/Off)
+                  </div>
+                )}
                 
                 {/* Simplified: Only On/Off options */}
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Light State</div>
+                  <div style={isAdvancedScheduleForm
+                    ? scheduleModalLabelStyle(formTheme)
+                    : { fontWeight: 600, marginBottom: 8, color: isLightScheduleForm ? formTheme.modalSectionLabelColor : formTheme.sectionTextColor }}>
+                    Light State
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
+                    <label style={isAdvancedScheduleForm
+                      ? scheduleModalRadioLabelStyle(formTheme)
+                      : { display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor }}>
                       <input
                         type="radio"
                         value="On"
@@ -1771,20 +1885,24 @@ const AddEvent = () => {
                         onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
                         style={{ 
                           marginRight: 8,
-                          accentColor: '#000000',
+                          accentColor: isLightScheduleForm ? '#000000' : formTheme.radioSelected,
                           WebkitAppearance: 'none',
                           appearance: 'none',
                           width: '12px',
                           height: '12px',
                           border: '2px solid #ccc',
                           borderRadius: '50%',
-                          backgroundColor: lightStatusSettings.switched.on_off === 'On' ? '#000000' : 'transparent',
+                          backgroundColor: lightStatusSettings.switched.on_off === 'On'
+                            ? (isLightScheduleForm ? '#000000' : formTheme.radioSelected)
+                            : 'transparent',
                           position: 'relative'
                         }}
                       />
                       On
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
+                    <label style={isAdvancedScheduleForm
+                      ? scheduleModalRadioLabelStyle(formTheme)
+                      : { display: 'flex', alignItems: 'center', color: formTheme.sectionTextColor }}>
                       <input
                         type="radio"
                         value="Off"
@@ -1792,14 +1910,16 @@ const AddEvent = () => {
                         onChange={(e) => handleLightStatusSettingChange('switched', 'on_off', e.target.value)}
                         style={{ 
                           marginRight: 8,
-                          accentColor: '#000000',
+                          accentColor: isLightScheduleForm ? '#000000' : formTheme.radioSelected,
                           WebkitAppearance: 'none',
                           appearance: 'none',
                           width: '12px',
                           height: '12px',
                           border: '2px solid #ccc',
                           borderRadius: '50%',
-                          backgroundColor: lightStatusSettings.switched.on_off === 'Off' ? '#000000' : 'transparent',
+                          backgroundColor: lightStatusSettings.switched.on_off === 'Off'
+                            ? (isLightScheduleForm ? '#000000' : formTheme.radioSelected)
+                            : 'transparent',
                           position: 'relative'
                         }}
                       />
@@ -1813,7 +1933,11 @@ const AddEvent = () => {
             {/* Occupancy Setting Options */}
             {selectedCommonActionType === 'occupancy' && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Occupancy Setting</div>
+                <div style={isAdvancedScheduleForm
+                  ? scheduleModalLabelStyle(formTheme)
+                  : { fontWeight: 600, marginBottom: 8, color: formTheme.sectionTextColor }}>
+                  Occupancy Setting
+                </div>
                 <div style={{ display: "flex", gap: 16 }}>
                   {["disabled", "auto", "vacancy"].map((setting) => (
                     <button
@@ -1860,15 +1984,10 @@ const AddEvent = () => {
                     (selectedCommonActionType !== 'light_status' || selectedZoneType)) ? "pointer" : "not-allowed"
                 }}
               >
-                Apply to All
+                {editingAreaStatus ? 'Update' : 'Apply to All'}
               </button>
               <button
-                onClick={() => { 
-                  setShowCommonActionDialog(false); 
-                  setSelectedCommonActionType('light_status'); 
-                  setSelectedOccupancySetting(null);
-                  setSelectedZoneType('switched');
-                }}
+                onClick={resetCommonActionDialog}
                 style={{
                   padding: "10px 28px",
                   borderRadius: 8,
@@ -1885,6 +2004,7 @@ const AddEvent = () => {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Area Tree Dialog */}
@@ -1893,6 +2013,44 @@ const AddEvent = () => {
         onClose={() => setShowLocationDialog(false)}
         onAdd={handleAddLocations}
         accessibleFloors={accessibleFloors}
+      />
+
+      <ConfirmDialog
+        open={showDeleteLocationDialog}
+        title="Delete Location"
+        message={`Are you sure you want to delete location "${locationToDelete?.location?.areaName || ''}"?`}
+        onConfirm={confirmDeleteLocation}
+        onCancel={() => {
+          setShowDeleteLocationDialog(false);
+          setLocationToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={showDeleteActionDialog}
+        title="Delete Action"
+        message={`Are you sure you want to delete "${getQuickControlActionShortLabel(actionToDelete?.action)}" from "${actionToDelete?.location?.areaName || ''}"?`}
+        onConfirm={confirmDeleteAction}
+        onCancel={() => {
+          setShowDeleteActionDialog(false);
+          setActionToDelete(null);
+        }}
+      />
+
+      <ActionChooserModal
+        open={Boolean(actionChooser)}
+        mode={actionChooser?.mode || 'edit'}
+        actions={
+          actionChooser != null
+            ? locations[actionChooser.locationIdx]?.actions || []
+            : []
+        }
+        buttonColor={buttonColor}
+        onPick={(pick) => {
+          if (actionChooser?.mode === 'delete') handleChooserPickDelete(pick);
+          else handleChooserPickEdit(pick);
+        }}
+        onCancel={() => setActionChooser(null)}
       />
     </div>
   );
