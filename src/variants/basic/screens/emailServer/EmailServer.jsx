@@ -18,7 +18,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { createEmail, fetchEmailConfigs, getEmailData, testEmail } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../customhooks/UseAuth';
-import { isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
+import { DEFAULT_APP_BACKGROUND, DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
 import { settingsSidebarColumnDividerSx } from '../../utils/settingsSidebarTabStyles';
 import SettingsSidebarNav from '../../components/SettingsSidebarNav';
 
@@ -32,8 +32,8 @@ const EmailServer = () => {
     const navigate = useNavigate();
     const emailData = useSelector(getEmailData)
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
-    const contentColor = appTheme?.application_theme?.content || '#ffffff';
+    const backgroundColor = appTheme?.application_theme?.background || DEFAULT_APP_BACKGROUND;
+    const contentColor = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
     const buttonColor = appTheme?.application_theme?.button || '#232323'
     const whiteChrome = isWhiteAreaPickerChrome(contentColor);
     const actionBlue = whiteChrome ? '#1565C0' : buttonColor;

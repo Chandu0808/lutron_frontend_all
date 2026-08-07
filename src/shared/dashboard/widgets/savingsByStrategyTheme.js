@@ -12,7 +12,7 @@ export const SAVINGS_BY_STRATEGY_ADAPTER_SHELL = {
   [SAVINGS_BY_STRATEGY_THEME_PRESETS.customized]: 'customized-builtin',
 };
 
-const BASIC_SLOT_HEIGHT_PX = 360;
+const BASIC_SLOT_HEIGHT_PX = 460; // Match Basic Consumption By Area Groups card height
 const BASIC_LIGHT_FULL_CARD_HEIGHT_PX = 488;
 
 const BASIC_SLOT_OUTER_STYLE = {
@@ -128,15 +128,23 @@ export function resolveSavingsByStrategyTheme({
         flex: 1,
       };
     } else if (light) {
+      const cardHeight = Math.max(
+        energyLightFullCardHeightPx || 0,
+        BASIC_SLOT_HEIGHT_PX
+      );
       outerStyleOverride = {
         ...BASIC_SLOT_OUTER_STYLE,
         backgroundColor: '#ffffff',
         border: '1px solid #e8e8e8',
-        height: energyLightFullCardHeightPx,
-        minHeight: energyLightFullCardHeightPx,
+        height: cardHeight,
+        minHeight: cardHeight,
+        overflow: 'visible',
       };
     } else {
-      outerStyleOverride = BASIC_SLOT_OUTER_STYLE;
+      outerStyleOverride = {
+        ...BASIC_SLOT_OUTER_STYLE,
+        overflow: 'visible',
+      };
     }
 
     let plotStyleOverride;
@@ -165,9 +173,15 @@ export function resolveSavingsByStrategyTheme({
         ...BASIC_PLOT_FLEX_STYLE,
         backgroundColor: '#ffffff',
         border: '1px solid #e0e0e0',
+        overflow: 'visible',
+        minHeight: 340,
       };
     } else {
-      plotStyleOverride = BASIC_PLOT_FLEX_STYLE;
+      plotStyleOverride = {
+        ...BASIC_PLOT_FLEX_STYLE,
+        overflow: 'visible',
+        minHeight: 340,
+      };
     }
 
     return {

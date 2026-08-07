@@ -82,10 +82,18 @@ export function resolveTotalConsumptionByGroupTheme({
 
   if (preset === TOTAL_CONSUMPTION_BY_GROUP_THEME_PRESETS.basic) {
     const light = chartSurface === 'light';
-    const outerStyleOverride =
-      light && energyLightFullCardHeightPx
-        ? { height: energyLightFullCardHeightPx, minHeight: energyLightFullCardHeightPx }
-        : {};
+    // Pie labels sit outside outerRadius (~110 + 35). Default basic-energy slot
+    // (360px) clips the top leader-line text (e.g. WS). Tall enough for Basic only.
+    const BASIC_CONSUMPTION_BY_GROUP_CARD_HEIGHT_PX = 460;
+    const cardHeight = Math.max(
+      energyLightFullCardHeightPx || 0,
+      BASIC_CONSUMPTION_BY_GROUP_CARD_HEIGHT_PX
+    );
+    const outerStyleOverride = {
+      height: cardHeight,
+      minHeight: cardHeight,
+      overflow: 'visible',
+    };
 
     return {
       preset,
@@ -101,7 +109,10 @@ export function resolveTotalConsumptionByGroupTheme({
       cssTooltipStyle: null,
       cardShellStyle: {},
       cardHeaderStyle: {},
-      plotStyleOverride: {},
+      plotStyleOverride: {
+        overflow: 'visible',
+        minHeight: 340,
+      },
       loaderHeight: '100%',
     };
   }

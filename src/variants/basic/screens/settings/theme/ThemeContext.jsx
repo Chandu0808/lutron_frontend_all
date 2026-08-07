@@ -1,10 +1,12 @@
 // src/screens/settings/theme/ThemeContext.jsx
 import React from "react";
+import { useSelector } from "react-redux";
 import {
   fetchThemeSettings,
   selectThemeSettings,
   selectThemeLoading,
   selectThemeError,
+  selectApplicationTheme,
 } from "../../../redux/slice/theme/themeSlice";
 import {
   DEFAULT_PUBLIC_BG,
@@ -15,6 +17,7 @@ import {
   DEFAULT_APP_CONTENT,
   isWhiteAreaPickerChrome,
 } from "../../../utils/themeOnSurface";
+import { pickThemeBackgroundImage } from "../../../../../shared/theme/utils/themeBackgroundImage";
 import {
   createThemeContext,
   createNormalizeUiColors,
@@ -31,7 +34,6 @@ import {
 const DEFAULT_TAB_COLOR = '#1976d2';
 /** Default action buttons (contained / outlined / text) — semantic colors stay on palette. */
 const BUTTON_BLUE = '#1565C0';
-const POLLING_INTERVAL = 30000;
 
 const normalizeUiColors = createNormalizeUiColors({
   background: DEFAULT_APP_BACKGROUND,
@@ -51,7 +53,9 @@ const applyCssVariables = (uiColors = {}, bgImage = "") => {
   const isDefaultWhiteTheme = isWhiteAreaPickerChrome(content);
   const root = document.documentElement;
 
-  root.style.setProperty("--app-background", background);
+  // Default/light content: keep body/html white so Settings does not show a beige band.
+  const cssBackground = isDefaultWhiteTheme ? DEFAULT_APP_BACKGROUND : background;
+  root.style.setProperty("--app-background", cssBackground);
   root.style.setProperty("--app-content", content);
   root.style.setProperty("--app-button", button);
   root.style.setProperty("--app-checkbox-accent", isDefaultWhiteTheme ? BUTTON_BLUE : "auto");
@@ -83,6 +87,8 @@ const createAppTheme = (uiColors = {}, bgImage = "") =>
 export const ThemeContext = createThemeContext(DEFAULT_PUBLIC_BG);
 
 export const ThemeProviderCustom = ({ children }) => {
+  const applicationTheme = useSelector(selectApplicationTheme);
+
   const { theme, backgroundImage, reloadTheme } = useThemeProviderBootstrap({
     createAppTheme,
     applyCssVariables,
@@ -94,6 +100,8 @@ export const ThemeProviderCustom = ({ children }) => {
     mountCssBackground: "",
     resolveApiBackgroundImage: backgroundResolvers.fromApi,
     resolveReloadBackgroundImage: backgroundResolvers.onReload,
+    applicationTheme,
+    pickThemeBackgroundImage,
   });
 
   return (

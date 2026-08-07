@@ -11,6 +11,8 @@ import {
   TextField,
   FormControl,
   InputLabel,
+  InputAdornment,
+  IconButton,
   Select,
   MenuItem,
   ListItemText,
@@ -22,6 +24,8 @@ import {
   Snackbar,
   Checkbox,
 } from "@mui/material";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useTheme } from "@mui/material/styles";
 import { isLightSurface } from "../../theme/utils/themeOnSurface";
 import { useDispatch, useSelector } from "react-redux";
@@ -88,6 +92,7 @@ export default function UpdateUser({ open, user, onClose }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedFloors, setSelectedFloors] = useState([]);
   const [initialName, setInitialName] = useState("");
   const [initialEmail, setInitialEmail] = useState("");
@@ -115,6 +120,7 @@ export default function UpdateUser({ open, user, onClose }) {
       setInitialEmail(em);
       setEmailError("");
       setPassword("");
+      setShowPassword(false);
       dispatch(clearUpdateError());
       setSnackbarOpen(false);
       const perms = user.user_permissions || [];
@@ -329,11 +335,26 @@ export default function UpdateUser({ open, user, onClose }) {
               fullWidth
               size="small"
               variant="outlined"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Leave blank to keep current password"
               sx={{ backgroundColor: "#fff", borderRadius: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                      size="small"
+                    >
+                      {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>

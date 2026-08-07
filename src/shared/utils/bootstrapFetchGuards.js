@@ -213,6 +213,8 @@ export function dispatchFetchApplicationThemeOnce(
 
   if (force) {
     clearSessionCache(cacheKey);
+    completed.delete(key);
+    completedAt.delete(key);
   } else if (completed.has(key)) {
     return Promise.resolve(null);
   } else if (
@@ -233,6 +235,19 @@ export function dispatchFetchApplicationThemeOnce(
     },
     { force }
   );
+}
+
+/**
+ * After a successful theme save, update session cache so the next reload does
+ * not hydrate a stale (e.g. gold) application theme over Default white.
+ * @param {object} applicationThemePayload - same shape as fetchApplicationTheme.fulfilled
+ */
+export function syncApplicationThemeSessionCache(applicationThemePayload) {
+  if (applicationThemePayload == null) return;
+  const key = 'theme-application';
+  writeSessionCache(themeApplicationCacheKey(), applicationThemePayload);
+  completed.add(key);
+  completedAt.set(key, Date.now());
 }
 
 export function dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme, { force = false } = {}) {

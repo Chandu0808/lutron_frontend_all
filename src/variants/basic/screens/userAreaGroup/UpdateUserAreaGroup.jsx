@@ -91,7 +91,7 @@ const UpdateUserAreaGroup = () => {
     const [showDeleteAreaDialog, setShowDeleteAreaDialog] = useState(false);
     const [areaToDelete, setAreaToDelete] = useState(null);
 
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
+    const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
     const handleDelete = (groupIndex, areaIndex) => {
         // Set the area to delete and show confirmation dialog
         setAreaToDelete({ groupIndex, areaIndex });

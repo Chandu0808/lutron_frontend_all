@@ -28,6 +28,7 @@ import {
     dispatchFetchBackgroundImageOnce,
     dispatchFetchClientOnce,
     dispatchFetchHeatMapThemeOnce,
+    syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
 import {
     DEFAULT_APP_BACKGROUND,
@@ -185,8 +186,19 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload, backgroundImage);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -239,8 +251,19 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
