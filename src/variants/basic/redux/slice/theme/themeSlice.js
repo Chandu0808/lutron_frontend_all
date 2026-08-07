@@ -24,6 +24,7 @@ const {
 } = createThemeModule({
   BaseUrl,
   getToken,
+  includeUpdateApplicationThemeFulfilled: true,
   initialState: {
     applicationTheme: {
       application_theme: {

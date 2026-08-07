@@ -458,7 +458,15 @@ function DashboardOverview({
     })
   }
 
-  const energy = data?.energy
+  const alerts = data?.alerts
+  const schedule = data?.schedule?.next
+  // Floors tile is hidden, but count still drives Energy / Space Utilization empty-state.
+  const floorsCount = data?.floors?.count ?? 0
+  // Basic only: without configured floors, do not show overview Energy/CO₂ from /home/dashboard
+  // (that payload can still include project-level CurrentAreaEvent / savings). Passing null
+  // uses existing OverviewMetricTile empty UI ("No data"), same as Space Utilization.
+  const energy = floorsCount > 0 ? data?.energy ?? null : null
+  const spaceUtil = floorsCount > 0 ? data?.space_utilization ?? null : null
   // Always match the Energy overview tile: instantaneous savings (kW) × CO₂ constant.
   const shadesCo2Amount = energy?.savings_kw ?? null
   const shadesCo2Unit = energy?.savings_kw != null ? 'kW' : null
@@ -469,13 +477,6 @@ function DashboardOverview({
   const customOverviewTileWidthSx = overviewBottomRowTileWidthSx(
     Math.min(Math.max(visibleCustomOverviewWidgets.length, 1), 4)
   )
-  const alerts = data?.alerts
-  const schedule = data?.schedule?.next
-  // Floors tile is hidden, but count still drives Space Utilization empty-state.
-  const floorsCount = data?.floors?.count ?? 0
-  // Basic only: without configured floors, do not show occupancy % from CurrentAreaEvent.
-  // Passing null uses existing OverviewMetricTile empty UI ("No data").
-  const spaceUtil = floorsCount > 0 ? data?.space_utilization ?? null : null
 
   if (loading && !data) {
     return (

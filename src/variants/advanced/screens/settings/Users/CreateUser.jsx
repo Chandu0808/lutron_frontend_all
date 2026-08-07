@@ -13,6 +13,8 @@ import {
   TextField,
   FormControl,
   InputLabel,
+  InputAdornment,
+  IconButton,
   Select,
   MenuItem,
   ListItemText,
@@ -24,6 +26,8 @@ import {
   Alert,
   Snackbar,
 } from "@mui/material";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useDispatch, useSelector } from "react-redux";
 import {
   createUser,
@@ -87,6 +91,7 @@ export default function CreateUser({ open, onClose }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("");
   const [selectedFloorIds, setSelectedFloorIds] = useState([]);
   const [sharedAccessLevel, setSharedAccessLevel] = useState(permissionOptions[0]);
@@ -111,6 +116,7 @@ export default function CreateUser({ open, onClose }) {
       setName("");
       setEmail("");
       setPassword("");
+      setShowPassword(false);
       if (currentUserRole === 'Admin') {
         setRole('Operator');
       } else if (currentUserRole === 'Superadmin') {
@@ -298,10 +304,25 @@ export default function CreateUser({ open, onClose }) {
                 fullWidth
                 size="small"
                 variant="outlined"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 sx={fieldSx}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>

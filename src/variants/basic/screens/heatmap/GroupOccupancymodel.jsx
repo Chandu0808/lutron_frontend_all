@@ -30,7 +30,7 @@ import {
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
-import { DEFAULT_APP_CONTENT, isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
+import { isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
 import { normalizeOccupancyModeString } from '../../redux/slice/settingsslice/heatmap/occupancyModeUtils';
 
 function toTitleCase(str) {
@@ -54,8 +54,8 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const updating = useSelector(selectGroupOccupancyUpdating);
   const areaGroupsLoading = useSelector(selectAreaGroupsLoading);
   const appTheme = useSelector(selectApplicationTheme);
-  const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-  const contentColor = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
+  const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
+  const contentColor = appTheme?.application_theme?.content || '#f5f5f5';
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const whiteChrome = isWhiteAreaPickerChrome(contentColor);
   const chromeBlue = '#1565C0';

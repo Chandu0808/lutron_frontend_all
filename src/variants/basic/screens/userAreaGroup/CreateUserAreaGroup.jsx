@@ -12,7 +12,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { fetchAreaGroups } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
-import { isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
+import { DEFAULT_APP_BACKGROUND, isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
 
 const CreateUserAreaGroup = () => {
     const role = localStorage.getItem("role")
@@ -26,7 +26,7 @@ const CreateUserAreaGroup = () => {
     const [showCreateFailure, setShowCreateFailure] = useState(false);
     const [isDisable, setIsDisable] = useState(false);
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
+    const backgroundColor = appTheme?.application_theme?.background || DEFAULT_APP_BACKGROUND;
     const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
     const buttonColor = appTheme?.application_theme?.button || '#232323'
     const whiteChrome = isWhiteAreaPickerChrome(contentColor);

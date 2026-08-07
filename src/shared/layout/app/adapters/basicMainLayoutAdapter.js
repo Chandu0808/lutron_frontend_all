@@ -74,7 +74,10 @@ export const basicMainLayoutAdapter = {
     const useWhiteContentShell =
       whiteChrome &&
       (isActivityReport || isSettingsLayout);
-    const layoutShellBg = useWhiteContentShell ? "#ffffff" : backgroundColor;
+    // Default / light content theme: always use white page shell (Energy, Heatmap,
+    // Settings, etc.). Prevents a stale gold application_theme.background from
+    // painting beige behind white content panels.
+    const layoutShellBg = whiteChrome ? "#ffffff" : backgroundColor;
     const mainContentPanelBg =
       useWhiteContentShell || whiteChrome ? "#ffffff" : contentColor;
     const showBlueHeaderStripForWhiteTheme =

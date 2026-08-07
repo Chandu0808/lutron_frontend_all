@@ -137,6 +137,16 @@ describe('SavingsByStrategy theme parity', () => {
     expect(theme.shellVariant).toBe('basic-energy');
     expect(theme.loaderLight).toBe(true);
     expect(theme.outerStyleOverride.height).toBe(500);
+    expect(theme.outerStyleOverride.minHeight).toBe(500);
+  });
+
+  it('basic standalone dark theme matches Consumption By Area Groups card height', () => {
+    const theme = resolveSavingsByStrategyTheme({
+      preset: SAVINGS_BY_STRATEGY_THEME_PRESETS.basic,
+      chartSurface: 'dark',
+    });
+    expect(theme.outerStyleOverride.height).toBe(460);
+    expect(theme.outerStyleOverride.minHeight).toBe(460);
   });
 
   it('basic embedded theme uses transparent shell', () => {

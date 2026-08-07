@@ -121,8 +121,28 @@ describe('TotalConsumptionByGroup theme parity', () => {
     });
     expect(theme.shellVariant).toBe('basic-energy');
     expect(theme.loaderLight).toBe(true);
-    expect(theme.outerStyleOverride).toEqual({ height: 500, minHeight: 500 });
+    expect(theme.outerStyleOverride).toEqual({
+      height: 500,
+      minHeight: 500,
+      overflow: 'visible',
+    });
+    expect(theme.plotStyleOverride).toEqual({
+      overflow: 'visible',
+      minHeight: 340,
+    });
     expect(theme.showZeroSegmentsState).toBe(false);
+  });
+
+  it('basic theme uses a taller default card so pie leader labels are not clipped', () => {
+    const theme = resolveTotalConsumptionByGroupTheme({
+      preset: TOTAL_CONSUMPTION_BY_GROUP_THEME_PRESETS.basic,
+      chartSurface: 'dark',
+    });
+    expect(theme.outerStyleOverride).toEqual({
+      height: 460,
+      minHeight: 460,
+      overflow: 'visible',
+    });
   });
 
   it('advanced theme uses advanced-card shell and surface overrides', () => {

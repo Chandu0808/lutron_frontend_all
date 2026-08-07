@@ -2454,58 +2454,19 @@ function Dashboard() {
     ADVANCED_DASHBOARD_TOOLBAR_PX + ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX;
   const advancedDashboardChromeRef = useRef(null);
   const advancedDashboardContentRef = useRef(null);
-  const frozenContentTopRef = useRef(ADVANCED_STABLE_CONTENT_TOP_PX);
 
-  const syncAdvancedDashboardContentTop = useCallback(() => {
-    const chromeEl = advancedDashboardChromeRef.current;
-    const contentEl = advancedDashboardContentRef.current;
-    if (!contentEl) return;
-    if (chromeEl) {
-      const bottom = chromeEl.getBoundingClientRect().bottom;
-      // Never lower the frozen top — filter swaps must not yank widgets.
-      if (bottom > frozenContentTopRef.current) {
-        frozenContentTopRef.current = bottom;
-      }
-    }
-    contentEl.style.top = `${frozenContentTopRef.current}px`;
-  }, []);
-
+  // Fixed top only — never remeasure chrome on tab switch (that yanked widgets).
   useLayoutEffect(() => {
+    const contentEl = advancedDashboardContentRef.current;
     if (!pinAdvancedDashboardScrollChrome) {
-      frozenContentTopRef.current = ADVANCED_STABLE_CONTENT_TOP_PX;
-      if (advancedDashboardContentRef.current) {
-        advancedDashboardContentRef.current.style.top = '';
-      }
+      if (contentEl) contentEl.style.top = '';
       return undefined;
     }
-
-    syncAdvancedDashboardContentTop();
-    const el = advancedDashboardChromeRef.current;
-    if (!el) return undefined;
-
-    let resizeObserver;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(syncAdvancedDashboardContentTop);
-      resizeObserver.observe(el);
+    if (contentEl) {
+      contentEl.style.top = `${ADVANCED_STABLE_CONTENT_TOP_PX}px`;
     }
-
-    window.addEventListener('resize', syncAdvancedDashboardContentTop);
-    window.addEventListener('orientationchange', syncAdvancedDashboardContentTop);
-    return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener('resize', syncAdvancedDashboardContentTop);
-      window.removeEventListener('orientationchange', syncAdvancedDashboardContentTop);
-    };
-  }, [
-    pinAdvancedDashboardScrollChrome,
-    syncAdvancedDashboardContentTop,
-    activeTab,
-    showAreaDropdown,
-    isLargeScreen,
-    isMediumScreen,
-    selectedDuration,
-    hideAdvancedHeaderDuration,
-  ]);
+    return undefined;
+  }, [pinAdvancedDashboardScrollChrome, ADVANCED_STABLE_CONTENT_TOP_PX]);
 
   const showAdvancedDashboardFixedChrome =
     !HIDE_DASHBOARD_VIEW_TABS || activeTab !== 'overview';
@@ -2529,8 +2490,10 @@ function Dashboard() {
           p: 0,
           zIndex: 999,
           boxSizing: 'border-box',
-          // Reserve stable chrome height across Energy/Space/Alerts filter swaps
-          minHeight: pinAdvancedDashboardScrollChrome ? 96 : undefined,
+          // Lock chrome band to content-top fallback (Energy/Space/Alerts CLS).
+          minHeight: pinAdvancedDashboardScrollChrome
+            ? ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX
+            : undefined,
         }}
       >
         <Box
@@ -2553,10 +2516,19 @@ function Dashboard() {
 
 
           >
-            {/* Select Floor and Areas Dropdown */}
-            {activeTab !== 'alerts' && activeTab !== 'overview' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ width: '100%', position: 'relative' }} ref={areaDropdownRef}>
+            {/* Floor/Areas + Alerts Type share one grid slot (visibility = no chrome CLS). */}
+            {activeTab !== 'overview' && (
+              <Grid item xs={12} sm={6} md={3} lg={3} xl={2} sx={{ position: 'relative', minHeight: 40 }}>
+                <div
+                  style={{
+                    width: '100%',
+                    position: 'relative',
+                    visibility: activeTab === 'alerts' ? 'hidden' : 'visible',
+                    pointerEvents: activeTab === 'alerts' ? 'none' : 'auto',
+                  }}
+                  aria-hidden={activeTab === 'alerts' || undefined}
+                  ref={areaDropdownRef}
+                >
                   <div
                     className="dashboard-area-filter-trigger"
                     onClick={(e) => {
@@ -2784,12 +2756,173 @@ function Dashboard() {
                     </div>
                   )}
                 </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    width: '100%',
+                    visibility: activeTab === 'alerts' ? 'visible' : 'hidden',
+                    pointerEvents: activeTab === 'alerts' ? 'auto' : 'none',
+                  }}
+                  aria-hidden={activeTab !== 'alerts' || undefined}
+                >
+                  <div style={{ width: '100%', minWidth: 0, maxWidth: '100%', position: 'relative' }} ref={dropdownRef}>
+                  <div
+                    className="dashboard-alert-type-filter-trigger"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation(); // Prevent click outside handler from firing
+                      setShowDropdown(!showDropdown);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: isGoldTheme
+                        ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
+                        : '1px solid #ccc',
+                      borderRadius: '4px',
+                      backgroundColor: isGoldTheme
+                        ? 'var(--dashboard-alert-filter-bg, #ffffff)'
+                        : 'white',
+                      color: isGoldTheme
+                        ? 'var(--dashboard-alert-filter-text, #2c2820)'
+                        : 'inherit',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span>
+                      {selectedAlertTypes.length === 0
+                        ? "Alerts Type"
+                        : selectedAlertTypes.length === 1
+                          ? selectedAlertTypes[0]
+                          : `${selectedAlertTypes.length} types selected`
+                      }
+                    </span>
+                    <span>▼</span>
+                  </div>
+
+                  {showDropdown && (
+                    <div
+                      className="dashboard-alert-type-filter-menu"
+                      style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: isGoldTheme
+                        ? 'var(--dashboard-alert-filter-menu-bg, #faf0d4)'
+                        : 'white',
+                      border: isGoldTheme
+                        ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
+                        : '1px solid #ccc',
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      zIndex: 1002,
+                      marginTop: '2px',
+                      maxHeight: '200px',
+                      overflowY: 'auto'
+                    }}>
+                      {alertTypes.map((type) => {
+                        const isChecked = selectedAlertTypes.includes(type);
+                        return (
+                          <div
+                            key={type}
+                            className="dashboard-alert-type-filter-item"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation(); // Prevent dropdown toggle
+                              handleTypeToggle(type);
+                            }}
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              borderBottom: isGoldTheme
+                                ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
+                                : '1px solid #eee',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              backgroundColor: isChecked
+                                ? (isGoldTheme
+                                  ? 'var(--dashboard-alert-filter-checked-bg, #f5e8bc)'
+                                  : '#e3f2fd')
+                                : 'transparent',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => { }} // Controlled by parent click
+                              style={{
+                                margin: 0,
+                                cursor: 'pointer',
+                                transform: 'scale(1.2)'
+                              }}
+                            />
+                            <span style={{
+                              fontSize: '14px',
+                              color: isGoldTheme
+                                ? 'var(--dashboard-alert-filter-text, #2c2820)'
+                                : '#333',
+                              fontWeight: isChecked ? '600' : '400',
+                            }}>
+                              {type}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {selectedAlertTypes.length > 0 && (
+                        <div style={{
+                          padding: '8px 12px',
+                          borderTop: isGoldTheme
+                            ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
+                            : '1px solid #eee',
+                          backgroundColor: isGoldTheme
+                            ? 'var(--dashboard-alert-filter-checked-bg, #f5e8bc)'
+                            : '#f8f9fa'
+                        }}>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation(); // Prevent dropdown toggle
+                              setSelectedAlertTypes([]);
+                              setFilterKey(prev => prev + 1);
+
+                              // Close and reopen dropdown to update the display
+                              setShowDropdown(false);
+                              setTimeout(() => {
+                                setShowDropdown(true);
+                              }, 100);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#666',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                </div>
               </Grid>
             )}
 
-            {/* Duration Dropdown with Date Navigation below — keep slot mounted (hidden) when
-                duration is suppressed so Energy↔Space chrome height does not jump. */}
-            {activeTab !== 'alerts' && activeTab !== 'overview' && (
+            {/* Duration stays mounted on Alerts (hidden) so chrome height stays stable. */}
+            {activeTab !== 'overview' && (
               <Grid
                 item
                 xs={12}
@@ -2798,10 +2931,10 @@ function Dashboard() {
                 lg={3}
                 xl={2}
                 sx={{
-                  visibility: hideAdvancedHeaderDuration ? 'hidden' : 'visible',
-                  pointerEvents: hideAdvancedHeaderDuration ? 'none' : 'auto',
+                  visibility: (activeTab === 'alerts' || hideAdvancedHeaderDuration) ? 'hidden' : 'visible',
+                  pointerEvents: (activeTab === 'alerts' || hideAdvancedHeaderDuration) ? 'none' : 'auto',
                 }}
-                aria-hidden={hideAdvancedHeaderDuration || undefined}
+                aria-hidden={(activeTab === 'alerts' || hideAdvancedHeaderDuration) || undefined}
               >
                 <div style={{ width: '100%' }}>
                   {/* Duration Dropdown */}
@@ -3009,188 +3142,6 @@ function Dashboard() {
               </Grid>
             )}
 
-            {/* Alerts Type dropdown – only on Alerts tab */}
-            {activeTab === 'alerts' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ width: '100%', minWidth: 0, maxWidth: '100%', position: 'relative' }} ref={dropdownRef}>
-                  <div
-                    className="dashboard-alert-type-filter-trigger"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation(); // Prevent click outside handler from firing
-                      setShowDropdown(!showDropdown);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: isGoldTheme
-                        ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
-                        : '1px solid #ccc',
-                      borderRadius: '4px',
-                      backgroundColor: isGoldTheme
-                        ? 'var(--dashboard-alert-filter-bg, #ffffff)'
-                        : 'white',
-                      color: isGoldTheme
-                        ? 'var(--dashboard-alert-filter-text, #2c2820)'
-                        : 'inherit',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <span>
-                      {selectedAlertTypes.length === 0
-                        ? "Alerts Type"
-                        : selectedAlertTypes.length === 1
-                          ? selectedAlertTypes[0]
-                          : `${selectedAlertTypes.length} types selected`
-                      }
-                    </span>
-                    <span>▼</span>
-                  </div>
-
-                  {showDropdown && (
-                    <div
-                      className="dashboard-alert-type-filter-menu"
-                      style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      backgroundColor: isGoldTheme
-                        ? 'var(--dashboard-alert-filter-menu-bg, #faf0d4)'
-                        : 'white',
-                      border: isGoldTheme
-                        ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
-                        : '1px solid #ccc',
-                      borderRadius: '4px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      zIndex: 1002,
-                      marginTop: '2px',
-                      maxHeight: '200px',
-                      overflowY: 'auto'
-                    }}>
-                      {alertTypes.map((type) => {
-                        const isChecked = selectedAlertTypes.includes(type);
-                        return (
-                          <div
-                            key={type}
-                            className="dashboard-alert-type-filter-item"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation(); // Prevent dropdown toggle
-                              handleTypeToggle(type);
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              borderBottom: isGoldTheme
-                                ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
-                                : '1px solid #eee',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              backgroundColor: isChecked
-                                ? (isGoldTheme
-                                  ? 'var(--dashboard-alert-filter-checked-bg, #f5e8bc)'
-                                  : '#e3f2fd')
-                                : 'transparent',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => { }} // Controlled by parent click
-                              style={{
-                                margin: 0,
-                                cursor: 'pointer',
-                                transform: 'scale(1.2)'
-                              }}
-                            />
-                            <span style={{
-                              fontSize: '14px',
-                              color: isGoldTheme
-                                ? 'var(--dashboard-alert-filter-text, #2c2820)'
-                                : '#333',
-                              fontWeight: isChecked ? '600' : '400',
-                            }}>
-                              {type}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {selectedAlertTypes.length > 0 && (
-                        <div style={{
-                          padding: '8px 12px',
-                          borderTop: isGoldTheme
-                            ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
-                            : '1px solid #eee',
-                          backgroundColor: isGoldTheme
-                            ? 'var(--dashboard-alert-filter-checked-bg, #f5e8bc)'
-                            : '#f8f9fa'
-                        }}>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation(); // Prevent dropdown toggle
-                              setSelectedAlertTypes([]);
-                              setFilterKey(prev => prev + 1);
-
-                              // Close and reopen dropdown to update the display
-                              setShowDropdown(false);
-                              setTimeout(() => {
-                                setShowDropdown(true);
-                              }, 100);
-                            }}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#666',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
-                          >
-                            Clear All
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Grid>
-            )}
-
-            {/* Placeholder for alerts tab – matches duration column height so tab row aligns with Energy/Space */}
-            {activeTab === 'alerts' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2}>
-                <div style={{ width: '100%' }} aria-hidden="true">
-                  <div style={{ width: '100%', marginBottom: '3px' }}>
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '40px',
-                        visibility: 'hidden',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      width: '100%',
-                      minHeight: '32px',
-                      padding: '4px 6px',
-                      boxSizing: 'border-box',
-                      visibility: 'hidden',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                </div>
-              </Grid>
-            )}
 
             {activeTab !== 'overview' && (
             <Grid
@@ -3242,7 +3193,7 @@ function Dashboard() {
                     width: tabIndicator.width,
                     backgroundColor: '#ffffff',
                     borderRadius: '999px',
-                    transition: tabIndicator.ready ? 'left 0.8s cubic-bezier(0.4, 0, 0.2, 1), width 0.8s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
+                    transition: pinAdvancedDashboardScrollChrome ? 'none' : (tabIndicator.ready ? 'left 0.8s cubic-bezier(0.4, 0, 0.2, 1), width 0.8s cubic-bezier(0.4, 0, 0.2, 1)' : 'none'),
                     opacity: tabIndicator.ready ? 1 : 0,
                     pointerEvents: 'none',
                     zIndex: 0,
@@ -3271,7 +3222,7 @@ function Dashboard() {
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
-                    transition: 'color 0.8s ease',
+                    transition: pinAdvancedDashboardScrollChrome ? 'none' : 'color 0.8s ease',
                     boxShadow: 'none',
                     opacity: 1,
                     whiteSpace: 'nowrap',
@@ -3305,7 +3256,7 @@ function Dashboard() {
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
-                    transition: 'color 0.8s ease',
+                    transition: pinAdvancedDashboardScrollChrome ? 'none' : 'color 0.8s ease',
                     boxShadow: 'none',
                     opacity: 1,
                     whiteSpace: 'nowrap',
@@ -3368,7 +3319,7 @@ function Dashboard() {
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
-                    transition: 'color 0.8s ease',
+                    transition: pinAdvancedDashboardScrollChrome ? 'none' : 'color 0.8s ease',
                     boxShadow: 'none',
                     opacity: 1,
                     whiteSpace: 'nowrap',
@@ -3401,7 +3352,7 @@ function Dashboard() {
                     fontWeight: 'bold',
                     fontSize: isLargeScreen ? '14px' : (isMediumScreen ? '13px' : '12px'),
                     fontFamily: 'inherit',
-                    transition: 'color 0.8s ease',
+                    transition: pinAdvancedDashboardScrollChrome ? 'none' : 'color 0.8s ease',
                     boxShadow: 'none',
                     opacity: 1,
                     whiteSpace: 'nowrap',
@@ -3436,6 +3387,7 @@ function Dashboard() {
                 bottom: 0,
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                scrollbarGutter: 'stable',
                 boxSizing: 'border-box',
                 py: 3,
                 zIndex: 1,

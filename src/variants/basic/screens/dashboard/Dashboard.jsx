@@ -169,7 +169,7 @@ import {
   resolveBasicDashboardSlotColumnSx,
 } from '../../utils/basicDashboardLayout'
 import { liftedFullOrderFromVisibleReorder } from '../../utils/draggableReflowOrder'
-import { isLightSurface } from '../../utils/themeOnSurface'
+import { DEFAULT_APP_BACKGROUND, DEFAULT_APP_CONTENT, isLightSurface } from '../../utils/themeOnSurface'
 import {
   formatDateForState,
   parseDateFromState,
@@ -470,8 +470,8 @@ function Dashboard() {
   const dashboardError = useSelector(selectDashboardError)
 
   const appTheme = useSelector(selectApplicationTheme);
-  const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
-  const contentColor = appTheme?.application_theme?.content || '#ffffff';
+  const backgroundColor = appTheme?.application_theme?.background || DEFAULT_APP_BACKGROUND;
+  const contentColor = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
   const buttonColor = appTheme?.application_theme?.button || '#232323'
   /** Default / white content theme: Energy line charts use white plot + black axis (match Lumyn Background reference). */
   const energyLineChartSurface = isLightSurface(contentColor) ? 'light' : 'dark'
