@@ -4,6 +4,17 @@ export const TOPBAR_ALIGNED_CONTENT_PANEL_CLASS = 'topbar-aligned-content-panel'
 /** Dashboard Alerts tab — filter bar + System Alerts card (customized only). */
 export const DASHBOARD_ALERTS_SHELL_CLASS = 'dashboard-alerts-shell';
 
+/**
+ * Floating navbar card (customized): top margin so the full rounded box is visible,
+ * not clipped flush to the viewport edge.
+ */
+export const CUSTOMIZED_TOPBAR_MARGIN_TOP_PX = 15;
+/** AppBar height at the xs breakpoint — matches TopbarComponent. */
+export const CUSTOMIZED_TOPBAR_BAR_HEIGHT_PX = 60;
+/** Fixed chrome under the topbar (filters, etc.) — margin + bar height. */
+export const CUSTOMIZED_TOPBAR_STACK_OFFSET_PX =
+  CUSTOMIZED_TOPBAR_MARGIN_TOP_PX + CUSTOMIZED_TOPBAR_BAR_HEIGHT_PX;
+
 /** Match TopbarComponent inner `px` — used by MainLayout only (customized). */
 export const layoutHorizontalPx = {
   xs: 2,

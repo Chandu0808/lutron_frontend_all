@@ -261,19 +261,10 @@ const HeatmapControls = () => {
     }
   };
 
-  // Use a ref to track previous availableFloors to detect when it actually changes
-  const prevAvailableFloorsRef = useRef(availableFloors);
-
+  // Auto-select a floor on mount even when floors were already loaded elsewhere
+  // (e.g. Dashboard → Floor). The old "floorsChanged" ref gate skipped that
+  // case, left selectedFloorId null, and never triggered /floor/light_status.
   useEffect(() => {
-    // Only run this effect when availableFloors actually changes (not on every render)
-    // This prevents infinite loops
-    const floorsChanged = prevAvailableFloorsRef.current !== availableFloors;
-    prevAvailableFloorsRef.current = availableFloors;
-
-    if (!floorsChanged) {
-      return; // Don't do anything if floors haven't changed
-    }
-
     if (!availableFloors || availableFloors.length === 0) {
       if (selectedFloorId !== null && selectedFloorId !== undefined) {
         dispatch(setSelectedFloorId(null));
@@ -281,21 +272,16 @@ const HeatmapControls = () => {
       return;
     }
 
-    // Only auto-select if there's no current selection
     if (selectedFloorId === null || selectedFloorId === undefined || selectedFloorId === "") {
-      if (availableFloors.length > 0) {
-        dispatch(setSelectedFloorId(availableFloors[0].id));
-      }
+      dispatch(setSelectedFloorId(availableFloors[0].id));
       return;
     }
 
-    // Check if current selection is still valid
     const hasSelected = availableFloors.some(f => String(f.id) === String(selectedFloorId));
-    if (!hasSelected && availableFloors.length > 0) {
-      // Only update if the current selection is truly invalid
+    if (!hasSelected) {
       dispatch(setSelectedFloorId(availableFloors[0].id));
     }
-  }, [availableFloors, dispatch]); // Only depend on availableFloors, not selectedFloorId
+  }, [availableFloors, selectedFloorId, dispatch]);
 
   useEffect(() => {
     return () => {

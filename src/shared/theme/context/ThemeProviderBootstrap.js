@@ -3,10 +3,19 @@ import { useDispatch, useSelector } from "react-redux";
 import { dispatchFetchThemeSettingsOnce } from "../../utils/bootstrapFetchGuards";
 import { useThemeReload } from "./useThemeReload";
 
+function applicationThemeHasColors(applicationTheme) {
+  const at = applicationTheme?.application_theme;
+  return Boolean(at?.background || at?.content || at?.button);
+}
+
 /**
  * Shared Redux bootstrap + theme state for ThemeProviderCustom.
  *
  * Variant-specific createAppTheme / applyCssVariables remain in each variant file.
+ *
+ * @param {boolean} [preferApplicationThemeCss=false]
+ *   Advanced-only: when true, `/theme/application` owns CSS vars + MUI theme once
+ *   loaded, so stale `/theme/` settings cannot overwrite the selected theme on refresh.
  */
 export function useThemeProviderBootstrap({
   createAppTheme,
@@ -21,6 +30,7 @@ export function useThemeProviderBootstrap({
   resolveReloadBackgroundImage,
   applicationTheme,
   pickThemeBackgroundImage,
+  preferApplicationThemeCss = false,
 }) {
   const dispatch = useDispatch();
 
@@ -46,6 +56,11 @@ export function useThemeProviderBootstrap({
       return;
     }
 
+    // Advanced: do not let /theme/ settings paint over a loaded application theme.
+    if (preferApplicationThemeCss && applicationThemeHasColors(applicationTheme)) {
+      return;
+    }
+
     const ui = themeSettings.ui_theme_colors || {};
     const bgImage = resolveApiBackgroundImage(themeSettings.background_image);
 
@@ -57,9 +72,11 @@ export function useThemeProviderBootstrap({
     applyCssVariables,
     createAppTheme,
     resolveApiBackgroundImage,
+    preferApplicationThemeCss,
+    applicationTheme,
   ]);
 
-  // Advanced-only: keep CSS variables in sync with /theme/application.
+  // Keep CSS variables in sync with /theme/application (Advanced + Basic when wired).
   useEffect(() => {
     if (!pickThemeBackgroundImage || applicationTheme == null) {
       return;
@@ -78,14 +95,21 @@ export function useThemeProviderBootstrap({
     const appBgImage =
       explicitBg !== undefined ? explicitBg : backgroundImage;
 
-    applyCssVariables(
-      {
-        background: at.background,
-        content: at.content,
-        button: at.button,
-      },
-      appBgImage
-    );
+    const ui = {
+      background: at.background,
+      content: at.content,
+      button: at.button,
+    };
+
+    applyCssVariables(ui, appBgImage);
+
+    // Advanced: application theme is also the MUI theme source of truth.
+    if (preferApplicationThemeCss) {
+      if (explicitBg !== undefined) {
+        setBackgroundImage(appBgImage);
+      }
+      setTheme(createAppTheme(ui, appBgImage));
+    }
   }, [
     applicationTheme,
     applicationTheme?.application_theme?.background,
@@ -96,6 +120,8 @@ export function useThemeProviderBootstrap({
     backgroundImage,
     applyCssVariables,
     pickThemeBackgroundImage,
+    preferApplicationThemeCss,
+    createAppTheme,
   ]);
 
   const reloadTheme = useThemeReload({

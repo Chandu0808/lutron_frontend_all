@@ -33,6 +33,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 
 import { ConfirmDialog } from '../../../utils/FeedbackUI';
+import FloorPlanPdfPreview from '../../../../../shared/pdf/FloorPlanPdfPreview';
 
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { isLightSurface } from "../../../utils/themeOnSurface";
@@ -52,23 +53,18 @@ const DocumentPreviewContainer = styled('div', {
   shouldForwardProp: (prop) => prop !== 'bg' && prop !== 'fg',
 })(({ bg, fg }) => ({
   width: '100%',
+  minHeight: '240px',
   maxHeight: '240px',
   borderRadius: '8px',
   marginTop: '16px',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'stretch',
   justifyContent: 'center',
   backgroundColor: bg || '#676050',
   color: fg || '#fff',
-  overflow: 'hidden',
+  overflow: 'auto',
   position: 'relative',
 }));
-
-const StyledIframe = styled('iframe')({
-  width: '100%',
-  height: '100%',
-  border: 'none',
-});
 
 export default function CreateFloor() {
   const dispatch = useDispatch();
@@ -665,11 +661,10 @@ export default function CreateFloor() {
             <Grid item xs={4}></Grid>
             <Grid item xs={8}>
               <DocumentPreviewContainer bg={surfaceBg} fg={surfaceText}>
-                {documentObjectURL ? (
-                  <StyledIframe src={documentObjectURL} title="Floor Document Preview" />
-                ) : (
-                  <Typography variant="body2" sx={{ color: surfaceText }}>No Document Selected</Typography>
-                )}
+                <FloorPlanPdfPreview
+                  source={floorDocument || documentObjectURL || null}
+                  emptyTextColor={surfaceText}
+                />
               </DocumentPreviewContainer>
             </Grid>
           </Grid>

@@ -205,6 +205,9 @@ export default function FloorSettingsContent({
   selectFloors,
   selectManualSortEnabled,
   ConfirmDialog,
+  /** Optional: Basic/Customized themed header (Users/Processors). Advanced omits → CSS vars. */
+  tableHeaderRowSx,
+  tableHeaderCellSx,
 }) {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -214,6 +217,21 @@ export default function FloorSettingsContent({
   const manualSortEnabled = useSelector(selectManualSortEnabled);
   const floorStatus = useSelector((state) => state.floor.status);
   const floorError = useSelector((state) => state.floor.error);
+
+  const defaultHeaderRowSx = { backgroundColor: 'var(--users-table-head-bg, #d6dde8)' };
+  const defaultHeaderCellSx = {
+    fontWeight: 600,
+    fontSize: '13px',
+    color: 'var(--settings-panel-text, #000)',
+    borderBottom: '2px solid var(--users-border, #ddd)',
+    backgroundColor: 'var(--users-table-head-bg, #d6dde8)',
+  };
+  const headerRowSx = tableHeaderRowSx || defaultHeaderRowSx;
+  const headerCellSx = tableHeaderCellSx
+    ? { fontSize: '13px', ...tableHeaderCellSx }
+    : defaultHeaderCellSx;
+  const headerIconColor =
+    tableHeaderCellSx?.color || 'var(--settings-panel-text, #000)';
 
   const [localFloors, setLocalFloors] = useState([]);
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
@@ -346,122 +364,89 @@ export default function FloorSettingsContent({
         </Button>
       </Box>
 
-      <TableContainer
-        component={Paper}
-        sx={{
-          width: '100%',
-          maxWidth: '900px',
-          borderRadius: 1,
-          overflow: 'hidden',
-          backgroundColor: 'var(--users-table-container-bg, #fff)',
-          border: '1px solid var(--users-border, #C5CDD8)',
-        }}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
       >
-        <Table>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: 'var(--users-table-head-bg, #d6dde8)' }}>
-              <TableCell
-                sx={{
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: 'var(--settings-panel-text, #000)',
-                  borderBottom: '2px solid var(--users-border, #ddd)',
-                  backgroundColor: 'var(--users-table-head-bg, #d6dde8)',
-                }}
-              >
-                Floor
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: 'var(--settings-panel-text, #000)',
-                  borderBottom: '2px solid var(--users-border, #ddd)',
-                  backgroundColor: 'var(--users-table-head-bg, #d6dde8)',
-                }}
-              >
-                Processor
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: 'var(--settings-panel-text, #000)',
-                  borderBottom: '2px solid var(--users-border, #ddd)',
-                  backgroundColor: 'var(--users-table-head-bg, #d6dde8)',
-                }}
-              >
-                Action
-              </TableCell>
-              <TableCell
-                align="center"
-                sx={{
-                  width: 48,
-                  p: 1,
-                  borderBottom: '2px solid var(--users-border, #ddd)',
-                  backgroundColor: 'var(--users-table-head-bg, #d6dde8)',
-                }}
-              >
-                <Tooltip
-                  title={
-                    isSortModeActive
-                      ? 'Click again to exit sorting mode'
-                      : 'Enable / Disable floor sorting'
-                  }
-                  arrow
-                  placement="top"
+        <TableContainer
+          component={Paper}
+          sx={{
+            width: '100%',
+            maxWidth: '900px',
+            borderRadius: 1,
+            overflow: 'hidden',
+            backgroundColor: 'var(--users-table-container-bg, #fff)',
+            border: '1px solid var(--users-border, #C5CDD8)',
+          }}
+        >
+          <Table>
+            <TableHead>
+              <TableRow sx={headerRowSx}>
+                <TableCell sx={headerCellSx}>Floor</TableCell>
+                <TableCell sx={headerCellSx}>Processor</TableCell>
+                <TableCell sx={headerCellSx}>Action</TableCell>
+                <TableCell
+                  align="center"
+                  sx={{
+                    ...headerCellSx,
+                    width: 48,
+                    p: 1,
+                  }}
                 >
-                  <IconButton
-                    size="small"
-                    onClick={handleSortButtonClick}
-                    sx={{
-                      color: isSortModeActive
-                        ? buttonColor
-                        : 'var(--settings-panel-text, #000)',
-                    }}
+                  <Tooltip
+                    title={
+                      isSortModeActive
+                        ? 'Click again to exit sorting mode'
+                        : 'Enable / Disable floor sorting'
+                    }
+                    arrow
+                    placement="top"
                   >
-                    <SwapVertIcon />
-                  </IconButton>
-                </Tooltip>
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {floorStatus === 'loading' ? (
-              <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
-                <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
-                  <CircularProgress size={24} sx={{ color: '#000' }} />
+                    <IconButton
+                      size="small"
+                      onClick={handleSortButtonClick}
+                      sx={{
+                        color: isSortModeActive ? buttonColor : headerIconColor,
+                      }}
+                    >
+                      <SwapVertIcon />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
-            ) : floorError ? (
-              <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
-                <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
-                  <Typography sx={{ color: 'red', mb: 1 }}>
-                    Failed to load floors. Please check the processor connection.
-                  </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => dispatchFetchFloorsOnce(dispatch, fetchFloors, { force: true })}
-                  >
-                    Retry
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ) : localFloors.length === 0 ? (
-              <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
-                <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
-                  <Typography sx={{ color: '#000' }}>
-                    No floors created yet. Click &quot;Create Floor&quot; to add one.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
+            </TableHead>
+            <TableBody>
+              {floorStatus === 'loading' ? (
+                <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
+                  <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
+                    <CircularProgress size={24} sx={{ color: '#000' }} />
+                  </TableCell>
+                </TableRow>
+              ) : floorError ? (
+                <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
+                  <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
+                    <Typography sx={{ color: 'red', mb: 1 }}>
+                      Failed to load floors. Please check the processor connection.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => dispatchFetchFloorsOnce(dispatch, fetchFloors, { force: true })}
+                    >
+                      Retry
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ) : localFloors.length === 0 ? (
+                <TableRow sx={{ backgroundColor: 'var(--users-table-row-bg, #fff)' }}>
+                  <TableCell colSpan={colSpan} sx={{ textAlign: 'center', py: 3 }}>
+                    <Typography sx={{ color: '#000' }}>
+                      No floors created yet. Click &quot;Create Floor&quot; to add one.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
                 <SortableContext
                   items={localFloors.map((f) => f.id)}
                   strategy={verticalListSortingStrategy}
@@ -480,20 +465,20 @@ export default function FloorSettingsContent({
                     />
                   ))}
                 </SortableContext>
-              </DndContext>
-            )}
-            {reorderSaving ? (
-              <TableRow>
-                <TableCell colSpan={colSpan} sx={{ py: 1, textAlign: 'center' }}>
-                  <Typography variant="caption" sx={{ color: '#666' }}>
-                    Saving order…
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              )}
+              {reorderSaving ? (
+                <TableRow>
+                  <TableCell colSpan={colSpan} sx={{ py: 1, textAlign: 'center' }}>
+                    <Typography variant="caption" sx={{ color: '#666' }}>
+                      Saving order…
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </DndContext>
 
       <Popover
         open={sortPanelOpen}

@@ -57,7 +57,7 @@ export default function DashboardDurationFilterBar({
     </FormControl>
   ) : (
     <select
-      value={selectedDuration}
+      value={selectedDuration || ''}
       onChange={onDurationChange}
       disabled={globalLoading}
       onClick={(e) => e.stopPropagation()}

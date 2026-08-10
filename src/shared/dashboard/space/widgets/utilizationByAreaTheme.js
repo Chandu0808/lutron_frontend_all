@@ -178,14 +178,21 @@ export function resolveUtilizationByAreaShellSx(layoutMode, theme) {
   };
 }
 
-export function resolveUtilizationByAreaListShellSx(layoutMode) {
+export function resolveUtilizationByAreaListShellSx(layoutMode, options = {}) {
+  const { preset } = options;
+  const isAdvanced = preset === UTILIZATION_BY_AREA_THEME_PRESETS.advanced;
+  // Advanced list sits inside a bordered shell; inset labels from the left edge.
+  const horizontalPad = isAdvanced
+    ? { paddingLeft: '12px', paddingRight: '12px' }
+    : { paddingRight: '8px' };
+
   if (layoutMode === UTILIZATION_BY_AREA_LAYOUT_MODES.scroll) {
     return {
       minHeight: 200,
       maxHeight: 'min(520px, 58vh)',
       overflowY: 'auto',
       overflowX: 'hidden',
-      paddingRight: '8px',
+      ...horizontalPad,
     };
   }
 
@@ -193,7 +200,7 @@ export function resolveUtilizationByAreaListShellSx(layoutMode) {
     return {
       height: 'calc(100% - 60px)',
       overflowY: 'auto',
-      paddingRight: '8px',
+      ...horizontalPad,
     };
   }
 
@@ -201,6 +208,6 @@ export function resolveUtilizationByAreaListShellSx(layoutMode) {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    paddingRight: '8px',
+    ...horizontalPad,
   };
 }

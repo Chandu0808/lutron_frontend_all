@@ -35,13 +35,25 @@ export function configurePdfJsWorker() {
 
 /**
  * react-pdf file descriptor with auth headers for protected floor-plan media.
+ * Returns a stable object reference per url+token so <Document file={...}> does not
+ * reload when callers remount or re-invoke with the same inputs (avoids
+ * "File prop changed but equal" + "Worker was terminated" noise).
  */
+const pdfDocumentFileCache = new Map();
+
 export function buildPdfDocumentFile(pdfUrl) {
   if (!pdfUrl) return null;
   const token = getValidToken();
   if (!token) return pdfUrl;
-  return {
+
+  const cacheKey = `${pdfUrl}\0${token}`;
+  const cached = pdfDocumentFileCache.get(cacheKey);
+  if (cached) return cached;
+
+  const file = {
     url: pdfUrl,
     httpHeaders: { Authorization: `Bearer ${token}` },
   };
+  pdfDocumentFileCache.set(cacheKey, file);
+  return file;
 }

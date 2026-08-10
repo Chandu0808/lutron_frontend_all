@@ -59,6 +59,13 @@ export const fetchAreaStatus = createAsyncThunk(
     } catch (err) {
       return rejectWithValue(mapAreaStatusFetchError(err));
     }
+  },
+  {
+    condition: (areaId, { getState }) => {
+      const hm = getState()?.heatmap;
+      if (!hm?.areaStatusLoading) return true;
+      return String(hm.areaStatusFetchingId) !== String(areaId);
+    },
   }
 );
 
@@ -211,6 +218,7 @@ const initialState = {
   areaStatus: null,
   areaStatusLoading: false,
   areaStatusError: null,
+  areaStatusFetchingId: null,
   toggleAllZonesLoading: false,
   toggleAllZonesError: null,
 };
@@ -245,6 +253,7 @@ const heatmapSlice = createSlice({
       state.areaStatus = null;
       state.areaStatusLoading = false;
       state.areaStatusError = null;
+      state.areaStatusFetchingId = null;
       state.toggleAllZonesLoading = false;
       state.toggleAllZonesError = null;
       state.loading = false;
@@ -371,13 +380,15 @@ const heatmapSlice = createSlice({
 
     // FULL AREA STATUS
     builder
-      .addCase(fetchAreaStatus.pending, (state) => {
+      .addCase(fetchAreaStatus.pending, (state, action) => {
         state.areaStatusLoading = true;
         state.areaStatusError = null;
+        state.areaStatusFetchingId = action.meta.arg;
         state.areaStatus = null;
       })
       .addCase(fetchAreaStatus.fulfilled, (state, action) => {
         state.areaStatusLoading = false;
+        state.areaStatusFetchingId = null;
         state.areaStatus = action.payload;
 
         const payloadAreaId = action.payload?.area_id;
@@ -402,6 +413,7 @@ const heatmapSlice = createSlice({
       })
       .addCase(fetchAreaStatus.rejected, (state, action) => {
         state.areaStatusLoading = false;
+        state.areaStatusFetchingId = null;
         state.areaStatusError =
           action.payload || action.error.message || "Failed to fetch area status";
       });
@@ -565,6 +577,7 @@ export const selectHeatmapError = (state) => state.heatmap.error;
 export const selectAreaStatus = (state) => state.heatmap.areaStatus;
 export const selectAreaStatusLoading = (state) => state.heatmap.areaStatusLoading;
 export const selectAreaStatusError = (state) => state.heatmap.areaStatusError;
+export const selectAreaStatusFetchingId = (state) => state.heatmap.areaStatusFetchingId;
 export const selectToggleAllZonesLoading = (state) => state.heatmap.toggleAllZonesLoading;
 export const selectToggleAllZonesError = (state) => state.heatmap.toggleAllZonesError;
 export const selectHeatmapSearchTerm = (state) => state.heatmap.searchTerm; // added

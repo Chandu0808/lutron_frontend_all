@@ -96,17 +96,37 @@ const Footer = () => {
           {isSuperadmin && `Version ${getAppDisplayVersion()}`}
         </Typography>
         <Box
-          component="img"
-          src="/assets/loginlogo.png"
-          alt="Lutron Logo"
           sx={{
-            height: 15,
-            width: 'auto',
-            display: 'block',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
             flexShrink: 0,
             paddingRight: '20px',
           }}
-        />
+        >
+          <Typography
+            component="span"
+            sx={{
+              color: 'rgba(0, 0, 0, 0.65)',
+              fontSize: FOOTER_VERSION_FONT_SIZE,
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            communicating with
+          </Typography>
+          <Box
+            component="img"
+            src="/assets/loginlogo.png"
+            alt="Lutron Logo"
+            sx={{
+              height: 15,
+              width: 'auto',
+              display: 'block',
+              flexShrink: 0,
+            }}
+          />
+        </Box>
       </Box>
     </Box>
   );

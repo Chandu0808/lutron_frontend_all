@@ -119,6 +119,7 @@ export function resolveTotalConsumptionByGroupTheme({
 
   if (preset === TOTAL_CONSUMPTION_BY_GROUP_THEME_PRESETS.advanced) {
     const surface = advancedSurface || {};
+    // Match Advanced Savings by Strategy plot height (400px) so side-by-side cards align.
     return {
       preset,
       shellVariant,
@@ -137,7 +138,9 @@ export function resolveTotalConsumptionByGroupTheme({
       cssTooltipStyle: surface.cssTooltipStyle || null,
       cardShellStyle: {},
       cardHeaderStyle: {},
-      plotStyleOverride: {},
+      plotStyleOverride: {
+        height: '400px',
+      },
       loaderHeight: '100%',
     };
   }

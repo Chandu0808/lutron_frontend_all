@@ -9,18 +9,24 @@ import {
   TableRow,
   Box,
   Typography,
-  IconButton,
   MenuItem,
   Select,
   FormControl,
+  Pagination,
 } from "@mui/material";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { useSelector } from "react-redux";
 import { getThemeButtonColor } from "../../utils/themePageBackground";
 
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
+
+const headCellSx = {
+  fontWeight: 700,
+  textAlign: "left",
+  borderBottom: "2px solid rgba(0,0,0,0.12)",
+  background: "var(--activity-report-table-head-bg, #d6dde8)",
+  color: "var(--activity-report-table-head-text, #000)",
+};
 
 const ActivityReportTable = ({
   rows = [],
@@ -61,8 +67,6 @@ const ActivityReportTable = ({
     [rows]
   );
 
-  // Reset only when the result set identity changes (new Generate), not on every
-  // parent re-render / new array reference with the same contents.
   const rowsIdentity = useMemo(() => {
     if (!safeRows.length) return "0";
     const first = safeRows[0];
@@ -79,17 +83,9 @@ const ActivityReportTable = ({
   const currentPage = Math.min(page, maxPage);
   const from = safeRows.length === 0 ? 0 : currentPage * rowsPerPage + 1;
   const to = Math.min(safeRows.length, (currentPage + 1) * rowsPerPage);
-  const canGoPrev = currentPage > 0;
-  const canGoNext = currentPage < maxPage;
 
-  const handlePrevPage = () => {
-    if (!canGoPrev) return;
-    setPage((p) => Math.max(0, p - 1));
-  };
-
-  const handleNextPage = () => {
-    if (!canGoNext) return;
-    setPage((p) => Math.min(maxPage, p + 1));
+  const handleChangePage = (_event, nextPage) => {
+    setPage(Math.max(0, nextPage - 1));
   };
 
   const handleChangeRowsPerPage = (event) => {
@@ -134,30 +130,19 @@ const ActivityReportTable = ({
         <Table size="small">
           <TableHead>
             <TableRow
-              sx={{ bgcolor: "var(--activity-report-table-head-bg, #d6dde8)" }}
+              sx={{
+                bgcolor: "var(--activity-report-table-head-bg, #d6dde8)",
+                "& .MuiTableCell-head": {
+                  color: "var(--activity-report-table-head-text, #000)",
+                },
+              }}
             >
-              {[
-                "Date",
-                "Time",
-                "Area",
-                "Type",
-                "User",
-                "Activity",
-              ].map((label) => (
-                <TableCell
-                  key={label}
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: "13px",
-                    textAlign: "center",
-                    borderBottom: "2px solid rgba(0,0,0,0.12)",
-                    background: "var(--activity-report-table-head-bg, #d6dde8)",
-                    color: "var(--activity-report-table-head-text, #000)",
-                  }}
-                >
-                  {label}
-                </TableCell>
-              ))}
+              <TableCell sx={headCellSx}>Date</TableCell>
+              <TableCell sx={headCellSx}>Time</TableCell>
+              <TableCell sx={headCellSx}>Area</TableCell>
+              <TableCell sx={headCellSx}>Type</TableCell>
+              <TableCell sx={headCellSx}>User</TableCell>
+              <TableCell sx={headCellSx}>Activity</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -178,6 +163,7 @@ const ActivityReportTable = ({
                           : "var(--activity-report-table-row-alt-bg, #f5f5f5)",
                       "& .MuiTableCell-root": {
                         color: "var(--activity-report-table-text, #000)",
+                        textAlign: "left",
                       },
                     }}
                   >
@@ -215,10 +201,11 @@ const ActivityReportTable = ({
           sx={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
             flexWrap: "wrap",
             gap: 1.5,
             mt: 1,
+            mb: "110px",
             px: 1,
             py: 0.5,
             color: paginationTextColor,
@@ -227,71 +214,57 @@ const ActivityReportTable = ({
             pointerEvents: "auto",
           }}
         >
-          <Typography variant="body2" sx={{ color: paginationTextColor }}>
-            Rows per page:
-          </Typography>
-          <FormControl size="small" variant="standard" sx={{ minWidth: 56 }}>
-            <Select
-              value={rowsPerPage}
-              onChange={handleChangeRowsPerPage}
-              disableUnderline
-              sx={{
-                color: paginationTextColor,
-                "& .MuiSelect-icon": { color: paginationTextColor },
-                "& .MuiSelect-select": {
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+            <Typography variant="body2" sx={{ color: paginationTextColor }}>
+              Showing {from} to {to} of {safeRows.length}
+            </Typography>
+            <Typography variant="body2" sx={{ color: paginationTextColor }}>
+              Rows per page:
+            </Typography>
+            <FormControl size="small" variant="standard" sx={{ minWidth: 56 }}>
+              <Select
+                value={rowsPerPage}
+                onChange={handleChangeRowsPerPage}
+                disableUnderline
+                sx={{
                   color: paginationTextColor,
-                  py: 0.5,
-                },
-              }}
-            >
-              {ROWS_PER_PAGE_OPTIONS.map((n) => (
-                <MenuItem key={n} value={n}>
-                  {n}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Typography variant="body2" sx={{ color: paginationTextColor, mx: 1 }}>
-            {from}–{to} of {safeRows.length}
-          </Typography>
-          <IconButton
-            type="button"
-            aria-label="previous page"
-            onClick={handlePrevPage}
-            disabled={!canGoPrev}
+                  "& .MuiSelect-icon": { color: paginationTextColor },
+                  "& .MuiSelect-select": {
+                    color: paginationTextColor,
+                    py: 0.5,
+                  },
+                }}
+              >
+                {ROWS_PER_PAGE_OPTIONS.map((n) => (
+                  <MenuItem key={n} value={n}>
+                    {n}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+          <Pagination
+            count={pageCount}
+            page={currentPage + 1}
+            onChange={handleChangePage}
+            color="primary"
+            size="small"
+            siblingCount={1}
+            boundaryCount={1}
             sx={{
-              color: paginationTextColor,
-              pointerEvents: "auto",
-              "&.Mui-disabled": {
+              "& .MuiPaginationItem-root": {
                 color: paginationTextColor,
-                opacity: 0.35,
+                border: "1px solid rgba(255,255,255,0.35)",
               },
-              "&:not(.Mui-disabled):hover": {
-                backgroundColor: "rgba(0,0,0,0.06)",
+              "& .MuiPaginationItem-root.Mui-selected": {
+                backgroundColor: buttonColor || undefined,
+                color: "#fff",
+              },
+              "& .MuiPaginationItem-icon": {
+                color: paginationTextColor,
               },
             }}
-          >
-            <ChevronLeftIcon />
-          </IconButton>
-          <IconButton
-            type="button"
-            aria-label="next page"
-            onClick={handleNextPage}
-            disabled={!canGoNext}
-            sx={{
-              color: canGoNext ? buttonColor || paginationTextColor : paginationTextColor,
-              pointerEvents: "auto",
-              "&.Mui-disabled": {
-                color: paginationTextColor,
-                opacity: 0.35,
-              },
-              "&:not(.Mui-disabled):hover": {
-                backgroundColor: "rgba(0,0,0,0.06)",
-              },
-            }}
-          >
-            <ChevronRightIcon />
-          </IconButton>
+          />
         </Box>
       )}
     </>

@@ -36,7 +36,20 @@ function normalizePathname(pathname) {
   return p || "/";
 }
 
-/** Child routes that stay at root but belong to settings (floor/users/help flows). */
+/** Root-level Area Groups create/edit flows owned by Settings (not Floor/Heatmap). */
+export function isBasicAreaGroupSettingsChildRoute(pathname) {
+  const p = normalizePathname(pathname);
+  return (
+    p === "/create-area-groups" ||
+    p.startsWith("/create-area-groups/") ||
+    p === "/create-area-group" ||
+    p.startsWith("/create-area-group/") ||
+    p.startsWith("/update-area-groups/") ||
+    p.startsWith("/update-area-group/")
+  );
+}
+
+/** Child routes that stay at root but belong to settings (floor/users/help/area-group flows). */
 function isBasicSettingsRelatedRoute(pathname) {
   const p = normalizePathname(pathname);
   return (
@@ -47,6 +60,7 @@ function isBasicSettingsRelatedRoute(pathname) {
     p.startsWith("/editfloor/") ||
     p.startsWith("/correct-coordinate/") ||
     p.startsWith("/area-calculation/") ||
+    isBasicAreaGroupSettingsChildRoute(p) ||
     p === "/get-help" ||
     p.startsWith("/get-help/")
   );
@@ -92,7 +106,8 @@ export function getBasicSettingsSectionLabel(pathname) {
   }
   if (
     p === BASIC_MANAGE_AREA_GROUPS_PATH ||
-    p.startsWith(`${BASIC_MANAGE_AREA_GROUPS_PATH}/`)
+    p.startsWith(`${BASIC_MANAGE_AREA_GROUPS_PATH}/`) ||
+    isBasicAreaGroupSettingsChildRoute(p)
   ) {
     return "Area Groups";
   }

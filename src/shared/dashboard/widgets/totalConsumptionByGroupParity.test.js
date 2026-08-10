@@ -159,6 +159,7 @@ describe('TotalConsumptionByGroup theme parity', () => {
     expect(theme.shellVariant).toBe('advanced-card');
     expect(theme.outerStyleOverride.background).toBe('#111');
     expect(theme.titleStyleOverride).toEqual({ fontSize: 16 });
+    expect(theme.plotStyleOverride.height).toBe('400px');
   });
 
   it('customized theme enables fetch error and zero-segment states', () => {

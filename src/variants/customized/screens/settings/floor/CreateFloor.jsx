@@ -33,6 +33,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 
 import { ConfirmDialog } from '../../../utils/FeedbackUI';
+import FloorPlanPdfPreview from '../../../../../shared/pdf/FloorPlanPdfPreview';
 import { customizedModalBackdropProps } from '../../../utils/customizedDialogChrome';
 
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
@@ -49,22 +50,17 @@ const VisuallyHiddenInput = styled('input')({
 
 const DocumentPreviewContainer = styled('div')({
   width: '100%',
+  minHeight: '240px',
   maxHeight: '240px',
   borderRadius: '8px',
   marginTop: '16px',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'stretch',
   justifyContent: 'center',
   backgroundColor: '#676050',
   color: '#fff',
-  overflow: 'hidden',
+  overflow: 'auto',
   position: 'relative',
-});
-
-const StyledIframe = styled('iframe')({
-  width: '100%',
-  height: '100%',
-  border: 'none',
 });
 
 export default function CreateFloor() {
@@ -655,11 +651,10 @@ export default function CreateFloor() {
             <Grid item xs={4}></Grid>
             <Grid item xs={8}>
               <DocumentPreviewContainer>
-                {documentObjectURL ? (
-                  <StyledIframe src={documentObjectURL} title="Floor Document Preview" />
-                ) : (
-                  <Typography variant="body2" sx={{ color: '#fff' }}>No Document Selected</Typography>
-                )}
+                <FloorPlanPdfPreview
+                  source={floorDocument || documentObjectURL || null}
+                  emptyTextColor="#fff"
+                />
               </DocumentPreviewContainer>
             </Grid>
           </Grid>

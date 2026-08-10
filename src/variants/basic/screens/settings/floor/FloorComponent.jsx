@@ -17,6 +17,10 @@ import { ConfirmDialog } from '../../../utils/FeedbackUI';
 import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../../customhooks/UseAuth';
 import FloorSettingsContent from '../../../../../shared/settings/floor/FloorSettingsContent';
 import {
+  getSettingsTableHeaderCellSx,
+  getSettingsTableHeaderRowSx,
+} from '../../../../../shared/settings/settingsTableHeaderStyles';
+import {
   fetchFloors,
   deleteFloor,
   setFloorSortMode,
@@ -28,10 +32,18 @@ import {
 export default function FloorComponent() {
   const theme = useTheme();
   const appTheme = useSelector(selectApplicationTheme);
+  const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
   const contentColor = appTheme?.application_theme?.content || '#ffffff';
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const isDefaultWhiteTheme = isLightSurface(contentColor);
   const actionBlue = isDefaultWhiteTheme ? '#1565C0' : buttonColor;
+  const tableHeaderText = isLightSurface(backgroundColor) ? '#000000' : '#ffffff';
+  const tableHeaderRowSx = getSettingsTableHeaderRowSx(isDefaultWhiteTheme, backgroundColor);
+  const tableHeaderCellSx = getSettingsTableHeaderCellSx(
+    isDefaultWhiteTheme,
+    backgroundColor,
+    tableHeaderText
+  );
 
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const settingsSidebarMdUp = useMediaQuery(theme.breakpoints.up('md'));
@@ -103,6 +115,8 @@ export default function FloorComponent() {
           selectFloors={selectFloors}
           selectManualSortEnabled={selectManualSortEnabled}
           ConfirmDialog={ConfirmDialog}
+          tableHeaderRowSx={tableHeaderRowSx}
+          tableHeaderCellSx={tableHeaderCellSx}
         />
       </Grid>
     </Grid>

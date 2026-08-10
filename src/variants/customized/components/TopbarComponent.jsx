@@ -39,6 +39,7 @@ import {
 } from "../../../shared/dashboard/utils/widgetVisibilityLogoutPreserve";
 import { DASHBOARD_DEFAULT_PATH } from "../utils/dashboardLanding";
 import { CUSTOMIZED_SETTINGS_HOME_PATH } from "../utils/customizedSettingsPaths";
+import { CUSTOMIZED_TOPBAR_MARGIN_TOP_PX } from "../utils/scheduleFormLayout";
 import {
   getRovingTabIndex,
   handleRovingTablistKeyDown,
@@ -377,7 +378,9 @@ export default function TopbarComponent() {
               "5xl": "80px",
               "6xl": "82px"
             },
-            borderRadius: "0px 0px 8px 8px",
+            /* Full rounded card on Help + Dashboard — bottom-only radius looked clipped. */
+            borderRadius: "8px",
+            marginTop: `${CUSTOMIZED_TOPBAR_MARGIN_TOP_PX}px`,
             overflow: "hidden",
           }}
         >

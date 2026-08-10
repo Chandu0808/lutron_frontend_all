@@ -324,6 +324,7 @@ describe('dashboard widget orchestration parity', () => {
     });
 
     it('buildUnifiedEnergyWidgetProps assembles core widget props', () => {
+      const ChartLoader = () => null;
       const props = buildUnifiedEnergyWidgetProps({
         title: 'Consumption',
         energyData: { unit: 'kWh' },
@@ -338,6 +339,7 @@ describe('dashboard widget orchestration parity', () => {
         selectedAreas: [1],
         customDatesIncomplete: false,
         shellVariant: 'basic',
+        ChartLoader,
       });
 
       expect(props).toMatchObject({
@@ -346,6 +348,7 @@ describe('dashboard widget orchestration parity', () => {
         customDatesIncomplete: false,
         selectedAreas: [1],
       });
+      expect(props.ChartLoader).toBe(ChartLoader);
     });
   });
 });

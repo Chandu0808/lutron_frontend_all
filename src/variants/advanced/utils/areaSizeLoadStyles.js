@@ -4,8 +4,31 @@ export const areaSizeText = "var(--settings-panel-text, #1c2330)";
 export const areaSizeMuted = "var(--settings-panel-muted-text, rgba(28, 35, 48, 0.72))";
 export const areaSizeBorder = "var(--users-border, #C5CDD8)";
 
+/** Page shell: one viewport-bound column so only the table scrolls (no page scrollbar). */
+export const areaSizePageShellSx = {
+  display: "flex",
+  flexDirection: "column",
+  minHeight: 0,
+  // Leave room for Advanced topbar + Settings padding/footer so the window does not scroll.
+  height: {
+    xs: "calc(100dvh - 220px)",
+    sm: "calc(100dvh - 210px)",
+    md: "calc(100dvh - 200px)",
+  },
+  maxHeight: {
+    xs: "calc(100dvh - 220px)",
+    sm: "calc(100dvh - 210px)",
+    md: "calc(100dvh - 200px)",
+  },
+  overflow: "hidden",
+};
+
 export const areaSizeTablePanelSx = {
   mt: 1,
+  flex: 1,
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
   borderRadius: "12px",
   overflow: "hidden",
   backgroundColor: "var(--users-table-container-bg, #d6dde8)",
@@ -25,10 +48,12 @@ export const areaSizeTableHeaderRowSx = {
   color: areaSizeText,
   backgroundColor: "var(--users-table-head-bg, #d6dde8)",
   borderBottom: `1px solid ${areaSizeBorder}`,
+  flexShrink: 0,
 };
 
 export const areaSizeTableScrollSx = {
-  maxHeight: { xs: "60vh", md: "68vh" },
+  flex: 1,
+  minHeight: 0,
   overflowY: "auto",
   overflowX: "auto",
 };
