@@ -28,6 +28,7 @@ import {
     dispatchFetchClientOnce,
     dispatchFetchHeatMapThemeOnce,
     dispatchFetchThemeSettingsOnce,
+    syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
 import {
     isLightSurface,
@@ -45,6 +46,7 @@ import {
     resolveThemeButtonStyle,
 } from '../../../utils/themePageBackground';
 import UiVariantSelector from '../../../../../components/UiVariantSelector';
+import { setUiVariant } from '../../../../../utils/uiVariant';
 
 const THEME_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -123,6 +125,8 @@ const ThemeChange = () => {
     );
     const [dynamicButtonColor, setDynamicButtonColor] = useState(themeButtonStyle.solid);
     useEffect(() => {
+        // Advanced shell may still be mounted after storage clear; pin variant so theme APIs use ?variant=advanced.
+        setUiVariant('advanced');
         dispatchFetchClientOnce(dispatch, getLutronDataClient);
     }, [dispatch]);
 
@@ -218,6 +222,7 @@ const ThemeChange = () => {
     //     setSnackbarOpen(true);
     // };
     const handleThemeSave = async () => {
+        setUiVariant('advanced');
         const payload = {
             background: normalizeColor(themeColorMap.Background),
             content: normalizeColor(
@@ -229,8 +234,21 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload, backgroundImage);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            // Keep session bootstrap cache aligned so hard refresh does not revive a prior theme.
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -269,6 +287,7 @@ const ThemeChange = () => {
     //     setSnackbarOpen(true);
     // };
     const handleThemeReset = async () => {
+        setUiVariant('advanced');
         const resetBackgroundColor = normalizeThemeHex(ADVANCED_THEME_RESET_BACKGROUND_SWATCH);
         const defaultColors = {
             ...DEFAULT_THEME_COLORS,
@@ -282,11 +301,23 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             setThemeColorMap(defaultColors);
             setSelectedThemeColor(resetBackgroundColor);
             setThemePickerKey((k) => k + 1);
             reloadTheme(payload, backgroundImage);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
         } catch {

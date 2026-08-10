@@ -69,11 +69,12 @@ import {
   requestSettingsSidebarFocus,
 } from "../../../utils/keyboard/pageSubNavBridge";
 import { isKeyboardNavBlockedTarget } from "../../../utils/keyboard/keyboardNavUtils";
-import { isSettingsAppRoute, isTopbarNavItemActive } from "../../../utils/keyboard/topbarNavActive";
+import { isTopbarNavItemActive } from "../../../utils/keyboard/topbarNavActive";
 import {
   BASIC_SETTINGS_HOME_PATH,
   BASIC_SETTINGS_SIDEBAR_PATHS,
   getBasicSettingsSectionLabel,
+  isBasicAreaGroupSettingsChildRoute,
   isBasicSettingsAppRoute,
 } from "../utils/basicSettingsPaths";
 import SharedSidebar from "../../../shared/layout/app/SharedSidebar";
@@ -212,20 +213,24 @@ export default function TopbarComponent() {
   const isSettingsPath = (p) =>
     p === settingsPath && isBasicSettingsAppRoute(location.pathname, settingsPath);
 
+  // Area Groups create/edit stay under Settings breadcrumb — not Floor/Heatmap.
   const isHeatmapPath = (p) =>
     p === "/heatmap" && (
       location.pathname === "/heatmap" ||
       location.pathname === "/create-area-model" ||
       location.pathname.startsWith("/create-area-model/") ||
       location.pathname === "/user-area-groups" ||
-      location.pathname.startsWith("/user-area-groups/") ||
-      location.pathname === "/create-area-group" ||
-      location.pathname.startsWith("/create-area-group/") ||
-      location.pathname === "/create-area-groups" ||
-      location.pathname.startsWith("/create-area-groups/") ||
-      location.pathname.startsWith("/update-area-groups/") ||
-      location.pathname.startsWith("/update-area-group/")
+      location.pathname.startsWith("/user-area-groups/")
     );
+
+  /** Basic-only: Settings owns Area Groups create/edit for nav active state. */
+  const isBasicTopbarNavItemActive = (item, pathname, pathForSettings) => {
+    if (isBasicAreaGroupSettingsChildRoute(pathname)) {
+      if (item.path === pathForSettings) return true;
+      if (item.path === "/heatmap") return false;
+    }
+    return isTopbarNavItemActive(item, pathname, pathForSettings);
+  };
 
   const isNavItemActive = (item) => {
     if (item.path === "/dashboard") {
@@ -324,7 +329,7 @@ export default function TopbarComponent() {
 
   const getActiveNavLabel = () => {
     for (const item of desktopNavItems) {
-      if (isTopbarNavItemActive(item, location.pathname, settingsPath)) {
+      if (isBasicTopbarNavItemActive(item, location.pathname, settingsPath)) {
         return item.label;
       }
     }
@@ -395,7 +400,7 @@ export default function TopbarComponent() {
     const onKeyDown = (event) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (location.pathname.startsWith("/dashboard") || location.pathname.startsWith("/heatmap")) return;
-      if (isSettingsAppRoute(location.pathname, settingsPath)) return;
+      if (isBasicSettingsAppRoute(location.pathname, settingsPath)) return;
       if (isKeyboardNavBlockedTarget(event.target)) return;
       if (event.target?.closest?.(".topbar-main-nav, .topbar-nav-tab, .nav-tab-btn, .heatmap-mode-tab-btn, .home-content-type-tabs, .settings-sidebar-nav-track")) {
         return;

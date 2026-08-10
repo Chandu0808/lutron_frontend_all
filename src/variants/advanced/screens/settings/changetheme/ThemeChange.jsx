@@ -10,6 +10,7 @@ import {
     fetchApplicationTheme,
     fetchBackgroundImage,
     fetchHeatMapTheme,
+    fetchThemeSettings,
     selectApplicationTheme,
     selectBackgroundImage,
     selectHeatMapTheme,
@@ -26,7 +27,10 @@ import {
     dispatchFetchBackgroundImageOnce,
     dispatchFetchClientOnce,
     dispatchFetchHeatMapThemeOnce,
+    dispatchFetchThemeSettingsOnce,
+    syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
+import { setUiVariant } from '../../../../../utils/uiVariant';
 import {
     DEFAULT_APP_BACKGROUND,
     DEFAULT_APP_CONTENT,
@@ -118,6 +122,8 @@ const ThemeChange = () => {
     const [themePickerKey, setThemePickerKey] = useState(0);
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
     useEffect(() => {
+        // Advanced shell may still be mounted after storage clear; pin variant so theme APIs use ?variant=advanced.
+        setUiVariant('advanced');
         dispatchFetchClientOnce(dispatch, getLutronDataClient);
     }, [dispatch]);
 
@@ -188,6 +194,7 @@ const ThemeChange = () => {
     //     setSnackbarOpen(true);
     // };
     const handleThemeSave = async () => {
+        setUiVariant('advanced');
         const payload = {
             background: normalizeColor(themeColorMap.Background),
             content: normalizeColor(
@@ -199,8 +206,20 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload, backgroundImage);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -239,6 +258,7 @@ const ThemeChange = () => {
     //     setSnackbarOpen(true);
     // };
     const handleThemeReset = async () => {
+        setUiVariant('advanced');
         const defaultColors = { ...DEFAULT_THEME_COLORS };
 
         setThemeColorMap(defaultColors);
@@ -252,8 +272,20 @@ const ThemeChange = () => {
         };
 
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload);
+            const nextApplicationTheme = {
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            };
+            syncApplicationThemeSessionCache(nextApplicationTheme);
+            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {

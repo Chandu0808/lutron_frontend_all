@@ -46,6 +46,7 @@ import {
   selectAreaStatus,
   selectAreaStatusLoading,
   selectAreaStatusError,
+  selectAreaStatusFetchingId,
   updateAreaLightStatus,
   updateZonesByArea,
   toggleAllZonesInArea,
@@ -176,6 +177,7 @@ const HeatMap = () => {
   const areaStatus = useSelector(selectAreaStatus);
   const areaStatusLoading = useSelector(selectAreaStatusLoading);
   const areaStatusError = useSelector(selectAreaStatusError);
+  const areaStatusFetchingId = useSelector(selectAreaStatusFetchingId);
   const heatmapLoading = useSelector(selectHeatmapLoading);
   const heatmapError = useSelector(selectHeatmapError);
   const searchTerm = useSelector(selectHeatmapSearchTerm); // added
@@ -499,6 +501,9 @@ const HeatMap = () => {
   }, [dispatch]);
 
   const lastFloorMapFloorIdRef = useRef(null);
+  const displayModeRef = useRef(displayMode);
+  displayModeRef.current = displayMode;
+  const prevDisplayModeRef = useRef(displayMode);
   const lastAreaStatusSnapshotRef = useRef({
     areaId: null,
     light: null,
@@ -546,7 +551,9 @@ const HeatMap = () => {
     return Math.max(sw, sh) + 0.01;
   };
 
-  // Effect A — floor change only (do not re-hit light_status on mode switch)
+  // Effect A — floor change only (do not re-hit light_status on mode switch).
+  // After map areas load, fetch occupancy/energy so they merge into the new floor
+  // (avoids racing energy_status vs light_status and wiping energy colors).
   useEffect(() => {
     if (!selectedFloorId) return;
     if (lastFloorMapFloorIdRef.current === selectedFloorId) return;
@@ -558,13 +565,17 @@ const HeatMap = () => {
       scene: null,
     };
 
+    const floorIdForRequest = selectedFloorId;
+
     setPdfLoaded(false);
     setPdfLoading(true);
     setFilteredAreas([]);
     setHasFit(false);
 
-    dispatch(fetchFloorMapData({ floorId: selectedFloorId }))
+    dispatch(fetchFloorMapData({ floorId: floorIdForRequest }))
       .then((action) => {
+        if (lastFloorMapFloorIdRef.current !== floorIdForRequest) return;
+
         const bv = action?.payload?.boundary_values;
         if (action?.meta?.requestStatus === 'fulfilled' && bv) {
           setBoundaryValues(bv);
@@ -572,18 +583,30 @@ const HeatMap = () => {
           setBoundaryValues(null);
         }
         setPdfLoading(false);
+
+        if (action?.meta?.requestStatus !== 'fulfilled') return;
+        const mode = displayModeRef.current;
+        if (mode === 'Occupancy') {
+          dispatch(fetchAreaOccupancyStatus({ floorId: floorIdForRequest }));
+        } else if (mode === 'Energy') {
+          dispatch(fetchAreaEnergyConsumption({ floorId: floorIdForRequest }));
+        }
       })
       .catch(() => {
-        setPdfLoading(false);
+        if (lastFloorMapFloorIdRef.current === floorIdForRequest) {
+          setPdfLoading(false);
+        }
       });
   }, [dispatch, selectedFloorId]);
 
-  // Effect B — mode-specific data only (occupancy / energy)
+  // Effect B — mode switch only (floor changes are handled by Effect A after map load)
   useEffect(() => {
     if (!selectedFloorId) return;
-    if (displayMode === "Occupancy") {
+    if (prevDisplayModeRef.current === displayMode) return;
+    prevDisplayModeRef.current = displayMode;
+    if (displayMode === 'Occupancy') {
       dispatch(fetchAreaOccupancyStatus({ floorId: selectedFloorId }));
-    } else if (displayMode === "Energy") {
+    } else if (displayMode === 'Energy') {
       dispatch(fetchAreaEnergyConsumption({ floorId: selectedFloorId }));
     }
   }, [dispatch, selectedFloorId, displayMode]);
@@ -1301,8 +1324,18 @@ const HeatMap = () => {
 
   const handleAreaClick = (area) => {
     setHighlightedFofpZone(null);
-    setSelectedAreaId(area.area_id || area.id);
+    const areaId = area.area_id || area.id;
+    setSelectedAreaId(areaId);
     if (!area.area_id) {
+      return;
+    }
+
+    // Same area already open or still loading — do not re-hit full_area_status.
+    const idKey = String(area.area_id);
+    if (
+      (areaStatusLoading && String(areaStatusFetchingId) === idKey) ||
+      (!areaStatusLoading && areaStatus && String(areaStatus.area_id) === idKey)
+    ) {
       return;
     }
 

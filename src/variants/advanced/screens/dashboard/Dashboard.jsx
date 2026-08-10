@@ -420,8 +420,8 @@ function Dashboard() {
   const dashboardError = useSelector(selectDashboardError)
 
   const appTheme = useSelector(selectApplicationTheme);
-  const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-  const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
+  const backgroundColor = appTheme?.application_theme?.background || '#6f809d';
+  const contentColor = appTheme?.application_theme?.content || '#3d4a5c';
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
   const tabActiveTextColor = `var(--heatmap-tab-active-text, ${buttonColor})`;
   const tabInactiveTextColor = 'var(--heatmap-tab-inactive-text, #fff)';
@@ -1133,7 +1133,7 @@ function Dashboard() {
           <input
             type="checkbox"
             className="dashboard-area-tree-checkbox"
-            checked={isSelected}
+            checked={Boolean(isSelected)}
             ref={(el) => {
               if (el) {
                 el.indeterminate = isIndeterminate;
@@ -2446,7 +2446,9 @@ function Dashboard() {
   const pinAdvancedDashboardScrollChrome =
     !isTabletViewport &&
     (activeTab === 'energy' || activeTab === 'charts' || activeTab === 'alerts');
-  const ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX = 120;
+  // Shorter chrome band so widgets sit closer to Floor/Duration/tabs (Alerts is one row).
+  const ADVANCED_DASHBOARD_CHROME_HEADER_FALLBACK_PX =
+    activeTab === 'alerts' ? 72 : 100;
   const ADVANCED_DASHBOARD_TOOLBAR_PX = 85;
   // Fixed widget-pane top for Energy/Space/Alerts. Driving `top` from live chrome
   // measurement made the content below the header jump on every tab switch.
@@ -2502,7 +2504,7 @@ function Dashboard() {
             maxWidth: '100%',
             mx: 'auto',
             px: ADVANCED_VIEWPORT_GUTTER_PX,
-            py: { xs: 1, md: 2 },
+            py: { xs: 1, md: 1 },
 
 
           }}
@@ -2518,11 +2520,30 @@ function Dashboard() {
           >
             {/* Floor/Areas + Alerts Type share one grid slot (visibility = no chrome CLS). */}
             {activeTab !== 'overview' && (
-              <Grid item xs={12} sm={6} md={3} lg={3} xl={2} sx={{ position: 'relative', minHeight: 40 }}>
+              <Grid
+                item
+                xs={12}
+                sm={6}
+                md={3}
+                lg={3}
+                xl={2}
+                sx={{
+                  position: 'relative',
+                  minHeight: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  alignSelf: 'center',
+                }}
+              >
                 <div
                   style={{
+                    // Out of flow when Alerts is active so Alerts Type is the in-flow control
+                    // and shares one row/baseline with Energy / Space Utilization / Alerts tabs.
+                    position: activeTab === 'alerts' ? 'absolute' : 'relative',
+                    top: activeTab === 'alerts' ? 0 : undefined,
+                    left: activeTab === 'alerts' ? 0 : undefined,
+                    right: activeTab === 'alerts' ? 0 : undefined,
                     width: '100%',
-                    position: 'relative',
                     visibility: activeTab === 'alerts' ? 'hidden' : 'visible',
                     pointerEvents: activeTab === 'alerts' ? 'none' : 'auto',
                   }}
@@ -2758,10 +2779,11 @@ function Dashboard() {
                 </div>
                 <div
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
+                    // In-flow on Alerts (same grid row as tabs). Absolute when hidden on Energy/Space.
+                    position: activeTab === 'alerts' ? 'relative' : 'absolute',
+                    top: activeTab === 'alerts' ? undefined : 0,
+                    left: activeTab === 'alerts' ? undefined : 0,
+                    right: activeTab === 'alerts' ? undefined : 0,
                     width: '100%',
                     visibility: activeTab === 'alerts' ? 'visible' : 'hidden',
                     pointerEvents: activeTab === 'alerts' ? 'auto' : 'none',
@@ -2778,7 +2800,8 @@ function Dashboard() {
                     }}
                     style={{
                       width: '100%',
-                      padding: '10px',
+                      minWidth: 0,
+                      padding: '8px 10px',
                       border: isGoldTheme
                         ? '1px solid var(--dashboard-alert-filter-border, rgba(74, 67, 52, 0.28))'
                         : '1px solid #ccc',
@@ -2789,13 +2812,15 @@ function Dashboard() {
                       color: isGoldTheme
                         ? 'var(--dashboard-alert-filter-text, #2c2820)'
                         : 'inherit',
-                      fontSize: '14px',
+                      fontSize: '13px',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       fontFamily: 'inherit',
+                      boxSizing: 'border-box',
+                      minHeight: 40,
                     }}
                   >
                     <span>
@@ -2921,7 +2946,7 @@ function Dashboard() {
               </Grid>
             )}
 
-            {/* Duration stays mounted on Alerts (hidden) so chrome height stays stable. */}
+            {/* Duration stays in the grid on Alerts (hidden) so Energy/Space/Alerts tabs keep the same column position as Space Utilization. */}
             {activeTab !== 'overview' && (
               <Grid
                 item
@@ -2933,6 +2958,16 @@ function Dashboard() {
                 sx={{
                   visibility: (activeTab === 'alerts' || hideAdvancedHeaderDuration) ? 'hidden' : 'visible',
                   pointerEvents: (activeTab === 'alerts' || hideAdvancedHeaderDuration) ? 'none' : 'auto',
+                  // Keep Duration column width on Alerts (tab position) but collapse height —
+                  // full Duration+date stack was creating a large empty gap above System Alerts.
+                  ...(activeTab === 'alerts'
+                    ? {
+                        maxHeight: 44,
+                        minHeight: 44,
+                        overflow: 'hidden',
+                        alignSelf: 'center',
+                      }
+                    : {}),
                 }}
                 aria-hidden={(activeTab === 'alerts' || hideAdvancedHeaderDuration) || undefined}
               >
@@ -3156,7 +3191,9 @@ function Dashboard() {
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: 12,
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
+                minHeight: 40,
+                alignSelf: 'center',
               }}
             >
               <div
@@ -3389,7 +3426,9 @@ function Dashboard() {
                 overflowX: 'hidden',
                 scrollbarGutter: 'stable',
                 boxSizing: 'border-box',
-                py: 3,
+                // Tighter gap under chrome for Energy / Space Utilization / Alerts.
+                py: 1.5,
+                pt: 1,
                 zIndex: 1,
               }
             : {

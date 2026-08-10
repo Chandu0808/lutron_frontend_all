@@ -71,15 +71,16 @@ export const customizedMainLayoutAdapter = {
   },
 
   getContentPaddingTop() {
+    // AppBar height + floating margin so content clears the full navbar card.
     return {
-      xs: "63px",
-      sm: "65px",
-      md: "67px",
-      lg: "69px",
-      xl: "71px",
-      xxl: "73px",
-      "3xl": "75px",
-      "4xl": "77px",
+      xs: "78px",
+      sm: "80px",
+      md: "82px",
+      lg: "84px",
+      xl: "86px",
+      xxl: "88px",
+      "3xl": "90px",
+      "4xl": "92px",
     };
   },
 

@@ -1,12 +1,13 @@
 // src/screens/settings/theme/ThemeContext.jsx
-import React from "react";
+import React, { useEffect } from "react";
 import {
   alpha,
   createTheme,
   darken,
 } from "@mui/material/styles";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import {
+  fetchApplicationTheme,
   fetchThemeSettings,
   selectApplicationTheme,
   selectThemeSettings,
@@ -21,6 +22,7 @@ import {
   ThemeMuiProviderShell,
   useThemeProviderBootstrap,
 } from "../../../../../shared/theme/context";
+import { dispatchFetchApplicationThemeOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
 import { isLightSurface, onContentColors } from "../../../utils/themeOnSurface";
 import {
   THEME_3_BUTTON_SOLID,
@@ -270,7 +272,16 @@ const createAppTheme = (uiColors = {}, bgImage = DEFAULT_BG) => {
 export const ThemeContext = createThemeContext(DEFAULT_BG);
 
 export const ThemeProviderCustom = ({ children }) => {
+  const dispatch = useDispatch();
   const applicationTheme = useSelector(selectApplicationTheme);
+
+  // Advanced: always revalidate /theme/application on app load so sessionStorage
+  // cannot keep a previously selected theme after the user saved a new one.
+  useEffect(() => {
+    dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, {
+      force: true,
+    });
+  }, [dispatch]);
 
   const { theme, backgroundImage, reloadTheme } = useThemeProviderBootstrap({
     createAppTheme,
@@ -285,6 +296,8 @@ export const ThemeProviderCustom = ({ children }) => {
     resolveReloadBackgroundImage: rawBackgroundResolvers.onReload,
     applicationTheme,
     pickThemeBackgroundImage,
+    // Selected /theme/application colors must win over /theme/ settings on refresh.
+    preferApplicationThemeCss: true,
   });
 
   return (

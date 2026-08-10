@@ -15,6 +15,7 @@ import {
   BASIC_SETTINGS_HOME_PATH,
   BASIC_SETTINGS_SIDEBAR_PATHS,
   getBasicSettingsSectionLabel,
+  isBasicAreaGroupSettingsChildRoute,
   isBasicMaintenanceRoute,
   isBasicSettingsAppRoute,
 } from "../../../../variants/basic/utils/basicSettingsPaths";
@@ -71,6 +72,10 @@ export const basicMainLayoutAdapter = {
       location.pathname,
       BASIC_SETTINGS_HOME_PATH
     );
+    // Area Groups create/edit are Settings chrome even if path is root-level.
+    const isAreaGroupSettingsChild = isBasicAreaGroupSettingsChildRoute(
+      location.pathname
+    );
     const useWhiteContentShell =
       whiteChrome &&
       (isActivityReport || isSettingsLayout);
@@ -91,6 +96,7 @@ export const basicMainLayoutAdapter = {
       location.pathname.startsWith("/get-help/") ||
       isBasicMaintenanceRouteActive ||
       isSettingsLayout ||
+      isAreaGroupSettingsChild ||
       isLutronWebsite ||
       showBlueHeaderStripForWhiteTheme;
 
@@ -108,7 +114,7 @@ export const basicMainLayoutAdapter = {
       }
       if (isScheduleRoute(location.pathname)) return "Schedule";
       if (isQuickControlsRoute(location.pathname)) return "Quick Control";
-      if (isSettingsLayout) {
+      if (isSettingsLayout || isAreaGroupSettingsChild) {
         const section = getBasicSettingsSectionLabel(location.pathname);
         let text = section ? `Settings > ${section}` : "Settings";
         if (

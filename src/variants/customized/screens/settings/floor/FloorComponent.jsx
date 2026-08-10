@@ -8,6 +8,7 @@ import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../../customhooks/U
 import SettingsSidebar from '../../../components/SettingsSidebar';
 import { settingsGridContainerSx } from '../../../utils/settingsPageLayout';
 import FloorSettingsContent from '../../../../../shared/settings/floor/FloorSettingsContent';
+import { getProcessorsTableHeaderStyles } from '../processors/processorsTableStyles';
 import {
   fetchFloors,
   deleteFloor,
@@ -22,6 +23,8 @@ export default function FloorComponent() {
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const { role } = UseAuth();
   const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(role);
+  const { rowSx: tableHeaderRowSx, cellSx: tableHeaderCellSx } =
+    getProcessorsTableHeaderStyles(appTheme);
 
   if (role !== 'Superadmin') return <Navigate to="/setting/main" replace />;
 
@@ -47,6 +50,8 @@ export default function FloorComponent() {
           selectFloors={selectFloors}
           selectManualSortEnabled={selectManualSortEnabled}
           ConfirmDialog={ConfirmDialog}
+          tableHeaderRowSx={tableHeaderRowSx}
+          tableHeaderCellSx={tableHeaderCellSx}
         />
       </Grid>
     </Grid>

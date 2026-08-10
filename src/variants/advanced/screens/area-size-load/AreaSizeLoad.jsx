@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { Box, Typography, CircularProgress } from '@mui/material';
 import AreaSizeLoadTree from './AreaSizeLoadTree';
 import SettingsLayout from '../settings/SettingsLayout';
-import { areaSizeMuted, areaSizeText } from '../../utils/areaSizeLoadStyles';
+import { areaSizeMuted, areaSizePageShellSx, areaSizeText } from '../../utils/areaSizeLoadStyles';
 
 const AreaSizeLoad = () => {
     const isLoading = useSelector((state) => state.groupOccupancy?.loading || false);
@@ -12,6 +12,7 @@ const AreaSizeLoad = () => {
 
     return (
         <SettingsLayout>
+            <Box sx={areaSizePageShellSx}>
                         <Typography
                             variant="h6"
                             sx={{
@@ -20,6 +21,7 @@ const AreaSizeLoad = () => {
                                 fontWeight: 600,
                                 fontSize: { xs: 18, sm: 20, md: 22 },
                                 letterSpacing: 0.3,
+                                flexShrink: 0,
                             }}
                         >
                             Area Details
@@ -32,6 +34,7 @@ const AreaSizeLoad = () => {
                                     justifyContent: 'center',
                                     alignItems: 'center',
                                     minHeight: 220,
+                                    flex: 1,
                                     flexDirection: 'column',
                                     gap: 2,
                                     borderRadius: '12px',
@@ -50,6 +53,7 @@ const AreaSizeLoad = () => {
                         ) : (
                             <AreaSizeLoadTree />
                         )}
+            </Box>
         </SettingsLayout>
     );
 };

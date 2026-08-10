@@ -44,16 +44,28 @@ const Footer = () => {
       <Typography sx={{ fontSize: FOOTER_VERSION_FONT_SIZE, color: "inherit" }}>
         {roleName === "Superadmin" && `Version ${getAppDisplayVersion()}`}
       </Typography>
-      <img
-        src={lutronLogo}
-        alt="Lutron Logo"
-        style={{
-          height: "100px",
-          marginBottom: "0px",
-          paddingRight: "20px",
-          filter: "var(--footer-logo-filter, none)",
-        }}
-      />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, paddingRight: "20px" }}>
+        <Typography
+          component="span"
+          sx={{
+            fontSize: FOOTER_VERSION_FONT_SIZE,
+            color: "inherit",
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          communicating with
+        </Typography>
+        <img
+          src={lutronLogo}
+          alt="Lutron Logo"
+          style={{
+            height: "100px",
+            marginBottom: "0px",
+            filter: "var(--footer-logo-filter, none)",
+          }}
+        />
+      </Box>
 
     </Box>
   );

@@ -19,6 +19,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { ConfirmDialog } from '../../../utils/FeedbackUI';
+import FloorPlanPdfPreview from '../../../../../shared/pdf/FloorPlanPdfPreview';
 
 const VisuallyHiddenInput = styled('input')({
   clip: 'rect(0 0 0 0)',
@@ -32,15 +33,16 @@ const VisuallyHiddenInput = styled('input')({
 
 const DocumentPreviewContainer = styled('div')({
   width: '100%',
+  minHeight: '240px',
   maxHeight: '240px',
   borderRadius: '8px',
   marginTop: '16px',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'stretch',
   justifyContent: 'center',
   backgroundColor: '#676050',
   color: '#fff',
-  overflow: 'hidden',
+  overflow: 'auto',
   position: 'relative',
 });
 
@@ -303,16 +305,10 @@ export default function EditFloor() {
           <Grid container sx={{ mt: 2 }}>
             <Grid item xs={12}>
               <DocumentPreviewContainer>
-                {previewURL ? (
-                  <iframe
-                    key={previewURL}        // forces remount when src changes
-                    src={previewURL}
-                    title="Floor Preview"
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                  />
-                ) : (
-                  <Typography>No Document Selected</Typography>
-                )}
+                <FloorPlanPdfPreview
+                  key={previewURL || 'empty'}
+                  source={newFloorDocument || previewURL || null}
+                />
               </DocumentPreviewContainer>
             </Grid>
           </Grid>

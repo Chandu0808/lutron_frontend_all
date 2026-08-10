@@ -75,8 +75,8 @@ function UtilizationByAreaListInner({
   );
 
   const listShellSx = useMemo(
-    () => resolveUtilizationByAreaListShellSx(layoutMode),
-    [layoutMode]
+    () => resolveUtilizationByAreaListShellSx(layoutMode, { preset: shellVariant }),
+    [layoutMode, shellVariant]
   );
 
   const messageFontSx = {

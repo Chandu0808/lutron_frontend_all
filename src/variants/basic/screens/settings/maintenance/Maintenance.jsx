@@ -124,19 +124,58 @@ const Maintenance = () => {
         </Box>
 
         <Box
-          sx={{
-            p: 2,
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: isLightChrome ? "#e5e7eb" : "rgba(255,255,255,0.18)",
-            backgroundColor: isLightChrome ? "#ffffff" : "rgba(255,255,255,0.04)",
-          }}
+          sx={
+            isLightChrome
+              ? {
+                  borderRadius: 2,
+                  border: "1px solid var(--users-border, #C5CDD8)",
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
+                  backgroundColor: "var(--users-table-container-bg, #ffffff)",
+                  overflow: "hidden",
+                }
+              : {
+                  borderRadius: 2,
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  backgroundColor: "rgba(255,255,255,0.04)",
+                  overflow: "hidden",
+                }
+          }
         >
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography sx={{ color: textColor, fontWeight: 600, fontSize: { xs: 12, sm: 13, md: 14 } }}>
+          <Box
+            sx={
+              isLightChrome
+                ? {
+                    px: { xs: 2, sm: 2.5 },
+                    py: 1.25,
+                    backgroundColor: "#0d6ebc",
+                    borderBottom: "1px solid #0a5a9c",
+                  }
+                : {
+                    px: 2,
+                    py: 1.25,
+                    borderBottom: "1px solid rgba(255,255,255,0.12)",
+                  }
+            }
+          >
+            <Typography
+              sx={{
+                color: isLightChrome ? "#ffffff" : textColor,
+                fontWeight: 600,
+                fontSize: { xs: 12, sm: 13, md: 14 },
+              }}
+            >
               Device Categories
             </Typography>
+          </Box>
 
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.5,
+              p: { xs: 2, sm: 2.5 },
+            }}
+          >
             <FormGroup>
               {DEVICE_TYPE_OPTIONS.map((opt) => (
                 <FormControlLabel
@@ -180,7 +219,18 @@ const Maintenance = () => {
             )}
           </Box>
 
-          <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+              px: { xs: 2, sm: 2.5 },
+              py: 1.5,
+              borderTop: isLightChrome
+                ? "1px solid var(--users-border, #C5CDD8)"
+                : "1px solid rgba(255,255,255,0.12)",
+              backgroundColor: isLightChrome ? "#f8fafc" : "transparent",
+            }}
+          >
             <Button
               variant="contained"
               onClick={handleDownload}

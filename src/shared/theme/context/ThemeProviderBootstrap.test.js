@@ -203,4 +203,75 @@ describe("useThemeProviderBootstrap", () => {
       ).toBe(true);
     });
   });
+
+  test("preferApplicationThemeCss skips settings CSS when application theme is loaded", async () => {
+    const applyCssVariables = jest.fn();
+    const createAppTheme = jest.fn((ui) => ({
+      palette: { main: ui.background || "default" },
+    }));
+    const fetchThemeSettings = jest.fn(() => ({
+      type: "theme/fetchSettings/pending",
+    }));
+    const pickThemeBackgroundImage = jest.fn(() => undefined);
+
+    const store = configureStore({
+      reducer: {
+        theme: (
+          state = {
+            settings: {
+              ui_theme_colors: {
+                background: "#111111",
+                content: "#222222",
+                button: "#333333",
+              },
+              background_image: "",
+            },
+            loading: false,
+            error: null,
+          }
+        ) => state,
+      },
+    });
+
+    const applicationTheme = {
+      application_theme: {
+        background: "#aaaaaa",
+        content: "#bbbbbb",
+        button: "#cccccc",
+      },
+    };
+
+    const { result } = renderHook(
+      () =>
+        useThemeProviderBootstrap({
+          createAppTheme,
+          applyCssVariables,
+          fetchThemeSettings,
+          selectThemeSettings: (state) => state.theme.settings,
+          selectThemeLoading: (state) => state.theme.loading,
+          selectThemeError: (state) => state.theme.error,
+          initialBackgroundImage: "/assets/defaultBg.png",
+          mountCssBackground: "/assets/defaultBg.png",
+          resolveApiBackgroundImage: rawBackgroundResolvers.fromApi,
+          resolveReloadBackgroundImage: rawBackgroundResolvers.onReload,
+          applicationTheme,
+          pickThemeBackgroundImage,
+          preferApplicationThemeCss: true,
+        }),
+      { wrapper: createWrapper(store) }
+    );
+
+    await waitFor(() => {
+      expect(
+        applyCssVariables.mock.calls.some(
+          ([ui]) => ui.background === "#aaaaaa" && ui.content === "#bbbbbb"
+        )
+      ).toBe(true);
+    });
+
+    expect(
+      applyCssVariables.mock.calls.some(([ui]) => ui.background === "#111111")
+    ).toBe(false);
+    expect(result.current.theme.palette.main).toBe("#aaaaaa");
+  });
 });

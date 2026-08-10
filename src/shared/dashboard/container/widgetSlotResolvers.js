@@ -152,6 +152,7 @@ export function resolveWidgetProps(widgetKey, context = {}) {
         customDatesIncomplete: energyCustomNeedsDates,
         shellVariant: variant,
         chartHeaderStyle,
+        ChartLoader,
         overrides,
       });
     }

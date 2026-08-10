@@ -1,85 +1,36 @@
-// // ActivityReportTable.jsx
-// import React, { useEffect } from "react";
-// import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Box, Typography } from "@mui/material";
-// import { fetchApplicationTheme, selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
-// import { useDispatch } from "react-redux";
-// const dispatch = useDispatch()
-// const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("en-GB") : "-");
-// const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-");
-// const appTheme = useSelector(selectApplicationTheme);
-// const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-// const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
-// const buttonColor = appTheme?.application_theme?.button || '#232323'
-// export default function ActivityReportTable({ rows = [], loading = false, error = "" }) {
-//     useEffect(() => {
-//         dispatch(fetchApplicationTheme());
-//     }, [dispatch]);
-//     if (loading) return <Box sx={{ color: "#fff", py: 2 }}>Loading…</Box>;
-//     if (error) return <Box sx={{ color: "error.main", py: 2 }}>{String(error)}</Box>;
-
-//     return (
-//         <>
-//             <Typography sx={{ color: "white", m: 1, fontWeight: 600 }}>Activities</Typography>
-//             <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 2, overflow: "hidden", bgcolor: "#FFFFFF" }}>
-//                 <Table size="small">
-//                     <TableHead>
-//                         <TableRow sx={{
-//                             bgcolor: "backgroundColor"
-//                         }}>
-//                             <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-//                             <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
-//                             <TableCell sx={{ fontWeight: 700 }}>Area</TableCell>
-//                             <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-//                             <TableCell sx={{ fontWeight: 700 }}>User</TableCell>
-//                             <TableCell sx={{ fontWeight: 700 }}>Activity</TableCell>
-//                         </TableRow>
-//                     </TableHead>
-//                     <TableBody>
-//                         {rows.length ? (
-//                             rows.map((r) => (
-//                                 <TableRow key={r.id} hover>
-//                                     <TableCell>{fmtDate(r.created_at)}</TableCell>
-//                                     <TableCell>{fmtTime(r.created_at)}</TableCell>
-//                                     <TableCell>{[r.floor_name, r.area_name].filter(Boolean).join(" / ")}</TableCell>
-//                                     <TableCell>{r.activity_type || "-"}</TableCell>
-//                                     <TableCell>{r.user_name || "-"}</TableCell>
-//                                     <TableCell>{r.activity_description || "-"}</TableCell>
-//                                 </TableRow>
-//                             ))
-//                         ) : (
-//                             <TableRow>
-//                                 <TableCell colSpan={6} align="center" sx={{ py: 4, color: "black" }}>
-//                                     No activities found for this filter.
-//                                 </TableCell>
-//                             </TableRow>
-//                         )}
-//                     </TableBody>
-//                 </Table>
-//             </TableContainer>
-//         </>
-//     );
-// }
-import React, { useEffect, useState } from "react";
-import { Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Box, Typography, TablePagination } from "@mui/material";
+import React, { useEffect, useState, useMemo } from "react";
+import {
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Box,
+  Typography,
+  Pagination,
+  FormControl,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
-import { useDispatch, useSelector } from "react-redux";
-import { useMemo } from "react";
+import { useSelector } from "react-redux";
 import {
   onContentColors,
-  DEFAULT_APP_BACKGROUND,
   DEFAULT_APP_CONTENT,
   isWhiteAreaPickerChrome,
 } from "../../utils/themeOnSurface";
+
+const ROWS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
+
 const ActivityReportTable = ({ rows = [], loading = false, error = "", selectedAreas = [] }) => {
-    const dispatch = useDispatch()
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
     const fmtDate = (iso) => {
         if (!iso) return "-";
-        // Create date in local timezone to avoid timezone conversion issues
         const date = new Date(iso);
-        // Use local date components to avoid timezone offset issues
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
@@ -87,19 +38,21 @@ const ActivityReportTable = ({ rows = [], loading = false, error = "", selectedA
     };
     const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "-");
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || DEFAULT_APP_BACKGROUND;
     const contentColor = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
-    const buttonColor = appTheme?.application_theme?.button || "#232323";
     const surface = useMemo(() => onContentColors(contentColor), [contentColor]);
     const isDefaultWhiteTheme = isWhiteAreaPickerChrome(contentColor);
 
-    // Reset to first page when rows change
     useEffect(() => {
         setPage(0);
     }, [rows]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
+    const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage) || 1);
+    const safePage = Math.min(page, Math.max(0, totalPages - 1));
+    const from = rows.length === 0 ? 0 : safePage * rowsPerPage + 1;
+    const to = Math.min(rows.length, (safePage + 1) * rowsPerPage);
+
+    const handleChangePage = (_event, nextPage) => {
+        setPage(Math.max(0, nextPage - 1));
     };
 
     const handleChangeRowsPerPage = (event) => {
@@ -111,7 +64,6 @@ const ActivityReportTable = ({ rows = [], loading = false, error = "", selectedA
     if (error) return <Box sx={{ color: "error.main", py: 2 }}>{String(error)}</Box>;
     return (
         <>
-            {/* Disclaimer when areas are selected */}
             {selectedAreas.length > 0 && (
                 <Box sx={{
                     mb: 2,
@@ -165,7 +117,7 @@ const ActivityReportTable = ({ rows = [], loading = false, error = "", selectedA
                     <TableBody>
                         {rows.length ? (
                             rows
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                .slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage)
                                 .map((r) => (
                                     <TableRow key={r.id} hover>
                                         <TableCell>{fmtDate(r.created_at)}</TableCell>
@@ -187,33 +139,65 @@ const ActivityReportTable = ({ rows = [], loading = false, error = "", selectedA
                 </Table>
             </TableContainer>
             {rows.length > 0 && (
-                <TablePagination
-                    component="div"
-                    count={rows.length}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25, 50, 100]}
+                <Box
                     sx={{
-                        color: surface.primary,
-                        "& .MuiTablePagination-select": {
-                            color: surface.primary,
-                        },
-                        "& .MuiTablePagination-selectIcon": {
-                            color: surface.primary,
-                        },
-                        "& .MuiTablePagination-displayedRows": {
-                            color: surface.primary,
-                        },
-                        "& .MuiTablePagination-actions": {
-                            color: surface.primary,
-                        },
-                        "& .MuiIconButton-root": {
-                            color: surface.primary,
-                        },
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 2,
+                        py: 1.5,
+                        px: 1,
                     }}
-                />
+                >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+                        <Typography variant="body2" sx={{ color: surface.primary, fontSize: "14px" }}>
+                            Showing {from} to {to} of {rows.length} activities
+                        </Typography>
+                        <FormControl size="small" sx={{ minWidth: 72 }}>
+                            <Select
+                                value={rowsPerPage}
+                                onChange={handleChangeRowsPerPage}
+                                sx={{
+                                    color: surface.primary,
+                                    "& .MuiOutlinedInput-notchedOutline": {
+                                        borderColor: isDefaultWhiteTheme ? "#1565C0" : "rgba(255,255,255,0.35)",
+                                    },
+                                    "& .MuiSvgIcon-root": {
+                                        color: surface.primary,
+                                    },
+                                }}
+                            >
+                                {ROWS_PER_PAGE_OPTIONS.map((n) => (
+                                    <MenuItem key={n} value={n}>
+                                        {n}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <Typography variant="body2" sx={{ color: surface.primary, fontSize: "14px" }}>
+                            per page
+                        </Typography>
+                    </Box>
+                    <Pagination
+                        count={totalPages}
+                        page={safePage + 1}
+                        onChange={handleChangePage}
+                        color="primary"
+                        size="small"
+                        siblingCount={1}
+                        boundaryCount={1}
+                        sx={{
+                            "& .MuiPaginationItem-root": {
+                                color: surface.primary,
+                            },
+                            "& .MuiPaginationItem-root.Mui-selected": {
+                                backgroundColor: isDefaultWhiteTheme ? "#0d47a1" : undefined,
+                                color: isDefaultWhiteTheme ? "#fff" : undefined,
+                            },
+                        }}
+                    />
+                </Box>
             )}
         </>
     )

@@ -1244,7 +1244,7 @@ function Dashboard() {
           {/* Universal checkbox for all node types */}
           <input
             type="checkbox"
-            checked={isSelected}
+            checked={Boolean(isSelected)}
             ref={(el) => {
               if (el) {
                 el.indeterminate = isIndeterminate;
@@ -2166,7 +2166,7 @@ function Dashboard() {
             <div style={{ width: '100%', maxWidth: 330, margin: '0 auto 10px auto' }}>
               <div style={{ position: 'relative', width: '100%', marginBottom: '8px' }}>
                 <select
-                  value={selectedDuration}
+                  value={selectedDuration || ''}
                   onChange={handleDurationChange}
                   disabled={globalLoading}
                   style={{

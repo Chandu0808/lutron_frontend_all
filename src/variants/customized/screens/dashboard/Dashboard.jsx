@@ -141,7 +141,7 @@ import {
   DASHBOARD_DEFAULT_PATH,
   DASHBOARD_OVERVIEW_ENABLED,
 } from '../../utils/dashboardLanding'
-import { DASHBOARD_ALERTS_SHELL_CLASS } from '../../utils/scheduleFormLayout'
+import { DASHBOARD_ALERTS_SHELL_CLASS, CUSTOMIZED_TOPBAR_STACK_OFFSET_PX } from '../../utils/scheduleFormLayout'
 import { useSyncPanelToTopbar } from '../../utils/useSyncPanelToTopbar'
 import EnergyCustomGraphCard from '../../components/dashboard/EnergyCustomGraphCard'
 import { readBuiltinWidgetOverrides, normalizeBuiltinApiPath, shouldRenderBuiltinWidgetAsCustomGraph } from '../../utils/builtinWidgetOverrides'
@@ -2702,7 +2702,7 @@ function Dashboard() {
           <input
             type="checkbox"
             title={isAreaNode && floorName ? `${floorName}/${node.name}` : node.name}
-            checked={isSelected}
+            checked={Boolean(isSelected)}
             ref={(el) => {
               if (el) {
                 el.indeterminate = isIndeterminate;
@@ -4153,7 +4153,8 @@ function Dashboard() {
     !isTabletViewport &&
     (activeTab === 'energy' || activeTab === 'space-utilization' || activeTab === 'alerts');
   const CUSTOMIZED_DASHBOARD_CHROME_HEADER_FALLBACK_PX = 120;
-  const CUSTOMIZED_DASHBOARD_TOOLBAR_PX = 60;
+  // Keep name for chrome fallback math; value tracks floating topbar stack offset.
+  const CUSTOMIZED_DASHBOARD_TOOLBAR_PX = CUSTOMIZED_TOPBAR_STACK_OFFSET_PX;
   const customizedDashboardChromeRef = useRef(null);
   const [customizedDashboardChromeBottomPx, setCustomizedDashboardChromeBottomPx] = useState(0);
 
@@ -4211,7 +4212,7 @@ function Dashboard() {
         ref={customizedDashboardChromeRef}
         sx={{
           position: 'fixed',
-          top: '60px',
+          top: `${CUSTOMIZED_TOPBAR_STACK_OFFSET_PX}px`,
           left: 0,
           right: 0,
           backgroundColor: pinCustomizedDashboardScrollChrome ? 'transparent' : backgroundColor,
@@ -4489,7 +4490,7 @@ function Dashboard() {
                   {/* Duration Dropdown */}
                   <div style={{ position: 'relative', width: '100%', marginBottom: '3px' }}>
                     <select
-                      value={selectedDuration}
+                      value={selectedDuration || ''}
                       onChange={handleDurationChange}
                       disabled={globalLoading}
                       style={{

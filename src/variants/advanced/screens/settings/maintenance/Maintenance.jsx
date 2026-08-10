@@ -18,6 +18,7 @@ import SettingsLayout from "../SettingsLayout";
 import { BaseUrl } from "../../../BaseUrl";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { getThemeButtonColor } from "../../../utils/themePageBackground";
+import { isLightSurface } from "../../../utils/themeOnSurface";
 import {
   DEVICE_TYPE_OPTIONS,
   OCCUPANCY_TYPE_OPTION,
@@ -36,7 +37,67 @@ const Maintenance = () => {
   const panelMuted = "var(--settings-panel-muted-text, #6b7280)";
 
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, backgroundColor);
+  // Theme accent for checkbox border/check — avoid near-white accents on light panels.
+  const checkboxColor = (() => {
+    const button = String(buttonColor || "").trim();
+    const background = String(backgroundColor || "").trim();
+    if (button && !isLightSurface(button)) return button;
+    if (background && !isLightSurface(background)) return background;
+    return button || "#374151";
+  })();
 
+  const checkboxSx = {
+    color: checkboxColor,
+    p: 0.5,
+    "&.Mui-checked": { color: checkboxColor },
+    "&.MuiCheckbox-indeterminate": { color: checkboxColor },
+    "&.Mui-disabled": { color: checkboxColor, opacity: 0.4 },
+    "& .MuiSvgIcon-root": { fontSize: 20 },
+  };
+
+  // Match Alerts / Processors settings typography (Roboto + settings size scale).
+  const settingsFontFamily = 'Roboto, Helvetica, Arial, sans-serif';
+  const titleSx = {
+    fontFamily: settingsFontFamily,
+    fontWeight: "bold",
+    color: panelText,
+    mb: 0.5,
+    fontSize: { xs: "14px", sm: "16px", md: "18px" },
+    lineHeight: 1.3,
+  };
+  const bodyMutedSx = {
+    fontFamily: settingsFontFamily,
+    color: panelMuted,
+    fontSize: { xs: 12, sm: 13, md: 14 },
+    fontWeight: 400,
+    lineHeight: 1.45,
+  };
+  const sectionHeadingSx = {
+    fontFamily: settingsFontFamily,
+    color: panelText,
+    fontWeight: 600,
+    fontSize: { xs: 12, sm: 13, md: 14 },
+    lineHeight: 1.4,
+  };
+  const categoryLabelSx = {
+    color: panelText,
+    alignItems: "center",
+    ml: 0,
+    mr: 0,
+    "& .MuiFormControlLabel-label": {
+      fontFamily: settingsFontFamily,
+      fontSize: { xs: 12, sm: 13, md: 14 },
+      fontWeight: 500,
+      lineHeight: 1.4,
+    },
+  };
+  const hintSx = {
+    fontFamily: settingsFontFamily,
+    color: panelMuted,
+    fontSize: { xs: 11, sm: 12, md: 13 },
+    fontWeight: 400,
+    lineHeight: 1.4,
+  };
   const [selectedTypes, setSelectedTypes] = useState(["devices"]);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
@@ -103,21 +164,14 @@ const Maintenance = () => {
           gap: 2,
           p: 2,
           maxWidth: 980,
+          fontFamily: settingsFontFamily,
         }}
       >
         <Box>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: "bold",
-              color: panelText,
-              mb: 0.5,
-              fontSize: { xs: "14px", sm: "16px", md: "18px" },
-            }}
-          >
+          <Typography variant="h4" sx={titleSx}>
             Maintenance Report
           </Typography>
-          <Typography sx={{ color: panelMuted, fontSize: { xs: 12, sm: 13, md: 14 } }}>
+          <Typography sx={bodyMutedSx}>
             Generate a live report from all processors. Select device categories or area occupancy mode.
           </Typography>
         </Box>
@@ -132,7 +186,7 @@ const Maintenance = () => {
           }}
         >
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography sx={{ color: panelText, fontWeight: 600, fontSize: { xs: 12, sm: 13, md: 14 } }}>
+            <Typography sx={sectionHeadingSx}>
               Device Categories
             </Typography>
 
@@ -146,10 +200,11 @@ const Maintenance = () => {
                       onChange={() => handleCategoryToggle(opt.value)}
                       disabled={occupancySelected}
                       size="small"
+                      sx={checkboxSx}
                     />
                   }
                   label={opt.label}
-                  sx={{ color: panelText }}
+                  sx={categoryLabelSx}
                 />
               ))}
               <FormControlLabel
@@ -159,15 +214,16 @@ const Maintenance = () => {
                     onChange={() => handleCategoryToggle(OCCUPANCY_TYPE_OPTION.value)}
                     disabled={selectedTypes.some((type) => type !== OCCUPANCY_TYPE_OPTION.value)}
                     size="small"
+                    sx={checkboxSx}
                   />
                 }
                 label={OCCUPANCY_TYPE_OPTION.label}
-                sx={{ color: panelText }}
+                sx={categoryLabelSx}
               />
             </FormGroup>
 
             {occupancySelected && (
-              <Typography sx={{ color: panelMuted, fontSize: { xs: 11, sm: 12, md: 13 } }}>
+              <Typography sx={hintSx}>
                 Occupancy mode reports may take a few minutes to complete.
               </Typography>
             )}
@@ -188,7 +244,9 @@ const Maintenance = () => {
               sx={{
                 backgroundColor: buttonColor,
                 color: "#fff",
+                fontFamily: settingsFontFamily,
                 fontWeight: 700,
+                fontSize: { xs: 12, sm: 13, md: 14 },
                 textTransform: "none",
                 "&:hover": { backgroundColor: darken(buttonColor, 0.12) },
               }}
