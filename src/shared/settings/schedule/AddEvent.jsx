@@ -3,7 +3,7 @@ import { getScheduleFormTheme, scheduleFormSectionCard, scheduleFormSectionsColu
 import { renderScheduleModalLayer, SCHEDULE_MODAL_OVERLAY_Z_INDEX } from './scheduleModalLayer';
 import { scheduleFilterMenuProps, scheduleModalFilterMenuProps, resolveScheduleModalFilterMenuProps, scheduleSelectFieldSx } from './scheduleSelectMenuProps';
 import { MenuItem, Select } from '@mui/material';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ScheduleLocationsPanel from './ScheduleLocationsPanel';
 import ActionChooserModal from '../../quickcontrols/ActionChooserModal';
 import { getQuickControlActionShortLabel } from '../../quickcontrols/quickControlActionLabels';
@@ -271,6 +271,74 @@ const AddEvent = () => {
  
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+
+  const leftPanelScrollRef = useRef(null);
+  const [showLeftScrollDown, setShowLeftScrollDown] = useState(false);
+
+  const updateLeftScrollDownVisibility = useCallback(() => {
+    if (!useAdvancedLocationsPanel) {
+      setShowLeftScrollDown(false);
+      return;
+    }
+    const el = leftPanelScrollRef.current;
+    if (!el) {
+      setShowLeftScrollDown(false);
+      return;
+    }
+    setShowLeftScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, [useAdvancedLocationsPanel]);
+
+  useLayoutEffect(() => {
+    if (!useAdvancedLocationsPanel) return undefined;
+
+    const sync = () => updateLeftScrollDownVisibility();
+    sync();
+    const rafId = requestAnimationFrame(sync);
+    const t50 = window.setTimeout(sync, 50);
+    const t300 = window.setTimeout(sync, 300);
+
+    const el = leftPanelScrollRef.current;
+    if (!el) {
+      return () => {
+        cancelAnimationFrame(rafId);
+        window.clearTimeout(t50);
+        window.clearTimeout(t300);
+      };
+    }
+
+    el.addEventListener('scroll', sync, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
+    resizeObserver?.observe(el);
+    window.addEventListener('resize', sync);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(t50);
+      window.clearTimeout(t300);
+      el.removeEventListener('scroll', sync);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [
+    useAdvancedLocationsPanel,
+    updateLeftScrollDownVisibility,
+    scheduleType,
+    keepUntil,
+    isCreatingGroup,
+    selectedDays,
+    annualDates,
+  ]);
+
+  const handleLeftScrollDown = () => {
+    const el = leftPanelScrollRef.current;
+    if (!el) return;
+    const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (remaining <= 0) return;
+    const step = Math.max(el.clientHeight * 0.75, 120);
+    el.scrollBy({ top: Math.min(step, remaining), behavior: 'smooth' });
+    window.setTimeout(updateLeftScrollDownVisibility, 300);
+  };
 
   const groupList = useSelector(state => state.schedule.groups);
   const groupLoading = useSelector(state => state.schedule.groupsLoading);
@@ -1236,15 +1304,31 @@ const AddEvent = () => {
         </div>
       )}
       {/* Left Column - Schedule Details */}
-      <div style={{
+      <div
+        className={useAdvancedLocationsPanel ? 'schedule-form-left-panel-scroll-wrap' : undefined}
+        style={{
         flex: "0 1 400px",
         minWidth: isLargeScreen ? 380 : isDesktop ? 360 : 340,
         maxWidth: isLargeScreen ? 480 : isDesktop ? 440 : 420,
-        padding: formTheme.panelShellPadding,
         ...(useAdvancedLocationsPanel ? {
           alignSelf: 'stretch',
           minHeight: 0,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        } : {}),
+      }}>
+      <div
+        ref={useAdvancedLocationsPanel ? leftPanelScrollRef : undefined}
+        className={useAdvancedLocationsPanel ? 'schedule-form-left-panel' : undefined}
+        style={{
+        padding: formTheme.panelShellPadding,
+        ...(useAdvancedLocationsPanel ? {
+          flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
+          overflowX: 'hidden',
         } : {}),
         ...(formTheme.useSeparateFieldCards ? {
           display: 'flex',
@@ -1299,39 +1383,82 @@ const AddEvent = () => {
           }}>
             Part Of
           </label>
-          <select
-            value={isCreatingGroup ? "create_new" : scheduleGroup}
-            onChange={e => {
-              if (e.target.value === "create_new") {
-                setIsCreatingGroup(true);
-                setScheduleGroup(""); // Clear selection
-              } else {
-                setIsCreatingGroup(false);
-                setScheduleGroup(e.target.value);
-                setNewGroupName(""); // Clear new group name if switching back
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
-              borderRadius: 8,
-              border: formTheme.inputBorder || '1px solid #ccc',
-              fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
-              backgroundColor: formTheme.dayUnselectedBg || '#ffffff',
-              color: formTheme.inputColor,
-              boxSizing: 'border-box',
-            }}
-          >
-            {/* <option value="">Select Group</option> */}
-            {groupList && groupList.length > 0 ? (
-              groupList.map(group => (
-                <option key={group.id} value={group.id}>{group.name}</option>
-              ))
-            ) : (
-              <option value="" disabled>No groups available</option>
-            )}
-            <option value="create_new">+ Create New Group</option>
-          </select>
+          {isAdvancedScheduleForm ? (
+            <Select
+              className="schedule-filter-select"
+              value={isCreatingGroup ? "create_new" : scheduleGroup}
+              onChange={(e) => {
+                if (e.target.value === "create_new") {
+                  setIsCreatingGroup(true);
+                  setScheduleGroup("");
+                } else {
+                  setIsCreatingGroup(false);
+                  setScheduleGroup(e.target.value);
+                  setNewGroupName("");
+                }
+              }}
+              fullWidth
+              displayEmpty
+              MenuProps={scheduleFilterMenuProps}
+              sx={{
+                ...scheduleSelectFieldSx,
+                fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                backgroundColor: formTheme.dayUnselectedBg || '#ffffff',
+                color: formTheme.inputColor,
+                '& .MuiSelect-select': {
+                  py: isLargeScreen ? '14px' : isDesktop ? '13px' : '12px',
+                  px: '12px',
+                },
+              }}
+            >
+              {groupList && groupList.length > 0 ? (
+                groupList.map((group) => (
+                  <MenuItem key={group.id} value={String(group.id)}>
+                    {group.name}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem value="" disabled>
+                  No groups available
+                </MenuItem>
+              )}
+              <MenuItem value="create_new">+ Create New Group</MenuItem>
+            </Select>
+          ) : (
+            <select
+              value={isCreatingGroup ? "create_new" : scheduleGroup}
+              onChange={e => {
+                if (e.target.value === "create_new") {
+                  setIsCreatingGroup(true);
+                  setScheduleGroup(""); // Clear selection
+                } else {
+                  setIsCreatingGroup(false);
+                  setScheduleGroup(e.target.value);
+                  setNewGroupName(""); // Clear new group name if switching back
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: isLargeScreen ? 14 : isDesktop ? 13 : 12,
+                borderRadius: 8,
+                border: formTheme.inputBorder || '1px solid #ccc',
+                fontSize: isLargeScreen ? 16 : isDesktop ? 15 : 14,
+                backgroundColor: formTheme.dayUnselectedBg || '#ffffff',
+                color: formTheme.inputColor,
+                boxSizing: 'border-box',
+              }}
+            >
+              {/* <option value="">Select Group</option> */}
+              {groupList && groupList.length > 0 ? (
+                groupList.map(group => (
+                  <option key={group.id} value={group.id}>{group.name}</option>
+                ))
+              ) : (
+                <option value="" disabled>No groups available</option>
+              )}
+              <option value="create_new">+ Create New Group</option>
+            </select>
+          )}
           {isCreatingGroup && (
             <div style={{ marginTop: 8 }}>
               <input
@@ -1654,6 +1781,17 @@ const AddEvent = () => {
             )}
           </div>
         </div>
+      </div>
+      {useAdvancedLocationsPanel && showLeftScrollDown && (
+        <button
+          type="button"
+          className="quick-control-details-scroll-btn"
+          onClick={handleLeftScrollDown}
+          aria-label="Scroll down"
+        >
+          ▼
+        </button>
+      )}
       </div>
 
       {/* Calendar positioned outside the form container */}

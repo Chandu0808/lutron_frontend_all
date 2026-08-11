@@ -54,7 +54,7 @@ const Footer = () => {
             whiteSpace: "nowrap",
           }}
         >
-          communicating with
+          Communicating with
         </Typography>
         <img
           src={lutronLogo}

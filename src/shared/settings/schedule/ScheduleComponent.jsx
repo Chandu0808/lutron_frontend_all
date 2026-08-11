@@ -1,6 +1,8 @@
 import { getScheduleSettingsBindings } from './bindScheduleSettingsModule';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { resolveScheduleCalendarColors } from './scheduleCalendarTheme';
+import { scheduleFilterMenuProps, scheduleSelectFieldSx } from './scheduleSelectMenuProps';
+import { MenuItem, Select } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -121,6 +123,8 @@ function ScheduleComponent() {
 
   const applicationTheme = useSelector(selectApplicationTheme)?.application_theme ?? {};
   const themeBackground = applicationTheme.background || '#ffffff';
+  // Advanced binds scheduleCalendarChrome as default 'dark' (basic=light, customized=customized).
+  const isAdvancedScheduleChrome = scheduleCalendarChrome === 'dark';
 
   // Get user role and profile for role-based filtering
   const { role: currentUserRole } = UseAuth();
@@ -623,27 +627,54 @@ function ScheduleComponent() {
           gap: 12,
           flexShrink: 0
         }}>
-          <select
-            className="schedule-filter-select"
-            value={selectedFilter}
-            onChange={e => setSelectedFilter(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: `1px solid ${colors.filterBorder}`,
-              fontSize: 14,
-              background: colors.filterBg,
-              color: colors.filterText,
-              fontWeight: 500,
-              outline: 'none',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-              minWidth: 200
-            }}
-          >
-            {dropdownOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          {isAdvancedScheduleChrome ? (
+            <Select
+              className="schedule-filter-select"
+              value={selectedFilter}
+              onChange={(e) => setSelectedFilter(e.target.value)}
+              MenuProps={scheduleFilterMenuProps}
+              sx={{
+                ...scheduleSelectFieldSx,
+                minWidth: 200,
+                height: 40,
+                fontWeight: 500,
+                backgroundColor: colors.filterBg,
+                color: colors.filterText,
+                '& .MuiSelect-select': {
+                  py: '8px',
+                  px: '12px',
+                },
+              }}
+            >
+              {dropdownOptions.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </Select>
+          ) : (
+            <select
+              className="schedule-filter-select"
+              value={selectedFilter}
+              onChange={(e) => setSelectedFilter(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.filterBorder}`,
+                fontSize: 14,
+                background: colors.filterBg,
+                color: colors.filterText,
+                fontWeight: 500,
+                outline: 'none',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                minWidth: 200
+              }}
+            >
+              {dropdownOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          )}
           
           {/* Week Navigation - positioned between dropdown and Add Event button */}
           <div style={{

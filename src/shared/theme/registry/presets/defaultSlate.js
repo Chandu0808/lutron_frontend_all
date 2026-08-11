@@ -4,6 +4,7 @@ import {
   THEME_4_TAB_PILL_GRADIENT,
 } from "../../../../variants/advanced/config/themeConstants";
 import { onContentColors } from "../../../../variants/advanced/utils/themeOnSurface";
+import { applyHeatmapTabPillTokens } from "../../utils/applyHeatmapTabPillTokens";
 
 /**
  * Default slate preset CSS variables (non-gold, non-custom shared surface).
@@ -56,7 +57,11 @@ export function applyDefaultSlatePreset(root, context = {}) {
     root.style.setProperty("--heatmap-sidebar-panel-label", "#1a2a42");
     root.style.setProperty("--heatmap-sidebar-section-text", "#ffffff");
     root.style.setProperty("--heatmap-sidebar-section-label-bg", "rgba(0, 0, 0, 0.12)");
-    root.style.setProperty("--heatmap-tab-pill-bg", "#3d4a5c");
+    applyHeatmapTabPillTokens(root, {
+      pillBg: "#3d4a5c",
+      activeText: "#3d4a5c",
+      contrastSolid: "#3d4a5c",
+    });
     root.style.setProperty("--home-tab-active-color", "#3d4a5c");
     root.style.setProperty("--home-field-surface-bg", "#D6DDE8");
     root.style.setProperty("--home-field-border", "#C5CDD8");
@@ -329,6 +334,9 @@ export function getDefaultSlatePresetVariableNames() {
     "heatmap-sidebar-section-label-bg",
     "heatmap-sidebar-section-text",
     "heatmap-tab-pill-bg",
+    "heatmap-tab-indicator-bg",
+    "heatmap-tab-active-text",
+    "heatmap-tab-inactive-text",
     "home-field-border",
     "home-field-surface-bg",
     "home-tab-active-color",

@@ -123,6 +123,13 @@
 .nav-tab-btn:hover:not(:disabled):not(.nav-tab-btn-active) {
   background-color: rgba(255, 255, 255, 0.12) !important;
 }
+/* Contrast-safe labels: inactive must stay readable on themed pill tracks */
+.nav-tab-btn:not(.nav-tab-btn-active) {
+  color: var(--heatmap-tab-inactive-text, #ffffff) !important;
+}
+.nav-tab-btn.nav-tab-btn-active {
+  color: var(--heatmap-tab-active-text, #3d4a5c) !important;
+}
 
 /* Keyboard-nav tabs — suppress default browser/MUI focus ring (active pill shows selection) */
 .topbar-main-nav .topbar-nav-tab:focus,
@@ -1104,15 +1111,15 @@ html.gold-theme .heatmap-display-mode-tabs .heatmap-mode-tab-btn:not(.heatmap-mo
 html.gold-theme .heatmap-display-mode-tabs .heatmap-mode-tab-btn:not(.heatmap-mode-tab-btn--active):hover {
   background-color: rgba(255, 255, 255, 0.12) !important;
 }
-/* Brown (Theme 4) — inactive heatmap tabs readable on light tan pill track */
+/* Brown (Theme 4) — dark brown pill track; white inactive labels (same as Gold/Blue) */
 html.theme-4-page .heatmap-display-mode-tabs .heatmap-mode-tab-btn--active {
   color: var(--heatmap-tab-active-text, #403a31) !important;
 }
 html.theme-4-page .heatmap-display-mode-tabs .heatmap-mode-tab-btn:not(.heatmap-mode-tab-btn--active) {
-  color: var(--heatmap-tab-inactive-text, #2c2820) !important;
+  color: var(--heatmap-tab-inactive-text, #ffffff) !important;
 }
 html.theme-4-page .heatmap-display-mode-tabs .heatmap-mode-tab-btn:not(.heatmap-mode-tab-btn--active):hover {
-  background-color: rgba(64, 58, 49, 0.08) !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
 }
 /* Theme settings — inactive picker tabs readable on cream cards */
 html.gold-theme .pill-tab:not(.active),
@@ -2162,9 +2169,15 @@ html.theme-4-page .settings-main-inner-panel .ql-container .ql-editor * {
 html.theme-4-page .settings-main-inner-panel .ql-container .ql-editor.ql-blank::before {
   color: var(--settings-panel-muted-text, rgba(44, 40, 32, 0.6)) !important;
 }
-/* Brown theme — Lutron/Client/Project + dashboard view tabs on light pill track */
+/* Brown theme — Lutron/Client/Project + dashboard view tabs on dark pill track */
 html.theme-4-page .home-content-type-tabs [role="tab"]:not([aria-selected="true"]) {
-  color: var(--heatmap-tab-inactive-text, #2c2820) !important;
+  color: var(--heatmap-tab-inactive-text, #ffffff) !important;
+}
+html.theme-4-page .nav-tab-btn:not(.nav-tab-btn-active) {
+  color: var(--heatmap-tab-inactive-text, #ffffff) !important;
+}
+html.theme-4-page .nav-tab-btn.nav-tab-btn-active {
+  color: var(--heatmap-tab-active-text, #403a31) !important;
 }
 html.theme-4-page .settings-main-inner-panel .MuiButton-contained {
   background: var(--app-button-background, linear-gradient(90deg, #403A31 0%, #4B453B 25%, #575045 50%, #4B453B 75%, #403A31 100%)) !important;
@@ -2954,6 +2967,62 @@ html.theme-4-page .schedule-filter-select.MuiOutlinedInput-root.Mui-focused .Mui
   border-color: var(--home-tab-active-color, #403a31) !important;
 }
 
+/* Theme 3 (Blue) — Schedule filter MUI menu */
+html.theme-3-page .schedule-filter-menu {
+  background-color: var(--schedule-select-menu-bg, #e8ecf2) !important;
+}
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root {
+  color: var(--schedule-select-menu-text, #1a2a42) !important;
+}
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root:hover,
+html.theme-3-page .schedule-filter-menu-list .MuiMenuItem-root:hover,
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root.Mui-focusVisible,
+html.theme-3-page .schedule-filter-menu-list .MuiMenuItem-root.Mui-focusVisible {
+  background-color: var(--schedule-select-menu-hover, rgba(61, 74, 92, 0.16)) !important;
+  color: var(--schedule-select-menu-text, #1a2a42) !important;
+}
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root.Mui-selected,
+html.theme-3-page .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected,
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root.Mui-selected:hover,
+html.theme-3-page .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected:hover,
+html.theme-3-page .schedule-filter-menu .MuiMenuItem-root.Mui-selected.Mui-focusVisible,
+html.theme-3-page .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected.Mui-focusVisible {
+  background-color: var(--schedule-modal-item-selected-bg, #3d4a5c) !important;
+  color: var(--schedule-modal-item-selected-text, #ffffff) !important;
+}
+html.theme-3-page .schedule-filter-select.MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+html.theme-3-page .schedule-filter-select.MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--home-tab-active-color, #3d4a5c) !important;
+}
+
+/* Custom hex themes — Schedule filter MUI menu uses accent CSS vars */
+html.custom-theme .schedule-filter-menu {
+  background-color: var(--schedule-select-menu-bg, #ffffff) !important;
+}
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root {
+  color: var(--schedule-select-menu-text, #1c2330) !important;
+}
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root:hover,
+html.custom-theme .schedule-filter-menu-list .MuiMenuItem-root:hover,
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root.Mui-focusVisible,
+html.custom-theme .schedule-filter-menu-list .MuiMenuItem-root.Mui-focusVisible {
+  background-color: var(--schedule-select-menu-hover, rgba(61, 74, 92, 0.16)) !important;
+  color: var(--schedule-select-menu-text, #1c2330) !important;
+}
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root.Mui-selected,
+html.custom-theme .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected,
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root.Mui-selected:hover,
+html.custom-theme .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected:hover,
+html.custom-theme .schedule-filter-menu .MuiMenuItem-root.Mui-selected.Mui-focusVisible,
+html.custom-theme .schedule-filter-menu-list .MuiMenuItem-root.Mui-selected.Mui-focusVisible {
+  background-color: var(--schedule-modal-item-selected-bg, var(--app-button, #3d4a5c)) !important;
+  color: var(--schedule-modal-item-selected-text, #ffffff) !important;
+}
+html.custom-theme .schedule-filter-select.MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+html.custom-theme .schedule-filter-select.MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--home-tab-active-color, var(--app-button, #3d4a5c)) !important;
+}
+
 /* Theme 4 — Quick Controls modals (On/Off labels on dark brown panels) */
 html.theme-4-page .quick-control-modal {
   color: var(--schedule-modal-body-text, #ffffff);
@@ -3078,10 +3147,35 @@ html.theme-4-page .MuiButton-contained:not(.MuiButton-colorError):hover {
   max-width: none;
 }
 
+.schedule-form-shell .schedule-form-left-panel-scroll-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+/* Add Event (advanced) — hide native scrollbar; use ▼ scroll affordance */
+.schedule-form-shell:not(.schedule-form-shell--details) .schedule-form-left-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.schedule-form-shell:not(.schedule-form-shell--details) .schedule-form-left-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* Schedule Details (advanced) — stretch + scroll without native bar */
 .schedule-form-shell--details .schedule-form-left-panel {
   align-self: stretch;
   flex-shrink: 0;
-  min-height: auto;
+  min-height: 0;
+  max-height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;

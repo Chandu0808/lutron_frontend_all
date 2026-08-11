@@ -7,6 +7,7 @@ import {
   THEME_3_TAB_PILL_GRADIENT,
 } from '../config/themeConstants';
 import { applySettingsSidebarTypographyVars } from './settingsSidebarTabStyles';
+import { applyHeatmapTabPillTokens } from '../../../shared/theme/utils/applyHeatmapTabPillTokens';
 
 /** Theme 3 (Blue) page chrome — overrides generic else-branch vars in ThemeContext. */
 export function applyTheme3PageChrome(root) {
@@ -138,8 +139,8 @@ export function applyTheme3PageChrome(root) {
   root.style.setProperty('--schedule-select-text', THEME_3_LIGHT_SURFACE_TEXT);
   root.style.setProperty('--schedule-select-menu-bg', THEME_3_LIGHT_PANEL_BG);
   root.style.setProperty('--schedule-select-menu-text', THEME_3_LIGHT_SURFACE_TEXT);
-  root.style.setProperty('--schedule-select-menu-hover', 'rgba(61, 74, 92, 0.12)');
-  root.style.setProperty('--schedule-select-menu-selected-hover', 'rgba(61, 74, 92, 0.22)');
+  root.style.setProperty('--schedule-select-menu-hover', 'rgba(61, 74, 92, 0.16)');
+  root.style.setProperty('--schedule-select-menu-selected-hover', '#2f3a4a');
   root.style.setProperty('--schedule-modal-item-selected-bg', THEME_3_BUTTON_SOLID);
   root.style.setProperty('--schedule-modal-item-selected-text', '#ffffff');
   root.style.setProperty('--quick-control-page-text', THEME_3_LIGHT_SURFACE_TEXT);
@@ -165,10 +166,11 @@ export function applyTheme3HeatmapChrome(root) {
   root.style.setProperty('--heatmap-sidebar-scrollbar-thumb', THEME_3_BUTTON_SOLID);
   root.style.setProperty('--heatmap-sidebar-scrollbar-thumb-hover', '#2f3948');
   root.style.setProperty('--heatmap-sidebar-scrollbar-track', 'rgba(0, 0, 0, 0.18)');
-  root.style.setProperty('--heatmap-tab-pill-bg', THEME_3_TAB_PILL_GRADIENT);
-  root.style.setProperty('--heatmap-tab-indicator-bg', '#ffffff');
-  root.style.setProperty('--heatmap-tab-active-text', THEME_3_BUTTON_SOLID);
-  root.style.setProperty('--heatmap-tab-inactive-text', '#ffffff');
+  applyHeatmapTabPillTokens(root, {
+    pillBg: THEME_3_TAB_PILL_GRADIENT,
+    activeText: THEME_3_BUTTON_SOLID,
+    contrastSolid: THEME_3_BUTTON_SOLID,
+  });
   root.style.setProperty('--heatmap-dialog-paper-bg', THEME_3_LIGHT_PANEL_BG);
   root.style.setProperty('--heatmap-dialog-section-bg', THEME_3_TAB_PILL_GRADIENT);
   root.style.setProperty('--heatmap-dialog-zone-card-bg', '#ffffff');

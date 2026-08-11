@@ -108,7 +108,7 @@ describe("preset module extraction (Phase 4.3B/4.3C)", () => {
     expect(vars["--settings-panel-inner-bg"]).toBeTruthy();
     expect(vars["--heatmap-tab-pill-bg"]).toBeTruthy();
     expect(vars["--premium-radius-sm"]).toBe("8px");
-    expect(Object.keys(vars).length).toMatchInlineSnapshot(`240`);
+    expect(Object.keys(vars).length).toMatchInlineSnapshot(`249`);
     expect(vars).toMatchSnapshot();
   });
 
@@ -130,7 +130,7 @@ describe("preset module extraction (Phase 4.3B/4.3C)", () => {
     expect(vars["--settings-panel-inner-bg"]).toBeTruthy();
     expect(vars["--heatmap-tab-pill-bg"]).toBeTruthy();
     expect(vars["--premium-radius-sm"]).toBe("8px");
-    expect(Object.keys(vars).length).toMatchInlineSnapshot(`226`);
+    expect(Object.keys(vars).length).toMatchInlineSnapshot(`239`);
     expect(vars).toMatchSnapshot();
   });
 
@@ -184,7 +184,7 @@ describe("preset module extraction (Phase 4.3B/4.3C)", () => {
     const vars = captureMockRootVars(root);
     expect(vars["--settings-panel-inner-bg"]).toBe("#ffffff");
     expect(vars["--heatmap-tab-pill-bg"]).toBe("#3d4a5c");
-    expect(Object.keys(vars).length).toMatchInlineSnapshot(`131`);
+    expect(Object.keys(vars).length).toMatchInlineSnapshot(`138`);
     expect(vars).toMatchSnapshot();
   });
 });

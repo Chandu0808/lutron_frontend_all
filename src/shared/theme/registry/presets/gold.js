@@ -8,6 +8,7 @@ import {
   GOLD_THEME_TAB_INDICATOR_BG,
 } from "../../../../variants/advanced/config/themeConstants";
 import { applySettingsSidebarTypographyVars } from "../settingsSidebarTabStyles";
+import { applyHeatmapTabPillTokens } from "../../utils/applyHeatmapTabPillTokens";
 
 /**
  * Gold preset CSS variables (Phase 4.3B extraction from ThemeContext).
@@ -32,10 +33,12 @@ export function applyGoldPreset(root, context) {
       "--heatmap-sidebar-loading-spinner-color",
       GOLD_THEME_BUTTON_SOLID
     );
-    root.style.setProperty("--heatmap-tab-pill-bg", GOLD_THEME_SURFACE_GRADIENT);
-    root.style.setProperty("--heatmap-tab-indicator-bg", GOLD_THEME_TAB_INDICATOR_BG);
-    root.style.setProperty("--heatmap-tab-active-text", GOLD_THEME_BUTTON_SOLID);
-    root.style.setProperty("--heatmap-tab-inactive-text", "#ffffff");
+    applyHeatmapTabPillTokens(root, {
+      pillBg: GOLD_THEME_SURFACE_GRADIENT,
+      activeText: GOLD_THEME_BUTTON_SOLID,
+      contrastSolid: GOLD_THEME_BUTTON_SOLID,
+      indicatorBg: GOLD_THEME_TAB_INDICATOR_BG,
+    });
     root.style.setProperty("--home-tab-active-color", "#3D3629");
     root.style.setProperty("--home-field-surface-bg", GOLD_THEME_LIGHT_SECTION_BG);
     root.style.setProperty("--home-field-border", "rgba(74, 67, 52, 0.28)");
@@ -120,8 +123,8 @@ export function applyGoldPreset(root, context) {
   root.style.setProperty("--schedule-select-text", GOLD_THEME_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--schedule-select-menu-bg", GOLD_THEME_LIGHT_PANEL_BG);
   root.style.setProperty("--schedule-select-menu-text", GOLD_THEME_LIGHT_SURFACE_TEXT);
-  root.style.setProperty("--schedule-select-menu-hover", "rgba(74, 67, 52, 0.12)");
-  root.style.setProperty("--schedule-select-menu-selected-hover", "rgba(74, 67, 52, 0.22)");
+  root.style.setProperty("--schedule-select-menu-hover", "rgba(74, 67, 52, 0.16)");
+  root.style.setProperty("--schedule-select-menu-selected-hover", "#3D3629");
   root.style.setProperty("--schedule-modal-body-text", GOLD_THEME_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--schedule-modal-muted-text", "rgba(44, 40, 32, 0.72)");
   root.style.setProperty("--schedule-modal-section-label-color", GOLD_THEME_LIGHT_SURFACE_TEXT);

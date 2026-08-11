@@ -44,7 +44,7 @@ const Footer = () => {
             whiteSpace: "nowrap",
           }}
         >
-          communicating with
+          Communicating with
         </Typography>
         <img
           src="/assets/loginlogo.png" // Replace with your logo path

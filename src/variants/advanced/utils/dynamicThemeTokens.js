@@ -11,6 +11,7 @@ import {
 } from './themePageBackground';
 import { applySettingsSidebarTypographyVars } from './settingsSidebarTabStyles';
 import { applyCustomPremiumThemeTokens } from './premiumThemeTokens';
+import { applyHeatmapTabPillTokens } from '../../../shared/theme/utils/applyHeatmapTabPillTokens';
 
 /**
  * Applies CSS variables for custom hex-picker themes (not Gold / Blue / Brown presets).
@@ -92,8 +93,8 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--schedule-select-text', panelOn.primary);
   root.style.setProperty('--schedule-select-menu-bg', panelBg);
   root.style.setProperty('--schedule-select-menu-text', panelOn.primary);
-  root.style.setProperty('--schedule-select-menu-hover', alpha(panelOn.primary, 0.12));
-  root.style.setProperty('--schedule-select-menu-selected-hover', alpha(panelOn.primary, 0.22));
+  root.style.setProperty('--schedule-select-menu-hover', alpha(accentSolid, 0.16));
+  root.style.setProperty('--schedule-select-menu-selected-hover', darken(accentSolid, 0.1));
 
   root.style.setProperty('--quick-control-page-text', pageOn.primary);
   root.style.setProperty('--quick-control-radio-border', accentSolid);
@@ -281,10 +282,11 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--heatmap-sidebar-scrollbar-thumb', accentSolid);
   root.style.setProperty('--heatmap-sidebar-scrollbar-thumb-hover', darken(accentSolid, 0.12));
   root.style.setProperty('--heatmap-sidebar-scrollbar-track', 'rgba(0, 0, 0, 0.18)');
-  root.style.setProperty('--heatmap-tab-pill-bg', dashboardTabPillBg);
-  root.style.setProperty('--heatmap-tab-indicator-bg', '#ffffff');
-  root.style.setProperty('--heatmap-tab-active-text', dashboardSurfaceSolid);
-  root.style.setProperty('--heatmap-tab-inactive-text', '#ffffff');
+  applyHeatmapTabPillTokens(root, {
+    pillBg: dashboardTabPillBg,
+    activeText: dashboardSurfaceSolid,
+    contrastSolid: dashboardSurfaceSolid,
+  });
   root.style.setProperty('--heatmap-dialog-paper-bg', panelBg);
   root.style.setProperty('--heatmap-dialog-section-bg', heatmapSectionBg);
   root.style.setProperty('--heatmap-dialog-zone-card-bg', '#ffffff');

@@ -1691,25 +1691,52 @@ const renderActionDisplay = (action) => {
               Part of
             </label>
             {editMode ? (
-              <select
-                value={scheduleGroup}
-                onChange={e => setScheduleGroup(e.target.value)}
-                disabled={groupsLoading}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  borderRadius: 8,
-                  border: formTheme.inputBorder || '1px solid #ccc',
-                  fontSize: 14,
-                  backgroundColor: formTheme.dayUnselectedBg || 'white',
-                  color: formTheme.inputColor,
-                  boxSizing: 'border-box',
-                }}
-              >
-                {groups && groups.map((group) => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
-                ))}
-              </select>
+              isAdvancedScheduleForm ? (
+                <Select
+                  className="schedule-filter-select"
+                  value={scheduleGroup}
+                  onChange={(e) => setScheduleGroup(e.target.value)}
+                  disabled={groupsLoading}
+                  fullWidth
+                  displayEmpty
+                  MenuProps={scheduleFilterMenuProps}
+                  sx={{
+                    ...scheduleSelectFieldSx,
+                    backgroundColor: formTheme.dayUnselectedBg || 'white',
+                    color: formTheme.inputColor,
+                    '& .MuiSelect-select': {
+                      py: '12px',
+                      px: '12px',
+                    },
+                  }}
+                >
+                  {groups && groups.map((group) => (
+                    <MenuItem key={group.id} value={String(group.id)}>
+                      {group.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              ) : (
+                <select
+                  value={scheduleGroup}
+                  onChange={e => setScheduleGroup(e.target.value)}
+                  disabled={groupsLoading}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    borderRadius: 8,
+                    border: formTheme.inputBorder || '1px solid #ccc',
+                    fontSize: 14,
+                    backgroundColor: formTheme.dayUnselectedBg || 'white',
+                    color: formTheme.inputColor,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {groups && groups.map((group) => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+              )
             ) : (
               <div
                 style={{
