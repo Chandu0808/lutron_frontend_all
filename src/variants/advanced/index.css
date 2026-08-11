@@ -3236,6 +3236,23 @@ html.theme-4-page .MuiButton-contained:not(.MuiButton-colorError):hover {
   color: var(--settings-panel-text, #1c2330);
 }
 
+/* FOFP empty canvas: panel typography rules force dark text; override for contrast. */
+.settings-main-inner-panel .fofp-viewer-empty-message .MuiTypography-root,
+html.gold-theme .settings-main-inner-panel .fofp-viewer-empty-message .MuiTypography-root,
+html.custom-theme .settings-main-inner-panel .fofp-viewer-empty-message .MuiTypography-root,
+html.theme-3-page .settings-main-inner-panel .fofp-viewer-empty-message .MuiTypography-root,
+html.theme-4-page .settings-main-inner-panel .fofp-viewer-empty-message .MuiTypography-root {
+  color: #e2e8f0 !important;
+}
+
+.settings-main-inner-panel .fofp-viewer-empty-message.fofp-viewer-empty-on-light .MuiTypography-root,
+html.gold-theme .settings-main-inner-panel .fofp-viewer-empty-message.fofp-viewer-empty-on-light .MuiTypography-root,
+html.custom-theme .settings-main-inner-panel .fofp-viewer-empty-message.fofp-viewer-empty-on-light .MuiTypography-root,
+html.theme-3-page .settings-main-inner-panel .fofp-viewer-empty-message.fofp-viewer-empty-on-light .MuiTypography-root,
+html.theme-4-page .settings-main-inner-panel .fofp-viewer-empty-message.fofp-viewer-empty-on-light .MuiTypography-root {
+  color: #0f172a !important;
+}
+
 .settings-main-inner-panel .MuiTableCell-root {
   color: var(--settings-panel-text, #1c2330) !important;
 }

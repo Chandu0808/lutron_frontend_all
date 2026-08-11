@@ -1,5 +1,5 @@
 // src/screens/settings/theme/ThemeContext.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect } from "react";
 import {
   alpha,
   createTheme,
@@ -22,8 +22,16 @@ import {
   ThemeMuiProviderShell,
   useThemeProviderBootstrap,
 } from "../../../../../shared/theme/context";
-import { dispatchFetchApplicationThemeOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
+import {
+  dispatchFetchApplicationThemeOnce,
+  syncApplicationThemeSessionCache,
+} from "../../../../../shared/utils/bootstrapFetchGuards";
+import {
+  readAdvancedApplicationThemePin,
+  toAdvancedApplicationThemePayload,
+} from "../../../utils/advancedApplicationThemePersist";
 import { isLightSurface, onContentColors } from "../../../utils/themeOnSurface";
+
 import {
   THEME_3_BUTTON_SOLID,
   THEME_4_BUTTON_SOLID,
@@ -275,12 +283,32 @@ export const ThemeProviderCustom = ({ children }) => {
   const dispatch = useDispatch();
   const applicationTheme = useSelector(selectApplicationTheme);
 
-  // Advanced: always revalidate /theme/application on app load so sessionStorage
-  // cannot keep a previously selected theme after the user saved a new one.
+  // Before paint: lock saved Advanced colors so Topbar/settings soft-fetch cannot
+  // race and paint the wrong chrome after refresh.
+  useLayoutEffect(() => {
+    const pin = readAdvancedApplicationThemePin();
+    if (!pin) return;
+    const payload = toAdvancedApplicationThemePayload(pin);
+    syncApplicationThemeSessionCache(payload);
+    if (fetchApplicationTheme?.fulfilled?.type) {
+      dispatch({ type: fetchApplicationTheme.fulfilled.type, payload });
+    }
+    applyCssVariables(
+      {
+        background: pin.background,
+        content: pin.content,
+        button: pin.button,
+      },
+      DEFAULT_BG
+    );
+  }, [dispatch]);
+
+  // Soft fetch only when there is no pin (first install / cleared storage).
+  // Do NOT auto-write API colors into the pin — that can lock a stale GET over
+  // the user's saved Gold/Brown preset. Pin is written only on Theme Save/Reset.
   useEffect(() => {
-    dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, {
-      force: true,
-    });
+    if (readAdvancedApplicationThemePin()) return;
+    dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
   }, [dispatch]);
 
   const { theme, backgroundImage, reloadTheme } = useThemeProviderBootstrap({

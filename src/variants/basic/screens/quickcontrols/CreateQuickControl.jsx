@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AreaTreeDialog from "./AreaTreeDialog";
 import Action from "./Action";
@@ -32,6 +32,7 @@ import {
   locationHasZoneAction,
   mergeExpandedActionsIntoLocation,
 } from "../../../../shared/quickcontrols/zoneActionHelpers";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const CreateQuickControl = () => {
   const dispatch = useDispatch();
@@ -281,7 +282,8 @@ const CreateQuickControl = () => {
 
   
   // Save quick control (call backend)
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = async () => runSaveOnce(async () => {
     if (!quickControlName.trim() || locations.length === 0) return;
     
     // Check that all locations have at least one action
@@ -398,7 +400,7 @@ const CreateQuickControl = () => {
     } catch (error) {
       // Error alert is shown by createQuickControl thunk; stay on create page.
     }
-  };
+  });
 
   // Cancel: go back to list
   const handleCancel = () => {

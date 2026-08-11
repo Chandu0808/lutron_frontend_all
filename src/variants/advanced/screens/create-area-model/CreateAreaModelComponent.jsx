@@ -1,5 +1,6 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createSingleFlight } from '../../../../shared/utils/createSingleFlight';
 import {
   Box, Button, TextField, Typography,
   List, ListItem, IconButton, ListItemText, Divider, Snackbar,
@@ -112,7 +113,9 @@ const CreateAreaModelComponent = () => {
     });
   };
 
-  const handleSave = () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!groupName || floorAreas.length === 0) {
       setShowCreateFailure(true);
       return;
@@ -140,7 +143,7 @@ const CreateAreaModelComponent = () => {
       .catch((error) => {
         setShowCreateFailure(true);
       });
-  };
+  });
 
   return (
     <Box 

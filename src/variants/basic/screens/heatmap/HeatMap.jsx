@@ -6,6 +6,7 @@ import {
   dispatchFetchApplicationThemeOnce,
   dispatchFetchHeatMapThemeOnce,
 } from "../../../../shared/utils/bootstrapFetchGuards";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
   Box,
   CircularProgress,
@@ -994,7 +995,8 @@ const HeatMap = () => {
       // CRITICAL: If there's an active scene, fetch its details to get fade/delay times
       // This ensures fade/delay times are loaded when area status is refreshed
       // Fade/delay times are stored in the scene definition, not in area status zones
-      if (areaStatus.active_scene && areaStatus.area_id) {
+      // Skip while Area Settings is open — dialog owns scene_status for the editor.
+      if (areaStatus.active_scene && areaStatus.area_id && !settingsOpen) {
         dispatch(fetchSceneStatus({
           areaId: areaStatus.area_id,
           sceneId: areaStatus.active_scene
@@ -1073,7 +1075,7 @@ const HeatMap = () => {
       } else {
       }
     }
-  }, [areaStatus, selectedAreaId, dispatch]);
+  }, [areaStatus, selectedAreaId, dispatch, settingsOpen]);
 
   useEffect(() => {
     if (
@@ -1677,7 +1679,9 @@ const HeatMap = () => {
     );
   };
 
-  const handleApplyShades = async () => {
+  const runApplyShadesOnce = useMemo(() => createSingleFlight(), []);
+  const handleApplyShades = () =>
+    runApplyShadesOnce(async () => {
     // Check if user has permission to update area status
     if (!canUpdateAreaStatus()) {
       return;
@@ -1704,7 +1708,7 @@ const HeatMap = () => {
     } finally {
       setShadesUpdating(false);
     }
-  };
+  });
 
   const zonesToShow = buildSidebarZonesToShow(areaStatus?.zones);
   const zonesPerPage = SIDEBAR_ZONES_PER_PAGE;

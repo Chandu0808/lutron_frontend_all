@@ -38,12 +38,31 @@ export function useThemeProviderBootstrap({
   const themeLoading = useSelector(selectThemeLoading);
   const themeError = useSelector(selectThemeError);
 
-  const [theme, setTheme] = useState(() => createAppTheme({}));
+  const [theme, setTheme] = useState(() => {
+    // Advanced: seed MUI theme from pinned/application colors so first paint is not defaults.
+    if (preferApplicationThemeCss && applicationThemeHasColors(applicationTheme)) {
+      const at = applicationTheme.application_theme;
+      return createAppTheme(
+        {
+          background: at.background,
+          content: at.content,
+          button: at.button,
+        },
+        initialBackgroundImage
+      );
+    }
+    return createAppTheme({});
+  });
   const [backgroundImage, setBackgroundImage] = useState(initialBackgroundImage);
 
   useEffect(() => {
+    // Advanced (preferApplicationThemeCss): never paint empty/default CSS.
+    // Empty apply resolves to #6f809d and strips gold-theme / theme-4-page.
+    if (preferApplicationThemeCss) {
+      return;
+    }
     applyCssVariables({}, mountCssBackground);
-  }, [applyCssVariables, mountCssBackground]);
+  }, [applyCssVariables, mountCssBackground, preferApplicationThemeCss]);
 
   useEffect(() => {
     dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, {

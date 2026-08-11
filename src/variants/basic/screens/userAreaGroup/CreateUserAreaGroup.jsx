@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
     List, ListItem, IconButton, ListItemText, Divider, Snackbar
@@ -13,6 +13,7 @@ import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { fetchAreaGroups } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { DEFAULT_APP_BACKGROUND, isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const CreateUserAreaGroup = () => {
     const role = localStorage.getItem("role")
@@ -71,7 +72,8 @@ const CreateUserAreaGroup = () => {
         });
     };
 
-    const handleSave = () => {
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const handleSave = async () => runSaveOnce(async () => {
         setIsDisable(true)
         if (!groupName || floorAreas.length === 0) {
             setShowCreateFailure(true);
@@ -102,7 +104,7 @@ const CreateUserAreaGroup = () => {
                 setShowCreateFailure(true);
                 setIsDisable(false)
             });
-    };
+    });
 
     return (
         <Box className="area-group-container" sx={{

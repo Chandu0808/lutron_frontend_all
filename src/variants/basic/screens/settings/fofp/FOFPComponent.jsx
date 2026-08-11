@@ -15,6 +15,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import { toSafeReactText } from '../../../../../utils/safeReactText';
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -93,6 +94,7 @@ const numEq = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-3;
 
 const FOFPComponent = () => {
   const dispatch = useDispatch();
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
   const theme = useTheme();
   const { role } = UseAuth();
   const appTheme = useSelector(selectApplicationTheme);
@@ -378,7 +380,7 @@ const FOFPComponent = () => {
 
   // -------------------- save flow --------------------
 
-  const handleSave = async () => {
+  const handleSave = async () => runSaveOnce(async () => {
     if (!selectedFloorId || !dirty) return;
     const modified = Array.from(dirtyMap.values()).map((p) => {
       const row = {
@@ -416,7 +418,7 @@ const FOFPComponent = () => {
         ...swalOptions,
       });
     }
-  };
+  });
 
   const handleDiscard = () => {
     setWorkingMap(new Map(originalMap));

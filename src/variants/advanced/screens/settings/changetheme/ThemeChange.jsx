@@ -30,6 +30,10 @@ import {
     dispatchFetchThemeSettingsOnce,
     syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
+    toAdvancedApplicationThemePayload,
+    writeAdvancedApplicationThemePin,
+} from '../../../utils/advancedApplicationThemePersist';
 import { setUiVariant } from '../../../../../utils/uiVariant';
 import {
     DEFAULT_APP_BACKGROUND,
@@ -196,35 +200,19 @@ const ThemeChange = () => {
     const handleThemeSave = async () => {
         setUiVariant('advanced');
         const payload = {
-            background: normalizeColor(themeColorMap.Background),
-            content: normalizeColor(
-                appTheme?.application_theme?.content || themeColorMap.Content || DEFAULT_APP_CONTENT
-            ),
-            button: normalizeColor(
-                appTheme?.application_theme?.button || themeColorMap.Button || '#232323'
-            ),
+            background: normalizeColor(themeColorMap.Background || DEFAULT_APP_BACKGROUND),
+            content: normalizeColor(themeColorMap.Content || DEFAULT_APP_CONTENT),
+            button: normalizeColor(themeColorMap.Button || '#232323'),
         };
 
         try {
-            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload, backgroundImage);
-            const nextApplicationTheme = {
-                ...(appTheme || {}),
-                ...(response && typeof response === 'object' ? response : {}),
-                application_theme: {
-                    ...(appTheme?.application_theme || {}),
-                    ...(response?.application_theme || {}),
-                    ...payload,
-                },
-            };
+            const nextApplicationTheme = toAdvancedApplicationThemePayload(payload);
+            writeAdvancedApplicationThemePin(payload);
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
-            if (typeof window !== 'undefined') {
-                setTimeout(() => window.location.reload(), 300);
-            }
         } catch (error) {
             // Optionally handle error feedback here
         }
@@ -272,25 +260,13 @@ const ThemeChange = () => {
         };
 
         try {
-            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload);
-            const nextApplicationTheme = {
-                ...(appTheme || {}),
-                ...(response && typeof response === 'object' ? response : {}),
-                application_theme: {
-                    ...(appTheme?.application_theme || {}),
-                    ...(response?.application_theme || {}),
-                    ...payload,
-                },
-            };
+            const nextApplicationTheme = toAdvancedApplicationThemePayload(payload);
+            writeAdvancedApplicationThemePin(payload);
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
-            if (typeof window !== 'undefined') {
-                setTimeout(() => window.location.reload(), 300);
-            }
         } catch (error) {
             // Optionally handle error feedback here
         }

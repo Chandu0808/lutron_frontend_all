@@ -2,7 +2,8 @@
 // - Superadmin: Can create Admin and Operator users
 // - Admin: Can only create Operator users
 // - Operator: Cannot create any users
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import {
   Dialog,
   DialogTitle,
@@ -176,7 +177,9 @@ export default function CreateUser({ open, onClose }) {
     !emailError
   );
 
-  const handleSave = () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!name.trim()) {
       setNameError("Name is required");
       setSnackbarMessage("Name is required");
@@ -199,7 +202,7 @@ export default function CreateUser({ open, onClose }) {
           : [],
     };
     dispatch(createUser(payload));
-  };
+  });
 
   const handleClose = () => {
     onClose();

@@ -45,12 +45,12 @@ const BASIC_PLOT_STYLE = {
   boxSizing: 'border-box',
 };
 
-/** Basic Savings By Strategy donut — keep circle readable without oversized empty chrome. */
+/** Basic Savings By Strategy donut — taller so % callouts at top/bottom are not clipped. */
 const BASIC_COMBINED_STRATEGY_PLOT_STYLE = {
   ...BASIC_PLOT_STYLE,
-  height: '300px',
-  minHeight: '300px',
-  padding: '14px 10px 12px',
+  height: '400px',
+  minHeight: '400px',
+  padding: '18px 12px 20px',
   position: 'relative',
   overflow: 'visible',
 };

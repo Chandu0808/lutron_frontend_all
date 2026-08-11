@@ -4,8 +4,9 @@ import { getUsersSettingsBindings } from './bindUsersSettingsModule';
 // - Superadmin: Can create Admin, Operator, and Superadmin users
 // - Admin: Can only create Operator users
 // - Operator: Cannot create any users
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { dispatchFetchFloorsOnce } from '../../utils/bootstrapFetchGuards';
+import { createSingleFlight } from '../../utils/createSingleFlight';
 import {
   Dialog,
   DialogTitle,
@@ -230,7 +231,9 @@ export default function CreateUser({ open, onClose }) {
     "Monitoring and control": "monitor_control",
     "Monitoring, edit and control": "monitor_control_edit",
   };
-  const handleSave = () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!name.trim()) {
       setNameError("Name is required");
       showSnackbar("Name is required", "error");
@@ -251,7 +254,7 @@ export default function CreateUser({ open, onClose }) {
           : [],
     };
     dispatch(createUser(payload));
-  };
+  });
 
   const floorSelectMenuProps = {
     autoFocus: false,

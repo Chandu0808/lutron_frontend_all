@@ -10,6 +10,29 @@ import { installGlobalAuthHandlers } from './installGlobalAuthHandlers';
 const variant = getUiVariant();
 if (variant === 'advanced') {
   require('./variants/advanced/index.css');
+  // Apply saved Advanced theme before async chunks load so gold/theme-4 classes
+  // exist on first paint (default body CSS is slate until then).
+  try {
+    const {
+      readAdvancedApplicationThemePin,
+    } = require('./variants/advanced/utils/advancedApplicationThemePersist');
+    const {
+      applyAdvancedCssVariables,
+    } = require('./shared/theme/registry/applyAdvancedCssVariables');
+    const pin = readAdvancedApplicationThemePin();
+    if (pin && (pin.background || pin.content || pin.button)) {
+      applyAdvancedCssVariables(
+        {
+          background: pin.background,
+          content: pin.content,
+          button: pin.button,
+        },
+        '/assets/defaultBg.png'
+      );
+    }
+  } catch {
+    // Pin / CSS apply is best-effort; ThemeProvider will hydrate later.
+  }
 } else if (variant === 'customized') {
   require('./variants/customized/index.css');
 } else {

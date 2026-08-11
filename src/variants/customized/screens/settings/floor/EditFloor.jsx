@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getProcessorId } from '../../../../../utils/processorId';
 import { validateAreaCoordinatesCsvFile } from '../../../../../utils/areaCoordinatesCsv';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { ConfirmDialog } from '../../../utils/FeedbackUI';
 import FloorPlanPdfPreview from '../../../../../shared/pdf/FloorPlanPdfPreview';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 
 const VisuallyHiddenInput = styled('input')({
   clip: 'rect(0 0 0 0)',
@@ -145,7 +146,8 @@ export default function EditFloor() {
     }
   };
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = async () => runSaveOnce(async () => {
     if (!floorName.trim()) {
       displayErrorSnackbar('Floor name is required.');
       return;
@@ -197,7 +199,7 @@ export default function EditFloor() {
       displayErrorSnackbar(`Update failed: ${err.message || 'Unknown error'}`);
       setIsLoading(false);
     }
-  };
+  });
 
   const handleRemoveProcessor = (index) => {
     const processor = processorList[index];

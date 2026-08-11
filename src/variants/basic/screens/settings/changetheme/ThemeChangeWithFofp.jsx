@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import { Box, Button, Grid, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -88,6 +89,9 @@ const ThemeChange = () => {
     const theme = useTheme();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const runThemeSaveOnce = useMemo(() => createSingleFlight(), []);
+    const runThemeResetOnce = useMemo(() => createSingleFlight(), []);
+    const runHeatmapSaveOnce = useMemo(() => createSingleFlight(), []);
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
     const heatMapTheme = useSelector(selectHeatMapTheme)
@@ -216,7 +220,7 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors saved successfully.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeSave = async () => {
+    const handleThemeSave = async () => runThemeSaveOnce(async () => {
         const payload = {
             background: normalizeColor(themeColorMap.Background),
             content: normalizeColor(themeColorMap.Content),
@@ -246,9 +250,9 @@ const ThemeChange = () => {
         } catch (error) {
             // Optionally handle error feedback here
         }
-    };
+    });
 
-    const handleHeatmapSave = () => {
+    const handleHeatmapSave = async () => runHeatmapSaveOnce(async () => {
         const payload = {
             light: normalizeColor(heatmapColorMap.Light),
             occupancy: normalizeColor(heatmapColorMap.Occupancy),
@@ -262,7 +266,7 @@ const ThemeChange = () => {
         }
         setSnackbarMessage("Heatmap colors saved successfully.");
         setSnackbarOpen(true);
-    };
+    });
 
     // const handleThemeReset = () => {
     //     setThemeColorMap(DEFAULT_THEME_COLORS);
@@ -275,7 +279,7 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors reset to default.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeReset = async () => {
+    const handleThemeReset = async () => runThemeResetOnce(async () => {
         const defaultColors = { ...DEFAULT_THEME_COLORS };
 
         setActiveThemeTab('Background');
@@ -312,7 +316,7 @@ const ThemeChange = () => {
         } catch (error) {
             // Optionally handle error feedback here
         }
-    };
+    });
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
     const fileInputRef = React.useRef();

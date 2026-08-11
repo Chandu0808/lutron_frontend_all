@@ -581,11 +581,30 @@ const FOFPLayoutViewer = ({
       </Stack>
 
       {!pdfUrl && (
-        <Box sx={{ textAlign: "center", color: theme.palette.grey[400] }}>
-          <Typography variant="h6" sx={{ fontWeight: theme.typography.fontWeightBold }}>
+        <Box
+          className={`fofp-viewer-empty-message${isLightChrome ? " fofp-viewer-empty-on-light" : ""}`}
+          sx={{ textAlign: "center", px: 2 }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: theme.typography.fontWeightBold,
+              // Beat `.settings-main-inner-panel .MuiTypography-root` panel text CSS.
+              color: `${isLightChrome ? "#0f172a" : "#E2E8F0"} !important`,
+            }}
+          >
             No Floor Selected
           </Typography>
-          <Typography variant="body2">
+          <Typography
+            variant="body2"
+            sx={{
+              color: `${
+                isLightChrome
+                  ? "rgba(15, 23, 42, 0.72)"
+                  : "rgba(226, 232, 240, 0.88)"
+              } !important`,
+            }}
+          >
             Select a floor from the toolbar to load the editable floorplan.
           </Typography>
         </Box>

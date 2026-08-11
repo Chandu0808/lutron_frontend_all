@@ -55,29 +55,20 @@ const Maintenance = () => {
     "& .MuiSvgIcon-root": { fontSize: 20 },
   };
 
-  // Match Alerts / Processors settings typography (Roboto + settings size scale).
-  const settingsFontFamily = 'Roboto, Helvetica, Arial, sans-serif';
+  // Match Advanced Alerts / Processors settings typography (theme Roboto; no custom stack).
   const titleSx = {
-    fontFamily: settingsFontFamily,
     fontWeight: "bold",
-    color: panelText,
-    mb: 0.5,
     fontSize: { xs: "14px", sm: "16px", md: "18px" },
-    lineHeight: 1.3,
   };
   const bodyMutedSx = {
-    fontFamily: settingsFontFamily,
+    mb: 1,
     color: panelMuted,
     fontSize: { xs: 12, sm: 13, md: 14 },
-    fontWeight: 400,
-    lineHeight: 1.45,
   };
   const sectionHeadingSx = {
-    fontFamily: settingsFontFamily,
-    color: panelText,
-    fontWeight: 600,
+    fontWeight: "bold",
     fontSize: { xs: 12, sm: 13, md: 14 },
-    lineHeight: 1.4,
+    color: panelText,
   };
   const categoryLabelSx = {
     color: panelText,
@@ -85,18 +76,13 @@ const Maintenance = () => {
     ml: 0,
     mr: 0,
     "& .MuiFormControlLabel-label": {
-      fontFamily: settingsFontFamily,
       fontSize: { xs: 12, sm: 13, md: 14 },
       fontWeight: 500,
-      lineHeight: 1.4,
     },
   };
   const hintSx = {
-    fontFamily: settingsFontFamily,
     color: panelMuted,
     fontSize: { xs: 11, sm: 12, md: 13 },
-    fontWeight: 400,
-    lineHeight: 1.4,
   };
   const [selectedTypes, setSelectedTypes] = useState(["devices"]);
   const [downloading, setDownloading] = useState(false);
@@ -164,13 +150,14 @@ const Maintenance = () => {
           gap: 2,
           p: 2,
           maxWidth: 980,
-          fontFamily: settingsFontFamily,
         }}
       >
         <Box>
-          <Typography variant="h4" sx={titleSx}>
-            Maintenance Report
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 0.5 }}>
+            <Typography variant="h4" sx={titleSx}>
+              Maintenance Report
+            </Typography>
+          </Box>
           <Typography sx={bodyMutedSx}>
             Generate a live report from all processors. Select device categories or area occupancy mode.
           </Typography>
@@ -244,9 +231,6 @@ const Maintenance = () => {
               sx={{
                 backgroundColor: buttonColor,
                 color: "#fff",
-                fontFamily: settingsFontFamily,
-                fontWeight: 700,
-                fontSize: { xs: 12, sm: 13, md: 14 },
                 textTransform: "none",
                 "&:hover": { backgroundColor: darken(buttonColor, 0.12) },
               }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
     List, ListItem, IconButton, ListItemText, Divider, Snackbar,
@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { ConfirmDialog } from '../../utils/FeedbackUI';
 import { isWhiteAreaPickerChrome } from '../../utils/themeOnSurface';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const UpdateUserAreaGroup = () => {
     const { id } = useParams()
@@ -176,7 +177,8 @@ const UpdateUserAreaGroup = () => {
         });
     };
 
-    const handleSave = () => {
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const handleSave = async () => runSaveOnce(async () => {
         if (!groupName || floorAreas.length === 0) {
             setShowCreateFailure(true);
             return;
@@ -225,7 +227,7 @@ const UpdateUserAreaGroup = () => {
                     setShowSnackbar(true);
                 });
         }
-    };
+    });
     useEffect(() => {
         dispatch(fetchSingleAreaGroups(id));
 

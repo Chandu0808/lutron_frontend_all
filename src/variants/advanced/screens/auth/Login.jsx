@@ -1,5 +1,5 @@
 // src/screens/authentication/Login.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Card,
@@ -39,6 +39,7 @@ import {
 } from "./authFormStyles";
 import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const Login = () => {
   const dispatch = useDispatch();
@@ -115,8 +116,10 @@ const Login = () => {
     navigate("/dashboard/overview", { replace: true });
   };
 
+  const runSubmitOnce = useMemo(() => createSingleFlight(), []);
   const handleSubmit = async (e) => {
     e.preventDefault();
+    return runSubmitOnce(async () => {
     const uErr = validateField("username", creds.username);
     const pErr = validateField("password", creds.password);
     setErrs({ username: uErr, password: pErr });
@@ -131,6 +134,7 @@ const Login = () => {
     } catch {
       setLoginError(true);
     }
+  });
   };
 
   return (

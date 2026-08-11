@@ -9,6 +9,7 @@ import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
 import { fetchAreaGroups } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 /** Aggregate per-floor area ids from all "Add location" batches (deduped). */
 function buildFloorAreasFromLocations(locations) {
@@ -66,7 +67,8 @@ const CreateUserAreaGroup = () => {
         ]);
     };
 
-    const handleSave = () => {
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const handleSave = async () => runSaveOnce(async () => {
         setIsDisable(true);
         const trimmedName = String(groupName ?? '').trim();
         if (!trimmedName || floorAreas.length === 0) {
@@ -108,7 +110,7 @@ const CreateUserAreaGroup = () => {
                 setShowCreateFailure(true);
                 setIsDisable(false);
             });
-    };
+    });
 
     return (
         <Box

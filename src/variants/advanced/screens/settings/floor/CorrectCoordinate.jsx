@@ -21,6 +21,7 @@ import { fetchFloorMapData } from '../../../redux/slice/settingsslice/heatmap/He
 import { MdArrowBack, MdExpandMore } from 'react-icons/md';
 import { Document, Page } from "react-pdf";
 import { configurePdfJsWorker, buildPdfDocumentFile } from '../../../../../shared/pdf/floorPlanPdf';
+import { createSingleFlight } from '../../../../../shared/utils/createSingleFlight';
 import { getPolygonRings, flattenAreaCoords } from '../../../utils/floorplanCoordinates';
 import { premiumSelectMenuProps } from '../Users/userSelectMenuProps';
 import {
@@ -91,7 +92,9 @@ export default function CorrectCoordinate() {
     setScaleValue('');
   };
 
-  const handleApplyAction = async () => {
+  const runApplyOnce = useMemo(() => createSingleFlight(), []);
+  const handleApplyAction = () =>
+    runApplyOnce(async () => {
     if (selectedAction && selectedSubAction) {
       const payload = {
         floorId: parseInt(floorId),
@@ -140,7 +143,7 @@ export default function CorrectCoordinate() {
         setShowErrorSnackbar(true);
       }
     }
-  };
+  });
 
   const handleFit = () => {
     if (!containerRef.current || !pageDims.width || !pageDims.height) return;

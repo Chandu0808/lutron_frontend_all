@@ -1,5 +1,5 @@
 // src/screens/authentication/Login.jsx
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useMemo } from "react";
 import {
   Box,
   Card,
@@ -35,6 +35,7 @@ import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
 import { dispatchFetchThemeSettingsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 import { resolveAuthPageBackgroundUrl } from "../../../../utils/themeBackgroundImage";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const Login = () => {
   const theme = useTheme();
@@ -125,8 +126,10 @@ const Login = () => {
     navigate(DASHBOARD_DEFAULT_PATH, { replace: true });
   };
 
+  const runSubmitOnce = useMemo(() => createSingleFlight(), []);
   const handleSubmit = async (e) => {
     e.preventDefault();
+    return runSubmitOnce(async () => {
     const uErr = validateField("username", creds.username);
     const pErr = validateField("password", creds.password);
     setErrs({ username: uErr, password: pErr });
@@ -141,6 +144,7 @@ const Login = () => {
     } catch {
       setLoginError(true);
     }
+  });
   };
 
   return (

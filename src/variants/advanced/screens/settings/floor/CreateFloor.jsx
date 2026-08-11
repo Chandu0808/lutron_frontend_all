@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { getProcessorId } from '../../../../../utils/processorId';
 import { validateAreaCoordinatesCsvFile } from '../../../../../utils/areaCoordinatesCsv';
 import { useNavigate, Navigate } from 'react-router-dom';
@@ -37,6 +37,7 @@ import FloorPlanPdfPreview from '../../../../../shared/pdf/FloorPlanPdfPreview';
 
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { getThemeButtonColor } from '../../../utils/themePageBackground';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 
 
 const VisuallyHiddenInput = styled('input')({
@@ -479,7 +480,8 @@ export default function CreateFloor() {
   //   }
   // };
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = async () => runSaveOnce(async () => {
     if (saving) return; // prevent double click
 
     setShowCreateError(false);
@@ -570,7 +572,7 @@ export default function CreateFloor() {
     } finally {
       setSaving(false); // always stop
     }
-  };
+  });
 
   const handleCancel = () => {
     setFloorName('');

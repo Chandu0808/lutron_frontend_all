@@ -6,6 +6,7 @@ import {
   dispatchFetchApplicationThemeOnce,
   dispatchFetchHeatMapThemeOnce,
 } from "../../../../shared/utils/bootstrapFetchGuards";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
   Box,
   CircularProgress,
@@ -83,6 +84,7 @@ import AreaSettingsDialog, {
 import { HeatmapFooterActions } from './HeatmapControls';
 
 import { fetchApplicationTheme, fetchHeatMapTheme, selectApplicationTheme, selectHeatMapTheme } from "../../redux/slice/theme/themeSlice";
+import { readAdvancedApplicationThemePin } from "../../utils/advancedApplicationThemePersist";
 import { isLightSurface, isWhiteAreaPickerChrome, onContentColors } from "../../utils/themeOnSurface";
 //import SearchComponent from "../../layouts/SearchComponent"; // adjust path as needed
 
@@ -493,8 +495,15 @@ const HeatMap = () => {
   }, [heatMapTheme, lightColor, occupancyColor, energyBaseColor]);
   useEffect(() => {
     dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme);
+    // Do not soft-fetch application theme when Advanced pin/colors already exist —
+    // that race was overwriting Gold/Brown page chrome after refresh.
+    const pin = readAdvancedApplicationThemePin();
+    if (pin?.background || pin?.content || pin?.button) return;
+    if (appTheme?.application_theme?.background || appTheme?.application_theme?.content) {
+      return;
+    }
     dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme);
-  }, [dispatch]);
+  }, [dispatch, appTheme]);
 
   const lastFloorMapFloorIdRef = useRef(null);
   const displayModeRef = useRef(displayMode);
@@ -987,7 +996,8 @@ const HeatMap = () => {
       // CRITICAL: If there's an active scene, fetch its details to get fade/delay times
       // This ensures fade/delay times are loaded when area status is refreshed
       // Fade/delay times are stored in the scene definition, not in area status zones
-      if (areaStatus.active_scene && areaStatus.area_id) {
+      // Skip while Area Settings is open — dialog owns scene_status for the editor.
+      if (areaStatus.active_scene && areaStatus.area_id && !settingsOpen) {
         dispatch(fetchSceneStatus({
           areaId: areaStatus.area_id,
           sceneId: areaStatus.active_scene
@@ -1066,7 +1076,7 @@ const HeatMap = () => {
       } else {
       }
     }
-  }, [areaStatus, selectedAreaId, dispatch]);
+  }, [areaStatus, selectedAreaId, dispatch, settingsOpen]);
 
   useEffect(() => {
     if (
@@ -1666,7 +1676,9 @@ const HeatMap = () => {
     );
   };
 
-  const handleApplyShades = async () => {
+  const runApplyShadesOnce = useMemo(() => createSingleFlight(), []);
+  const handleApplyShades = () =>
+    runApplyShadesOnce(async () => {
     // Check if user has permission to update area status
     if (!canUpdateAreaStatus()) {
       return;
@@ -1693,7 +1705,7 @@ const HeatMap = () => {
     } finally {
       setShadesUpdating(false);
     }
-  };
+  });
 
   const zonesToShow = buildSidebarZonesToShow(areaStatus?.zones);
   const hasSidebarShades = shades.length > 0;

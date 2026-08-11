@@ -1,6 +1,7 @@
 // src/screens/auth/ChangePassword.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { toSafeReactText } from '../../../../utils/safeReactText';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
   Box,
   Card,
@@ -107,8 +108,10 @@ const ChangePassword = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: validationError }));
   };
+  const runSubmitOnce = useMemo(() => createSingleFlight(), []);
   const handleSubmit = async (e) => {
     e.preventDefault();
+    return runSubmitOnce(async () => {
     // Validate all fields
     const currentPasswordError = validateField("currentPassword", formData.currentPassword);
     const newPasswordError = validateField("newPassword", formData.newPassword);
@@ -128,6 +131,7 @@ const ChangePassword = () => {
         new_password: formData.newPassword,
       })
     );
+  });
   };
   const pageBackgroundUrl = resolveAuthPageBackgroundUrl(
     theme?.palette?.custom?.backgroundImage

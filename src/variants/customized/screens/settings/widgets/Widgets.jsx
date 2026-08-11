@@ -102,6 +102,7 @@ import {
     CUSTOMIZED_GUARANTEED_SPACE_BUILTIN_ROWS,
     mergeGuaranteedCustomizedBuiltinRows,
 } from "../../../utils/customizedDashboardBuiltinWidgetRows";
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 
 export default function RenameWidget() {
     const dispatch = useDispatch();
@@ -398,7 +399,8 @@ export default function RenameWidget() {
         setGraphEditOpen(true);
     };
 
-    const handleSaveGraphEdit = async () => {
+    const runSaveGraphEditOnce = useMemo(() => createSingleFlight(), []);
+    const handleSaveGraphEdit = async () => runSaveGraphEditOnce(async () => {
         if (!graphEditName.trim()) return;
         if (graphEditIsCustom) {
             if (!graphEditCustomId) return;
@@ -570,7 +572,7 @@ export default function RenameWidget() {
         } catch {
             setErrorSnackbarOpen(true);
         }
-    };
+    });
 
     const handleCheckboxRowEdit = (row) => {
         openGraphEdit(row);

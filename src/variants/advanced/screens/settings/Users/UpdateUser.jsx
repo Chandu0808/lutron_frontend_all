@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import {
   Dialog,
   DialogTitle,
@@ -191,7 +192,9 @@ export default function UpdateUser({ open, user, onClose }) {
 
   const selectedFloorIds = selectedFloors.map((f) => f.id);
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!user?.id || !canSave) return;
     const body = buildUserPatchBody({
       name,
@@ -229,7 +232,7 @@ export default function UpdateUser({ open, user, onClose }) {
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
     }
-  };
+  });
 
   const handleClose = () => {
     setSnackbarOpen(false);

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import {
     Box,
     Button,
@@ -231,6 +232,7 @@ const HomeComponent = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
 
     // Get current user role for sidebar filtering
     const { role: currentUserRole } = UseAuth();
@@ -528,7 +530,7 @@ const HomeComponent = () => {
             .trim();
     };
 
-    const handleSave = async () => {
+    const handleSave = async () => runSaveOnce(async () => {
         const formData = new FormData();
 
         if (displayMode === 'Lutron') {
@@ -570,7 +572,7 @@ const HomeComponent = () => {
                 await dispatchFetchProjectOnce(dispatch, getLutronDataProject, { force: true });
             }
         }
-    };
+    });
 
     const handleCloseSuccessMessage = () => {
         setShowSuccessMessage(false);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchQuickControlDetails,
@@ -41,6 +41,7 @@ import {
   locationHasZoneAction,
   mergeExpandedActionsIntoLocation,
 } from '../../../../shared/quickcontrols/zoneActionHelpers';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 /** Scrollable table body so fixed action buttons do not cover rows. */
 const quickControlDetailsTableScrollStyle = {
@@ -757,7 +758,8 @@ const QuickControlDetails = () => {
     resetCommonActionDialog();
   };
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = async () => runSaveOnce(async () => {
     if (!editableControl || updateStatus === 'loading') return;
 
     const hasLocationsWithoutActions = editableControl.quick_control_areas.some(area => !area.actions || area.actions.length === 0);
@@ -799,7 +801,7 @@ const QuickControlDetails = () => {
         message: error?.message || "Failed to save Quick Control"
       });
     }
-  };
+  });
 
   const handleEditChange = (field, value) => {
     setEditableControl(prev => ({ ...prev, [field]: value }));
