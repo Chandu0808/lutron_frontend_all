@@ -309,7 +309,7 @@ const CreateAreaGroup = () => {
                                         }}
                                     >
                                         <Typography variant="body1" sx={{ flexGrow: 1 }}>
-                                            {location.floorName} &gt; {name}
+                                            {location.floorName} / {name}
                                         </Typography>
                                     </ListItem>
                                 ))

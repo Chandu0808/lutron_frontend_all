@@ -7,6 +7,7 @@ import {
   THEME_4_TAB_PILL_GRADIENT,
 } from "../../../../variants/advanced/config/themeConstants";
 import { applySettingsSidebarTypographyVars } from "../settingsSidebarTabStyles";
+import { applyHeatmapTabPillTokens } from "../../utils/applyHeatmapTabPillTokens";
 
 /**
  * Theme 4 preset CSS variables.
@@ -46,10 +47,13 @@ export function applyTheme4Preset(root, context = {}) {
     "--heatmap-sidebar-loading-spinner-color",
     THEME_4_BUTTON_SOLID
   );
-  root.style.setProperty("--heatmap-tab-pill-bg", THEME_4_LIGHT_SECTION_BG);
-  root.style.setProperty("--heatmap-tab-indicator-bg", "#ffffff");
-  root.style.setProperty("--heatmap-tab-active-text", THEME_4_BUTTON_SOLID);
-  root.style.setProperty("--heatmap-tab-inactive-text", THEME_4_LIGHT_SURFACE_TEXT);
+  // Dark brown track (same as cards) so inactive white labels stay readable —
+  // matches Gold / Blue dashboard tabs. Do not use light cream track here.
+  applyHeatmapTabPillTokens(root, {
+    pillBg: THEME_4_TAB_PILL_GRADIENT,
+    activeText: THEME_4_BUTTON_SOLID,
+    contrastSolid: THEME_4_BUTTON_SOLID,
+  });
   root.style.setProperty("--home-editor-text", THEME_4_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--home-tab-active-color", "#403A31");
   root.style.setProperty("--home-field-surface-bg", "#f0ebe3");
@@ -93,8 +97,8 @@ export function applyTheme4Preset(root, context = {}) {
   root.style.setProperty("--schedule-select-text", THEME_4_LIGHT_SURFACE_TEXT);
   root.style.setProperty("--schedule-select-menu-bg", THEME_4_LIGHT_PANEL_BG);
   root.style.setProperty("--schedule-select-menu-text", THEME_4_LIGHT_SURFACE_TEXT);
-  root.style.setProperty("--schedule-select-menu-hover", "rgba(64, 58, 49, 0.12)");
-  root.style.setProperty("--schedule-select-menu-selected-hover", "rgba(64, 58, 49, 0.22)");
+  root.style.setProperty("--schedule-select-menu-hover", "rgba(64, 58, 49, 0.16)");
+  root.style.setProperty("--schedule-select-menu-selected-hover", "#352f28");
   root.style.setProperty("--area-picker-light-dialog-bg", THEME_4_TAB_PILL_GRADIENT);
   root.style.setProperty("--area-picker-light-dialog-title-color", "#ffffff");
   root.style.setProperty("--area-picker-light-dialog-field-text", "#2c2820");

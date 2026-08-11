@@ -218,7 +218,7 @@ const CreateUserAreaGroup = () => {
                                         textOverflow: 'ellipsis',
                                         minWidth: 0
                                     }}>
-                                        {location.floorName} &gt; {name}
+                                        {location.floorName} / {name}
                                     </Typography>
                                 </ListItem>
                             ))

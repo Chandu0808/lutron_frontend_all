@@ -6,26 +6,29 @@ const scheduleMenuItemSx = {
   minHeight: 36,
   '&:hover': {
     backgroundColor:
-      'var(--schedule-select-menu-hover, rgba(61, 74, 92, 0.12)) !important',
+      'var(--schedule-select-menu-hover, var(--advanced-menu-item-hover-bg, rgba(61, 74, 92, 0.12))) !important',
   },
   '&.Mui-focusVisible': {
     backgroundColor:
-      'var(--schedule-select-menu-hover, rgba(61, 74, 92, 0.12)) !important',
+      'var(--schedule-select-menu-hover, var(--advanced-menu-item-hover-bg, rgba(61, 74, 92, 0.12))) !important',
   },
   '&.Mui-selected': {
     backgroundColor:
-      'var(--schedule-modal-item-selected-bg, #3d4a5c) !important',
-    color: 'var(--schedule-modal-item-selected-text, #fff) !important',
+      'var(--schedule-modal-item-selected-bg, var(--advanced-menu-item-selected-bg, #3d4a5c)) !important',
+    color:
+      'var(--schedule-modal-item-selected-text, var(--advanced-menu-item-selected-text, #fff)) !important',
   },
   '&.Mui-selected:hover': {
     backgroundColor:
-      'var(--schedule-select-menu-selected-hover, rgba(61, 74, 92, 0.28)) !important',
-    color: 'var(--schedule-modal-item-selected-text, #fff) !important',
+      'var(--schedule-select-menu-selected-hover, var(--advanced-menu-item-selected-hover-bg, var(--schedule-modal-item-selected-bg, #3d4a5c))) !important',
+    color:
+      'var(--schedule-modal-item-selected-text, var(--advanced-menu-item-selected-text, #fff)) !important',
   },
   '&.Mui-selected.Mui-focusVisible': {
     backgroundColor:
-      'var(--schedule-select-menu-selected-hover, rgba(61, 74, 92, 0.28)) !important',
-    color: 'var(--schedule-modal-item-selected-text, #fff) !important',
+      'var(--schedule-select-menu-selected-hover, var(--advanced-menu-item-selected-hover-bg, var(--schedule-modal-item-selected-bg, #3d4a5c))) !important',
+    color:
+      'var(--schedule-modal-item-selected-text, var(--advanced-menu-item-selected-text, #fff)) !important',
   },
 };
 

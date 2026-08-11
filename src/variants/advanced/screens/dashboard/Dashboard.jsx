@@ -3228,7 +3228,7 @@ function Dashboard() {
                     bottom: 4,
                     left: tabIndicator.left,
                     width: tabIndicator.width,
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'var(--heatmap-tab-indicator-bg, #ffffff)',
                     borderRadius: '999px',
                     transition: pinAdvancedDashboardScrollChrome ? 'none' : (tabIndicator.ready ? 'left 0.8s cubic-bezier(0.4, 0, 0.2, 1), width 0.8s cubic-bezier(0.4, 0, 0.2, 1)' : 'none'),
                     opacity: tabIndicator.ready ? 1 : 0,
