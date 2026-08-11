@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
     List, ListItem, IconButton, ListItemText, Divider, Snackbar,
@@ -17,6 +17,7 @@ import { selectProfile } from '../../redux/slice/auth/userlogin';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { ConfirmDialog } from '../../utils/FeedbackUI';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 const UpdateAreaGroup = () => {
     const { id } = useParams()
     const [searchParams] = useSearchParams();
@@ -170,7 +171,8 @@ const UpdateAreaGroup = () => {
         });
     };
 
-    const handleSave = () => {
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const handleSave = async () => runSaveOnce(async () => {
         if (!groupName || floorAreas.length === 0) {
             setShowCreateFailure(true);
             return;
@@ -219,7 +221,7 @@ const UpdateAreaGroup = () => {
                     setShowSnackbar(true);
                 });
         }
-    };
+    });
     useEffect(() => {
         dispatch(fetchSingleAreaGroups(id));
         

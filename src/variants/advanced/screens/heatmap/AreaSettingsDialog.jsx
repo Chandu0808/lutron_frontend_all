@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Typography, Box, CircularProgress, OutlinedInput, Select, MenuItem, Slider, TextField
@@ -357,6 +358,8 @@ function TuningSettingsHeaderIcon() {
 
 export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAreaStatus, canModifyDeviceSettings, canViewAreaSettings, canEditScene, currentUserRole, userProfile, selectedFloorId }) {
   const dispatch = useDispatch();
+  const runApplySceneOnce = useMemo(() => createSingleFlight(), []);
+  const runSaveTuningOnce = useMemo(() => createSingleFlight(), []);
   const theme = useTheme();
   const isSuperAdmin = typeof currentUserRole === 'string' && (
     currentUserRole.toLowerCase().trim() === 'superadmin' ||
@@ -418,6 +421,11 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
   // Tuning Settings (superadmin only): one selected zone + High End trim only
   const [selectedTuningZoneId, setSelectedTuningZoneId] = useState(null);
   const [draftHighEndTrim, setDraftHighEndTrim] = useState('');
+  // Avoid re-POST /area/zone_status when fetchAreaStatus updates Redux areaStatus.
+  const areaStatusZonesRef = useRef(areaStatus?.zones);
+  areaStatusZonesRef.current = areaStatus?.zones;
+  // Dedupe /setting/scene_status for the same area+scene while dialog is open.
+  const lastSceneStatusKeyRef = useRef('');
 
   const sanitizeTrimInput = (value) => {
     const s = value === null || value === undefined ? '' : String(value);
@@ -481,11 +489,17 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       dispatch(fetchLockStatus(areaId));
       dispatch(fetchOccupancyMode(areaId));
       dispatch(fetchAreaScenes(areaId));
-      dispatch(fetchAreaStatus(areaId)); // Fetch area status to get zones
+      // HeatMap sidebar already loads full_area_status for the selected area — skip duplicate.
+      const areaAlreadyLoaded =
+        areaStatus && Number(areaStatus.area_id) === Number(areaId);
+      if (!areaAlreadyLoaded) {
+        dispatch(fetchAreaStatus(areaId));
+      }
 
       // Reset tuning UI state on open/area change
       setSelectedTuningZoneId(null);
       setDraftHighEndTrim('');
+      lastSceneStatusKeyRef.current = '';
 
       if (isSuperAdmin) {
         dispatch(fetchTunningSettings(areaId));
@@ -528,7 +542,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       } catch (err) {
         console.error("Failed to fetch zones:", err);
         if (!cancelled) {
-          setAreaZones(areaStatus?.zones || []);
+          setAreaZones(areaStatusZonesRef.current || []);
         }
       }
     };
@@ -538,7 +552,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     return () => {
       cancelled = true;
     };
-  }, [open, areaId, areaStatus]);
+  }, [open, areaId]);
 
   // When occupancyMode (or area status) changes, keep local state in sync with a canonical label.
   // occupancy_status from floor APIs is *detection* (occupied/unoccupied), not mode; mode comes from occupancy_setting.
@@ -573,6 +587,10 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
   }, [occupancyMode, open, pendingOccupancy, areaId, areaStatus]);
 
   useEffect(() => {
+    if (!open) {
+      lastSceneStatusKeyRef.current = '';
+      return;
+    }
     const inList = (id) => {
       if (id == null) return false;
       const n = Number(id);
@@ -580,13 +598,20 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       return (areaScenes || []).some((s) => getAreaSceneRowId(s) === n);
     };
     if (selectedScene && areaId && inList(selectedScene)) {
+      const key = `${areaId}:${Number(selectedScene)}`;
+      if (lastSceneStatusKeyRef.current === key) {
+        return;
+      }
+      lastSceneStatusKeyRef.current = key;
       setSceneZoneValues({});
       dispatch(fetchSceneStatus({ areaId, sceneId: Number(selectedScene) }));
     } else {
       setSceneZoneValues({});
+      if (selectedScene == null) {
+        lastSceneStatusKeyRef.current = '';
+      }
     }
-  }, [selectedScene, areaId, dispatch, areaScenes]);
-
+  }, [open, selectedScene, areaId, dispatch, areaScenes]);
   // Helper function to get zone_id from scene detail
   // CRITICAL: Use zone_id from backend response if available, otherwise match by exact name
   // Backend now includes zone_id in the response, so we can use it directly
@@ -813,7 +838,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     });
   };
 
-  const handleApplyScene = async () => {
+  const handleApplyScene = async () => runApplySceneOnce(async () => {
     if (!canEditScene) return;
     
     
@@ -1143,9 +1168,9 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     } catch (error) {
       console.error("Error applying scene:", error);
     }
-  };
+  });
 
-  const handleSaveTuning = async () => {
+  const handleSaveTuning = async () => runSaveTuningOnce(async () => {
     if (!isSuperAdmin) return;
     if (!selectedTuningZoneId) return;
 
@@ -1182,7 +1207,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     } catch (err) {
       console.error('Error saving tuning settings:', err);
     }
-  };
+  });
 
   if (!open) return null;
 

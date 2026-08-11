@@ -76,6 +76,7 @@ import {
     selectCustomGraphsLoading,
     selectCustomGraphsError,
 } from "../../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 
 const capitalizeFirstLetter = (str) => {
     if (!str) return "";
@@ -221,7 +222,8 @@ export default function RenameWidget() {
     };
 
     // POST -> refresh list so dropdown_name changes only after success
-    const handleUpdate = async () => {
+    const runUpdateOnce = useMemo(() => createSingleFlight(), []);
+    const handleUpdate = async () => runUpdateOnce(async () => {
         if (!selectedKey || !name.trim()) return;
 
         try {
@@ -237,7 +239,7 @@ export default function RenameWidget() {
         } catch (err) {
             setErrorSnackbarOpen(true);
         }
-    };
+    });
 
     useEffect(() => {
         // Only fetch if not already loaded

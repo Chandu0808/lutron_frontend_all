@@ -1,6 +1,7 @@
 import { BaseUrl } from "../../../BaseUrl";
 import { getToken } from "../auth/userlogin";
 import { createThemeModule } from "../../../../../shared/theme/redux/createThemeModule";
+import { getAdvancedApplicationThemeInitialState } from "../../../utils/advancedApplicationThemePersist";
 
 export {
   selectThemeSettings,
@@ -24,6 +25,8 @@ const {
 } = createThemeModule({
   BaseUrl,
   getToken,
+  // Pin first paint so /theme/ settings cannot flash the wrong chrome on refresh.
+  initialState: getAdvancedApplicationThemeInitialState(),
   includeUpdateApplicationThemeFulfilled: true,
 });
 

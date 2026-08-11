@@ -1,6 +1,7 @@
 import { getUsersSettingsBindings } from './bindUsersSettingsModule';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { dispatchFetchFloorsOnce } from '../../utils/bootstrapFetchGuards';
+import { createSingleFlight } from '../../utils/createSingleFlight';
 import {
   Dialog,
   DialogTitle,
@@ -208,7 +209,9 @@ export default function UpdateUser({ open, user, onClose }) {
 
   const selectedFloorIds = selectedFloors.map((f) => f.id);
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!user?.id || !canSave) return;
     const body = buildUserPatchBody({
       name,
@@ -249,7 +252,7 @@ export default function UpdateUser({ open, user, onClose }) {
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
     }
-  };
+  });
 
   const handleClose = () => {
     setSnackbarOpen(false);

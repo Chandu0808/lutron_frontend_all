@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
     Box,
     Typography,
@@ -25,6 +26,7 @@ const EmailServer = () => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
     const dispatch = useDispatch()
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
     const navigate = useNavigate();
     const emailData = useSelector(getEmailData)
     const appTheme = useSelector(selectApplicationTheme);
@@ -64,7 +66,7 @@ const EmailServer = () => {
             setSnackbarOpen(true);
         }
     };
-    const handleSave = async () => {
+    const handleSave = async () => runSaveOnce(async () => {
         const payload = {
             server_name: formData.serverName,
             port: Number(formData.port),
@@ -83,7 +85,7 @@ const EmailServer = () => {
         } finally {
             setSnackbarOpen(true);
         }
-    };
+    });
 
     useEffect(() => {
         dispatch(fetchEmailConfigs()).then((res) => {

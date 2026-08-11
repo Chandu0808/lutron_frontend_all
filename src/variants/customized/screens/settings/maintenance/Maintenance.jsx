@@ -38,9 +38,6 @@ import {
   onCategoryToggle,
 } from "../../../../../shared/settings/maintenanceReport";
 
-/** Match other customized settings pages (Home / Processors / Alerts). */
-const SETTINGS_FONT_FAMILY = "inherit";
-
 const Maintenance = () => {
   const { role: currentUserRole } = UseAuth();
   const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(currentUserRole);
@@ -67,27 +64,22 @@ const Maintenance = () => {
     "& .MuiSvgIcon-root": { fontSize: 22 },
   };
 
-  // Same scale as Processors title + Home settings field labels.
+  // Match customized Alerts / Processors settings typography (no custom fontFamily).
   const titleSx = {
-    fontFamily: SETTINGS_FONT_FAMILY,
     fontWeight: "bold",
     fontSize: { xs: "14px", sm: "16px", md: "18px" },
-    lineHeight: 1.3,
+    mb: 0.5,
     color: "rgba(0, 0, 0, 0.87)",
   };
   const bodyMutedSx = {
-    fontFamily: SETTINGS_FONT_FAMILY,
-    color: "#6b7280",
     mb: 2,
-    fontSize: { xs: "12px", sm: "14px", md: "16px" },
+    color: "rgba(0, 0, 0, 0.87)",
+    fontSize: { xs: 12, sm: 13, md: 14 },
     fontWeight: 400,
-    lineHeight: 1.5,
   };
   const sectionHeadingSx = {
-    fontFamily: SETTINGS_FONT_FAMILY,
-    fontWeight: 600,
-    fontSize: { xs: "12px", sm: "14px", md: "16px" },
-    lineHeight: 1.4,
+    fontWeight: "bold",
+    fontSize: { xs: 12, sm: 13, md: 14 },
     color: "rgba(0, 0, 0, 0.87)",
   };
   const categoryLabelSx = {
@@ -95,19 +87,15 @@ const Maintenance = () => {
     ml: 0,
     mr: 0,
     "& .MuiFormControlLabel-label": {
-      fontFamily: SETTINGS_FONT_FAMILY,
-      fontSize: { xs: "12px", sm: "14px", md: "16px" },
+      fontSize: { xs: 12, sm: 13, md: 14 },
       fontWeight: 500,
-      lineHeight: 1.45,
       color: "rgba(0, 0, 0, 0.87)",
     },
   };
   const hintSx = {
-    fontFamily: SETTINGS_FONT_FAMILY,
     color: "#6b7280",
-    fontSize: { xs: "11px", sm: "13px", md: "14px" },
+    fontSize: { xs: 11, sm: 12, md: 13 },
     fontWeight: 400,
-    lineHeight: 1.4,
   };
 
   const [selectedTypes, setSelectedTypes] = useState(["devices"]);
@@ -178,7 +166,6 @@ const Maintenance = () => {
               ...settingsHelpWhitePaperSx,
               display: "flex",
               flexDirection: "column",
-              fontFamily: SETTINGS_FONT_FAMILY,
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
@@ -245,18 +232,29 @@ const Maintenance = () => {
                 variant="contained"
                 onClick={handleDownload}
                 disabled={downloading || !selectedTypes.length}
-                startIcon={downloading ? <CircularProgress size={18} color="inherit" /> : <FileDownloadOutlined />}
+                // Do not put CircularProgress in startIcon — Button icon sizing
+                // breaks the spinner SVG into a square with arrow-like marks.
+                startIcon={downloading ? null : <FileDownloadOutlined />}
                 sx={{
                   backgroundColor: buttonColor,
                   color: "#fff",
-                  fontFamily: SETTINGS_FONT_FAMILY,
-                  fontWeight: 700,
-                  fontSize: { xs: "12px", sm: "14px", md: "16px" },
                   textTransform: "none",
                   "&:hover": { backgroundColor: darken(buttonColor, 0.12) },
                 }}
               >
-                {downloading ? "Preparing Report…" : "Download Report"}
+                {downloading ? (
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                    <CircularProgress
+                      size={18}
+                      thickness={4}
+                      color="inherit"
+                      sx={{ display: "block", flexShrink: 0 }}
+                    />
+                    Preparing Report…
+                  </Box>
+                ) : (
+                  "Download Report"
+                )}
               </Button>
             </Box>
           </Paper>

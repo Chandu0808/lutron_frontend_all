@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createSingleFlight } from '../../../../shared/utils/createSingleFlight';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchQuickControls,
@@ -410,7 +411,9 @@ const QuickControls = () => {
   };
 
   // Save after modify
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = () =>
+    runSaveOnce(async () => {
     if (!editableControl || updateStatus === 'loading') return;
     const payload = {
       name: editableControl.name,
@@ -480,7 +483,7 @@ const QuickControls = () => {
       setEditableControl(null);
       dispatch(fetchQuickControlDetails(editableControl.id)); // reload details
     }
-  };
+  });
 
   // Handle input changes in edit mode
   const handleEditChange = (field, value) => {

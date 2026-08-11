@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchQuickControlDetails,
@@ -58,6 +58,7 @@ import {
   locationHasZoneAction,
   mergeExpandedActionsIntoLocation,
 } from '../../../../shared/quickcontrols/zoneActionHelpers';
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const QuickControlDetails = () => {
   const dispatch = useDispatch();
@@ -817,7 +818,8 @@ const QuickControlDetails = () => {
 
   // Don't auto-apply when dialog opens - wait for "Apply to All" button
 
-  const handleSave = async () => {
+  const runSaveOnce = useMemo(() => createSingleFlight(), []);
+  const handleSave = async () => runSaveOnce(async () => {
     if (!editableControl || updateStatus === 'loading') return;
     
     // Check that all locations have at least one action
@@ -865,7 +867,7 @@ const QuickControlDetails = () => {
         message: error?.message || "Failed to save Quick Control" 
       });
     }
-  };
+  });
 
   const handleEditChange = (field, value) => {
     setEditableControl(prev => ({ ...prev, [field]: value }));

@@ -1,5 +1,5 @@
 // src/screens/authentication/Login.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Card,
@@ -33,6 +33,7 @@ import lutronLogo from "../../assets/images/lutron-logo.png";
 import { resetAuthRedirectGuard } from "../../BaseUrl";
 import { buildPasswordVisibilityInputProps } from "../../../../utils/passwordVisibilityAdornment";
 import { dispatchFetchThemeSettingsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 const QV_ACCENT = "#0d6ebc";
 const QV_ACCENT_HOVER = "#0a5a9a";
@@ -137,8 +138,10 @@ const Login = () => {
     navigate("/dashboard/overview", { replace: true });
   };
 
+  const runSubmitOnce = useMemo(() => createSingleFlight(), []);
   const handleSubmit = async (e) => {
     e.preventDefault();
+    return runSubmitOnce(async () => {
     const uErr = validateField("username", creds.username);
     const pErr = validateField("password", creds.password);
     setErrs({ username: uErr, password: pErr });
@@ -153,6 +156,7 @@ const Login = () => {
     } catch {
       setLoginError(true);
     }
+  });
   };
 
   return (

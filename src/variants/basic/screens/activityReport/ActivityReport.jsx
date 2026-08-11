@@ -38,6 +38,7 @@ import {
 import { UseAuth } from "../../customhooks/UseAuth";
 import { fetchProfile } from "../../redux/slice/auth/userlogin";
 import { dispatchFetchProfileOnce } from "../../../../shared/utils/bootstrapFetchGuards";
+import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 
 // Activity type mapping for API
 const ACTIVITY_TYPE_MAPPING = {
@@ -151,6 +152,8 @@ const ActivityReport = ({ onGenerate }) => {
     const rows = useSelector(selectActivityReport) || [];
     const loading = useSelector(getActivityReportLoading);
     const error = useSelector(getActivityReportError);
+    const runGenerateOnce = useMemo(() => createSingleFlight(), []);
+    const runExportOnce = useMemo(() => createSingleFlight(), []);
 
     // Redux selectors for export functionality
     const exportLoading = useSelector(selectActivityReportExportLoading);
@@ -239,44 +242,49 @@ const ActivityReport = ({ onGenerate }) => {
         }
     }, [selectedAreas]);
 
-    const handleGenerate = async () => {
-        // Handle cases where no areas are selected - use all areas by default
-        const floor_ids = selectedAreas.length > 0 ? Array.from(new Set(selectedAreas.map((a) => a.floorId))) : undefined;
-        const area_ids = selectedAreas.length > 0 ? selectedAreas.map((a) => a.areaId).filter(id => id !== null) : undefined;
+    const handleGenerate = () =>
+        runGenerateOnce(async () => {
+            if (loading) return;
+            // Handle cases where no areas are selected - use all areas by default
+            const floor_ids = selectedAreas.length > 0 ? Array.from(new Set(selectedAreas.map((a) => a.floorId))) : undefined;
+            const area_ids = selectedAreas.length > 0 ? selectedAreas.map((a) => a.areaId).filter(id => id !== null) : undefined;
 
-        const activity_desc_keywords = Object.entries(checked)
-            .filter(([, v]) => v)
-            .map(([k]) => ACTIVITY_TYPE_MAPPING[k])
-            .filter(Boolean);
+            const activity_desc_keywords = Object.entries(checked)
+                .filter(([, v]) => v)
+                .map(([k]) => ACTIVITY_TYPE_MAPPING[k])
+                .filter(Boolean);
 
-        const withSeconds = (t) => (t ? (t.length === 5 ? `${t}:00` : t) : "");
+            const withSeconds = (t) => (t ? (t.length === 5 ? `${t}:00` : t) : "");
 
-        // Get current date in local timezone to avoid timezone issues
-        const today = new Date();
-        const todayString = today.getFullYear() + '-' +
-            String(today.getMonth() + 1).padStart(2, '0') + '-' +
-            String(today.getDate()).padStart(2, '0');
+            // Get current date in local timezone to avoid timezone issues
+            const today = new Date();
+            const todayString = today.getFullYear() + '-' +
+                String(today.getMonth() + 1).padStart(2, '0') + '-' +
+                String(today.getDate()).padStart(2, '0');
 
-        const params = {
-            activity_type: undefined,
-            floor_ids,
-            area_ids,
-            activity_description: activity_desc_keywords.length > 0 ? activity_desc_keywords : undefined,
-            start_date: startDate || todayString,
-            start_time: withSeconds(startTime) || "00:00:00",
-            end_date: endDate || todayString,
-            end_time: withSeconds(endTime) || "23:59:59",
-        };
-        try {
-            await dispatch(fetchActivityReport(params)).unwrap();
-            onGenerate?.(params);
-        } catch (e) {
-            showSnackbar('Failed to load activity report. Please try again.', 'error');
-        }
-    };
+            const params = {
+                activity_type: undefined,
+                floor_ids,
+                area_ids,
+                activity_description: activity_desc_keywords.length > 0 ? activity_desc_keywords : undefined,
+                start_date: startDate || todayString,
+                start_time: withSeconds(startTime) || "00:00:00",
+                end_date: endDate || todayString,
+                end_time: withSeconds(endTime) || "23:59:59",
+            };
+            try {
+                await dispatch(fetchActivityReport(params)).unwrap();
+                onGenerate?.(params);
+            } catch (e) {
+                showSnackbar('Failed to load activity report. Please try again.', 'error');
+            }
+        });
 
     // Handle export actions
-    const handleExport = async (action) => {
+    const handleExport = (action) =>
+        runExportOnce(async () => {
+        if (action === 'email' && emailLoading) return;
+        if (action === 'download' && exportLoading) return;
 
         // Use today's date if no dates are selected
         const today = new Date();
@@ -376,7 +384,7 @@ const ActivityReport = ({ onGenerate }) => {
             }
         }
         setShowExportDropdown(false);
-    };
+        });
 
     const handleAdd = ({ floorId, floorName, areaCodes = [], areaNames = [], areaIds = [] }) => {
         const incoming = areaCodes.map((code, i) => ({
@@ -1288,6 +1296,7 @@ const ActivityReport = ({ onGenerate }) => {
                     <Button
                         variant="contained"
                         onClick={handleGenerate}
+                        disabled={loading}
                         sx={{
                             padding: "10px 28px",
                             borderRadius: isDefaultWhiteTheme ? "8px !important" : 0.6,
@@ -1295,7 +1304,7 @@ const ActivityReport = ({ onGenerate }) => {
                             background: isDefaultWhiteTheme ? "#1565C0" : buttonColor,
                             color: "#fff",
                             fontWeight: 500,
-                            cursor: "pointer",
+                            cursor: loading ? "default" : "pointer",
                             textTransform: "none",
                             "&:hover": {
                                 backgroundColor: isDefaultWhiteTheme ? "#0d47a1" : buttonColor,
@@ -1303,7 +1312,7 @@ const ActivityReport = ({ onGenerate }) => {
                             }
                         }}
                     >
-                        Generate
+                        {loading ? "Generating…" : "Generate"}
                     </Button>
                 </Grid>
             </Grid>

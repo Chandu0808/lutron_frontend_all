@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 import { Box, Button, Typography, useTheme } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +31,10 @@ import {
     dispatchFetchThemeSettingsOnce,
     syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
+import {
+    toAdvancedApplicationThemePayload,
+    writeAdvancedApplicationThemePin,
+} from '../../../utils/advancedApplicationThemePersist';
 import {
     isLightSurface,
     PRODUCT_DEFAULT_APP_BACKGROUND,
@@ -94,6 +99,9 @@ const ThemeChange = () => {
     const theme = useTheme();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const runThemeSaveOnce = useMemo(() => createSingleFlight(), []);
+    const runThemeResetOnce = useMemo(() => createSingleFlight(), []);
+    const runHeatmapSaveOnce = useMemo(() => createSingleFlight(), []);
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
     const heatMapTheme = useSelector(selectHeatMapTheme)
@@ -221,45 +229,36 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors saved successfully.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeSave = async () => {
+    const handleThemeSave = async () => runThemeSaveOnce(async () => {
         setUiVariant('advanced');
+        // Persist picker colors (not stale Redux) so Background/Content/Button stick on refresh.
         const payload = {
-            background: normalizeColor(themeColorMap.Background),
-            content: normalizeColor(
-                appTheme?.application_theme?.content || themeColorMap.Content || PRODUCT_DEFAULT_APP_CONTENT
+            background: normalizeThemeHex(
+                normalizeColor(themeColorMap.Background || PRODUCT_DEFAULT_APP_BACKGROUND)
             ),
-            button: normalizeColor(
-                appTheme?.application_theme?.button || themeColorMap.Button || PRODUCT_DEFAULT_APP_BUTTON
+            content: normalizeThemeHex(
+                normalizeColor(themeColorMap.Content || PRODUCT_DEFAULT_APP_CONTENT)
+            ),
+            button: normalizeThemeHex(
+                normalizeColor(themeColorMap.Button || PRODUCT_DEFAULT_APP_BUTTON)
             ),
         };
 
         try {
-            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            await dispatch(updateApplicationTheme(payload)).unwrap();
             reloadTheme(payload, backgroundImage);
-            const nextApplicationTheme = {
-                ...(appTheme || {}),
-                ...(response && typeof response === 'object' ? response : {}),
-                application_theme: {
-                    ...(appTheme?.application_theme || {}),
-                    ...(response?.application_theme || {}),
-                    ...payload,
-                },
-            };
-            // Keep session bootstrap cache aligned so hard refresh does not revive a prior theme.
+            const nextApplicationTheme = toAdvancedApplicationThemePayload(payload);
+            writeAdvancedApplicationThemePin(payload);
+            // Align session cache; do not force-GET or full-reload (races revive stale /theme/ chrome).
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
-            if (typeof window !== 'undefined') {
-                setTimeout(() => window.location.reload(), 300);
-            }
         } catch (error) {
             // Optionally handle error feedback here
         }
-    };
+    });
 
-    const handleHeatmapSave = () => {
+    const handleHeatmapSave = async () => runHeatmapSaveOnce(async () => {
         const payload = {
             light: normalizeColor(heatmapColorMap.Light),
             occupancy: normalizeColor(heatmapColorMap.Occupancy),
@@ -273,7 +272,7 @@ const ThemeChange = () => {
         }
         setSnackbarMessage("Heatmap colors saved successfully.");
         setSnackbarOpen(true);
-    };
+    });
 
     // const handleThemeReset = () => {
     //     setThemeColorMap(DEFAULT_THEME_COLORS);
@@ -286,7 +285,7 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors reset to default.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeReset = async () => {
+    const handleThemeReset = async () => runThemeResetOnce(async () => {
         setUiVariant('advanced');
         const resetBackgroundColor = normalizeThemeHex(ADVANCED_THEME_RESET_BACKGROUND_SWATCH);
         const defaultColors = {
@@ -295,36 +294,27 @@ const ThemeChange = () => {
         };
 
         const payload = {
-            background: normalizeColor(defaultColors.Background),
-            content: normalizeColor(defaultColors.Content),
-            button: normalizeColor(defaultColors.Button),
+            background: normalizeThemeHex(normalizeColor(defaultColors.Background)),
+            content: normalizeThemeHex(normalizeColor(defaultColors.Content)),
+            button: normalizeThemeHex(normalizeColor(defaultColors.Button)),
         };
 
         try {
-            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            await dispatch(updateApplicationTheme(payload)).unwrap();
             setThemeColorMap(defaultColors);
             setSelectedThemeColor(resetBackgroundColor);
             setThemePickerKey((k) => k + 1);
             reloadTheme(payload, backgroundImage);
-            const nextApplicationTheme = {
-                ...(appTheme || {}),
-                ...(response && typeof response === 'object' ? response : {}),
-                application_theme: {
-                    ...(appTheme?.application_theme || {}),
-                    ...(response?.application_theme || {}),
-                    ...payload,
-                },
-            };
+            const nextApplicationTheme = toAdvancedApplicationThemePayload(payload);
+            writeAdvancedApplicationThemePin(payload);
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
         } catch {
             setSnackbarMessage("Failed to reset theme colors. Please try again.");
             setSnackbarOpen(true);
         }
-    };
+    });
     const sidebarItemPaths = {
         "Home": "/main",
         "Alerts": "/alerts",
@@ -398,7 +388,18 @@ const ThemeChange = () => {
             );
             dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
             dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage, { force: true });
-            dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            // Keep color pin authoritative — do not force-GET application colors (revives slate).
+            const colorPin = {
+                background: normalizeColor(themeColorMap.Background),
+                content: normalizeColor(
+                    themeColorMap.Content || appTheme?.application_theme?.content || PRODUCT_DEFAULT_APP_CONTENT
+                ),
+                button: normalizeColor(
+                    themeColorMap.Button || appTheme?.application_theme?.button || PRODUCT_DEFAULT_APP_BUTTON
+                ),
+            };
+            writeAdvancedApplicationThemePin(colorPin);
+            syncApplicationThemeSessionCache(toAdvancedApplicationThemePayload(colorPin));
             setSnackbarSeverity('success');
             setSnackbarMessage('Background image removed.');
             setSnackbarOpen(true);

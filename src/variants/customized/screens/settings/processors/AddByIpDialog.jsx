@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createSingleFlight } from '../../../../../shared/utils/createSingleFlight';
 import { toSafeReactText } from '../../../../../utils/safeReactText';
 import {
   Alert,
@@ -117,7 +118,9 @@ const AddByIpDialog = ({ open, onClose, onAdded }) => {
     }));
   };
 
-  const handleSaveRow = async (idx, row) => {
+  const runSaveRowOnce = useMemo(() => createSingleFlight(), []);
+  const handleSaveRow = (idx, row) =>
+    runSaveRowOnce(async () => {
     const detail = rowDetails[idx] || {};
     const system = (detail.system || '').trim();
     const serial = (detail.serial || '').trim();
@@ -159,7 +162,7 @@ const AddByIpDialog = ({ open, onClose, onAdded }) => {
         },
       }));
     }
-  };
+  });
 
   const renderStatusChip = (row) => {
     if (row.reachable && row.processor_id) {

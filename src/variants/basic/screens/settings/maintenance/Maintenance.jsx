@@ -107,18 +107,25 @@ const Maintenance = () => {
         }}
       >
         <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 0.5 }}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: "bold",
+                fontSize: { xs: "14px", sm: "16px", md: "18px" },
+                color: textColor,
+              }}
+            >
+              Maintenance Report
+            </Typography>
+          </Box>
           <Typography
-            variant="h4"
             sx={{
-              fontWeight: "bold",
-              color: textColor,
-              mb: 0.5,
-              fontSize: { xs: "14px", sm: "16px", md: "18px" },
+              mb: 1,
+              color: mutedColor,
+              fontSize: { xs: 12, sm: 13, md: 14 },
             }}
           >
-            Maintenance Report
-          </Typography>
-          <Typography sx={{ color: mutedColor, fontSize: { xs: 12, sm: 13, md: 14 } }}>
             Generate a live report from all processors. Select device categories or area occupancy mode.
           </Typography>
         </Box>
@@ -160,7 +167,7 @@ const Maintenance = () => {
             <Typography
               sx={{
                 color: isLightChrome ? "#ffffff" : textColor,
-                fontWeight: 600,
+                fontWeight: "bold",
                 fontSize: { xs: 12, sm: 13, md: 14 },
               }}
             >
@@ -188,8 +195,12 @@ const Maintenance = () => {
                       size="small"
                     />
                   }
-                  label={opt.label}
-                  sx={{ color: textColor }}
+                  label={
+                    <Typography sx={{ fontSize: { xs: 12, sm: 13, md: 14 }, fontWeight: 500, color: textColor }}>
+                      {opt.label}
+                    </Typography>
+                  }
+                  sx={{ m: 0, alignItems: "center", gap: 1 }}
                 />
               ))}
               <FormControlLabel
@@ -201,8 +212,12 @@ const Maintenance = () => {
                     size="small"
                   />
                 }
-                label={OCCUPANCY_TYPE_OPTION.label}
-                sx={{ color: textColor }}
+                label={
+                  <Typography sx={{ fontSize: { xs: 12, sm: 13, md: 14 }, fontWeight: 500, color: textColor }}>
+                    {OCCUPANCY_TYPE_OPTION.label}
+                  </Typography>
+                }
+                sx={{ m: 0, alignItems: "center", gap: 1 }}
               />
             </FormGroup>
 
@@ -239,7 +254,6 @@ const Maintenance = () => {
               sx={{
                 backgroundColor: buttonColor,
                 color: "#fff",
-                fontWeight: 700,
                 textTransform: "none",
                 "&:hover": {
                   backgroundColor: buttonColor,
