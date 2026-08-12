@@ -39,6 +39,7 @@ import { UseAuth } from "../../customhooks/UseAuth";
 import { fetchProfile } from "../../redux/slice/auth/userlogin";
 import { dispatchFetchProfileOnce } from "../../../../shared/utils/bootstrapFetchGuards";
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
+import { buildActivityReportGenerateKey } from "../../../../shared/utils/activityReportGenerateKey";
 
 // Activity type mapping for API
 const ACTIVITY_TYPE_MAPPING = {
@@ -154,6 +155,7 @@ const ActivityReport = ({ onGenerate }) => {
     const error = useSelector(getActivityReportError);
     const runGenerateOnce = useMemo(() => createSingleFlight(), []);
     const runExportOnce = useMemo(() => createSingleFlight(), []);
+    const lastGenerateKeyRef = useRef(null);
 
     // Redux selectors for export functionality
     const exportLoading = useSelector(selectActivityReportExportLoading);
@@ -272,8 +274,14 @@ const ActivityReport = ({ onGenerate }) => {
                 end_date: endDate || todayString,
                 end_time: withSeconds(endTime) || "23:59:59",
             };
+            const generateKey = buildActivityReportGenerateKey(params);
+            // Same selection as last successful Generate — reuse Redux rows, skip API.
+            if (generateKey === lastGenerateKeyRef.current) {
+                return;
+            }
             try {
                 await dispatch(fetchActivityReport(params)).unwrap();
+                lastGenerateKeyRef.current = generateKey;
                 onGenerate?.(params);
             } catch (e) {
                 showSnackbar('Failed to load activity report. Please try again.', 'error');
