@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import HexColorPicker from '../../../utils/HexColorPicker';
+import { createSingleFlight } from '../../../../../shared/utils/createSingleFlight';
+import { buildFofpThemeSaveKey } from '../../../../../shared/utils/themeSettingsSaveKey';
 import {
     fetchFofpConfig,
     updateFofpConfig,
@@ -30,9 +32,12 @@ const FofpThemeColorCard = ({
     onSaveMessage,
 }) => {
     const dispatch = useDispatch();
+    const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const lastSavedKeyRef = useRef(null);
     const fofpConfig = useSelector(selectFofpConfig);
     const fofpConfigError = useSelector(selectFofpConfigError);
     const [activeFofpTab, setActiveFofpTab] = useState('FOFP');
+    const [saving, setSaving] = useState(false);
     const [fofpColorMap, setFofpColorMap] = useState({
         FOFP: DEFAULT_FOFP_MARKER_COLOR,
     });
@@ -47,21 +52,31 @@ const FofpThemeColorCard = ({
             const hex = normalizeFofpHex(fofpConfig.marker_color);
             setFofpColorMap({ FOFP: hex });
             setSelectedFofpColor(hex);
+            lastSavedKeyRef.current = buildFofpThemeSaveKey(hex);
         }
     }, [fofpConfig?.marker_color]);
 
-    const handleFofpColorSave = async () => {
+    const handleFofpColorSave = async () => runSaveOnce(async () => {
         const color = resolveFofpThemePickerColor(fofpColorMap.FOFP);
+        const saveKey = buildFofpThemeSaveKey(color);
+        if (lastSavedKeyRef.current === saveKey) {
+            onSaveMessage('No changes to save');
+            return;
+        }
+        setSaving(true);
         try {
             const saved = await dispatch(updateFofpConfig({ marker_color: color })).unwrap();
             const hex = normalizeFofpHex(saved?.marker_color || color);
             setFofpColorMap({ FOFP: hex });
             setSelectedFofpColor(hex);
+            lastSavedKeyRef.current = buildFofpThemeSaveKey(hex);
             onSaveMessage('FOFP color saved successfully.');
         } catch {
             onSaveMessage('Failed to save FOFP color.');
+        } finally {
+            setSaving(false);
         }
-    };
+    });
 
     return (
         <Box sx={themePickerCardCellSx}>
@@ -110,6 +125,7 @@ const FofpThemeColorCard = ({
                     <Button
                         className="save-button"
                         onClick={handleFofpColorSave}
+                        disabled={saving}
                         data-testid="fofp-theme-color-save"
                         sx={{
                             backgroundColor: dynamicButtonColor,
@@ -120,7 +136,7 @@ const FofpThemeColorCard = ({
                             borderRadius: 1,
                         }}
                     >
-                        Save
+                        {saving ? 'Saving…' : 'Save'}
                     </Button>
                 </Box>
             </Box>

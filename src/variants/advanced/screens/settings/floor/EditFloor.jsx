@@ -57,6 +57,7 @@ const floorSectionBg = 'var(--settings-form-section-bg, #4a586c)';
 const floorSectionHover = 'var(--settings-panel-outer-bg, #5a6d85)';
 const floorPanelLabel = 'var(--settings-form-label-color, #ffffff)';
 const floorPanelText = 'var(--settings-form-control-text, #ffffff)';
+const floorSnackbarText = 'var(--settings-panel-button-text, #ffffff)';
 const floorFieldBg = 'var(--floor-tool-field-bg, #ffffff)';
 const floorFieldText = 'var(--floor-tool-field-text, #1c2330)';
 
@@ -514,7 +515,13 @@ export default function EditFloor() {
               px: 4,
               borderRadius: 2,
               textTransform: 'none',
-              '&:hover': { backgroundColor: 'var(--app-button, #232323)', opacity: 0.92 }
+              '&:hover': { backgroundColor: 'var(--app-button, #232323)', opacity: 0.92 },
+              '&.Mui-disabled': {
+                backgroundColor: 'var(--app-button, #232323)',
+                color: '#fff',
+                borderColor: 'var(--app-button, #232323)',
+                opacity: 0.7,
+              },
             }}
           >
             Cancel
@@ -547,13 +554,16 @@ export default function EditFloor() {
         ContentProps={{
           sx: {
             backgroundColor: floorSectionBg,
-            color: '#fff',
+            color: floorSnackbarText,
             borderRadius: '12px',
             px: 4,
             py: 1.5,
             fontWeight: 'bold',
             fontSize: '15px',
             boxShadow: 4,
+            '& .MuiSnackbarContent-message': {
+              color: floorSnackbarText,
+            },
           },
         }}
       />

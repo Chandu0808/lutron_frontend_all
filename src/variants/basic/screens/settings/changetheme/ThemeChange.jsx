@@ -198,7 +198,7 @@ const ThemeChange = () => {
                 },
             };
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            // Skip force GET /theme/application — save response + cache already applied.
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -263,7 +263,7 @@ const ThemeChange = () => {
                 },
             };
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
+            // Skip force GET /theme/application — save response + cache already applied.
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {

@@ -422,26 +422,28 @@ export default function UsersComponent() {
                               </Tooltip>
                               {canDeleteUsers() && (
                                 <Tooltip title="Delete User" arrow placement="top">
-                                  <IconButton
-                                    onClick={() => handleDeleteUser(user)}
-                                    disabled={deleteLoading}
-                                    sx={{
-                                      backgroundColor: buttonColor,
-                                      color: '#fff',
-                                      borderRadius: '6px',
-                                      p: 1,
-                                      width: '34px',
-                                      height: '30px',
-                                      '&:hover': { backgroundColor: buttonColor, opacity: 0.9 },
-                                      '&:disabled': { backgroundColor: '#9aa3b0' },
-                                    }}
-                                  >
-                                    {deleteLoading ? (
-                                      <CircularProgress size={16} color="inherit" />
-                                    ) : (
-                                      <DeleteIcon />
-                                    )}
-                                  </IconButton>
+                                  <span style={{ display: 'inline-block' }}>
+                                    <IconButton
+                                      onClick={() => handleDeleteUser(user)}
+                                      disabled={deleteLoading}
+                                      sx={{
+                                        backgroundColor: buttonColor,
+                                        color: '#fff',
+                                        borderRadius: '6px',
+                                        p: 1,
+                                        width: '34px',
+                                        height: '30px',
+                                        '&:hover': { backgroundColor: buttonColor, opacity: 0.9 },
+                                        '&:disabled': { backgroundColor: '#9aa3b0' },
+                                      }}
+                                    >
+                                      {deleteLoading ? (
+                                        <CircularProgress size={16} color="inherit" />
+                                      ) : (
+                                        <DeleteIcon />
+                                      )}
+                                    </IconButton>
+                                  </span>
                                 </Tooltip>
                               )}
                             </Box>

@@ -509,6 +509,38 @@ const FOFPComponent = () => {
                 disabled={floorsLoading || generating || saving}
                 onChange={(e) => requestFloorSwitch(e.target.value)}
                 inputProps={{ "data-testid": "fofp-floor-select" }}
+                sx={
+                  isDefaultWhiteTheme
+                    ? {
+                        bgcolor: "#ffffff",
+                        color: "#000000",
+                        "& .MuiOutlinedInput-notchedOutline": {
+                          borderColor: "#000000",
+                        },
+                        "&:hover .MuiOutlinedInput-notchedOutline": {
+                          borderColor: "#000000",
+                        },
+                        "& .MuiSvgIcon-root": { color: "#000000" },
+                      }
+                    : undefined
+                }
+                MenuProps={
+                  isDefaultWhiteTheme
+                    ? {
+                        PaperProps: {
+                          sx: {
+                            bgcolor: "#ffffff",
+                            color: "#000000",
+                            "& .MuiMenuItem-root": { color: "#000000" },
+                            "& .MuiMenuItem-root.Mui-selected": {
+                              backgroundColor: "rgba(21, 101, 192, 0.08)",
+                              color: "#000000",
+                            },
+                          },
+                        },
+                      }
+                    : undefined
+                }
               >
                 <MenuItem value="">
                   <em>Select floor</em>

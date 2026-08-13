@@ -38,6 +38,7 @@ import {
   fetchFloorMapData,
   fetchAreaOccupancyStatus,
   fetchAreaEnergyConsumption,
+  fetchFloorStatusRevision,
   selectPdfUrl,
   selectHeatmapData,
   selectSelectedFloorId,
@@ -48,6 +49,7 @@ import {
   selectAreaStatusLoading,
   selectAreaStatusError,
   selectAreaStatusFetchingId,
+  selectFloorStatusRevisionByFloorId,
   updateAreaLightStatus,
   updateZonesByArea,
   toggleAllZonesInArea,
@@ -100,6 +102,7 @@ import {
   resolveLightModeFill,
 } from './heatmapLightStyles';
 import { isMapProcessorUnreachable } from '../../../../shared/heatmap/processorReachable';
+import { resolveHeatmapAreaClickPlan } from '../../../../shared/heatmap/resolveHeatmapAreaClickPlan';
 import {
   ZONE_CONTROL_CARD_WIDTH_SX,
   ZONE_CONTROL_SLIDER_WRAP_SX,
@@ -179,6 +182,7 @@ const HeatMap = () => {
   const areaStatusLoading = useSelector(selectAreaStatusLoading);
   const areaStatusError = useSelector(selectAreaStatusError);
   const areaStatusFetchingId = useSelector(selectAreaStatusFetchingId);
+  const floorStatusRevisionByFloorId = useSelector(selectFloorStatusRevisionByFloorId);
   const heatmapLoading = useSelector(selectHeatmapLoading);
   const heatmapError = useSelector(selectHeatmapError);
   const searchTerm = useSelector(selectHeatmapSearchTerm); // added
@@ -369,6 +373,7 @@ const HeatMap = () => {
   useEffect(() => {
     setAreaRenameOpen(false);
     setAreaRenameError("");
+    setScenePage(0);
   }, [selectedAreaId]);
 
   const closeAreaPanel = () => {
@@ -511,6 +516,7 @@ const HeatMap = () => {
     occ: null,
     scene: null,
   });
+  const floorRevisionClickLockRef = useRef(null);
 
   const applyButtonSx = {
     background: whiteChrome ? settingsFormActionBlue : '#222',
@@ -1324,25 +1330,54 @@ const HeatMap = () => {
     // Note: The useEffect will handle data fetching when selectedFloorId changes
   };
 
-  const handleAreaClick = (area) => {
+  const handleAreaClick = async (area) => {
     setHighlightedFofpZone(null);
-    const areaId = area.area_id || area.id;
+    const areaId = Number(area.area_id ?? area.id);
+    if (!Number.isFinite(areaId)) return;
     setSelectedAreaId(areaId);
-    if (!area.area_id) {
+
+    const floorId = selectedFloorId;
+    if (!floorId) {
+      dispatch(fetchAreaStatus(areaId));
       return;
     }
 
-    // Same area already open or still loading — do not re-hit full_area_status.
-    const idKey = String(area.area_id);
-    if (
-      (areaStatusLoading && String(areaStatusFetchingId) === idKey) ||
-      (!areaStatusLoading && areaStatus && String(areaStatus.area_id) === idKey)
-    ) {
+    const lockKey = String(floorId);
+    if (floorRevisionClickLockRef.current === lockKey) return;
+    floorRevisionClickLockRef.current = lockKey;
+
+    const prevRevision = floorStatusRevisionByFloorId?.[String(floorId)];
+    let nextRevision = prevRevision;
+    try {
+      const result = await dispatch(fetchFloorStatusRevision({ floorId })).unwrap();
+      nextRevision = result.revision;
+    } catch (err) {
+      if (err?.name === "ConditionError") return;
+      dispatch(fetchAreaStatus(areaId));
       return;
+    } finally {
+      floorRevisionClickLockRef.current = null;
     }
 
-    // Area panel only — floor map already loaded by floor effect; do not re-hit light_status
-    dispatch(fetchAreaStatus(area.area_id));
+    const plan = resolveHeatmapAreaClickPlan({
+      areaId,
+      prevRevision,
+      nextRevision,
+      currentAreaId: areaStatus?.area_id,
+    });
+
+    if (plan.fetchArea) {
+      dispatch(fetchAreaStatus(areaId));
+    }
+    if (plan.fetchFloor) {
+      if (displayMode === "Occupancy") {
+        dispatch(fetchAreaOccupancyStatus({ floorId }));
+      } else if (displayMode === "Energy") {
+        dispatch(fetchAreaEnergyConsumption({ floorId }));
+      } else {
+        dispatch(fetchFloorMapData({ floorId }));
+      }
+    }
   };
 
 
@@ -2499,6 +2534,9 @@ const HeatMap = () => {
 
                                 // Check if user has permission to update area status
                                 if (!canUpdateAreaStatus()) {
+                                  return;
+                                }
+                                if (Number(scene.id) === Number(areaStatus.active_scene)) {
                                   return;
                                 }
 
@@ -4197,7 +4235,10 @@ function HeatmapPdfSvgViewer({
                       stroke={'#000'}
                       strokeWidth={2}
                       vectorEffect="non-scaling-stroke"
-                      onClick={() => handleAreaClick(area)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAreaClick(area);
+                      }}
                       style={{
                         cursor: 'pointer',
                         pointerEvents: 'auto'
@@ -4259,7 +4300,6 @@ function HeatmapPdfSvgViewer({
                     {/* Red alert icon overlay for areas with active alerts */}
                     <g
                       key={area.area_id || area.id || index}
-                      onClick={() => handleAreaClick(area)}
                       style={{ cursor: "pointer" }}
                     >
                       {/* ALERT ICON */}

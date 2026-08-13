@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
+import { buildEmailServerSaveKey } from "../../../../shared/utils/emailServerSaveKey";
 import {
     Box,
     Typography,
@@ -27,6 +28,8 @@ const EmailServer = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+    const [saving, setSaving] = useState(false);
+    const lastSavedKeyRef = useRef(null);
     const dispatch = useDispatch()
     const runSaveOnce = useMemo(() => createSingleFlight(), []);
     const theme = useTheme();
@@ -81,15 +84,25 @@ const EmailServer = () => {
             sender_name: formData.senderName,
             app_password: formData.password,
         };
+        const saveKey = buildEmailServerSaveKey(payload);
+        if (lastSavedKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage('No changes to save');
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setSaving(true);
         try {
             await dispatch(createEmail(payload)).unwrap();
+            lastSavedKeyRef.current = saveKey;
             setSnackbarSeverity('success');
             setSnackbarMessage('Email configuration saved successfully!');
         } catch (error) {
             setSnackbarSeverity('error');
             setSnackbarMessage('Failed to save email configuration!');
         } finally {
+            setSaving(false);
             setSnackbarOpen(true);
         }
     });
@@ -99,14 +112,23 @@ const EmailServer = () => {
             const data = res.payload;
             if (Array.isArray(data) && data.length > 0) {
                 const latest = data[0];
-                setFormData({
+                setFormData((prev) => ({
+                    ...prev,
                     serverName: latest.server_name || '',
                     port: latest.port?.toString() || '',
                     serverEmail: latest.server_email || '',
                     senderName: latest.sender_name || '',
                     sslRequired: true,
                     authRequired: true,
-                    password: ''
+                    password: '',
+                    testEmail: prev.testEmail || '',
+                }));
+                lastSavedKeyRef.current = buildEmailServerSaveKey({
+                    server_name: latest.server_name || '',
+                    port: Number(latest.port) || 0,
+                    server_email: latest.server_email || '',
+                    sender_name: latest.sender_name || '',
+                    app_password: '',
                 });
             }
         });
@@ -214,7 +236,7 @@ const EmailServer = () => {
                                 <TextField
                                     fullWidth
                                     size="small"
-                                    value={formData.serverName}
+                                    value={formData.serverName ?? ''}
                                     onChange={handleChange('serverName')}
                                     variant="outlined"
                                     // placeholder="relay.cb.intra.lutron.com"
@@ -345,7 +367,16 @@ const EmailServer = () => {
                     <Box display="flex" justifyContent="flex-end" gap={2} mt={1}>
                         <Button
                             variant="outlined"
-                            onClick={() => setFormData({})}
+                            onClick={() => setFormData({
+                                serverName: '',
+                                port: '',
+                                serverEmail: '',
+                                senderName: '',
+                                sslRequired: false,
+                                authRequired: false,
+                                password: '',
+                                testEmail: '',
+                            })}
                             sx={{
                                 textTransform: 'none',
                                 backgroundColor: '#fff',
@@ -359,6 +390,7 @@ const EmailServer = () => {
                         <Button
                             variant="contained"
                             onClick={handleSave}
+                            disabled={saving}
                             sx={{
                                 textTransform: 'none',
                                 backgroundColor: actionBlue,
@@ -366,7 +398,7 @@ const EmailServer = () => {
                                 '&:hover': { backgroundColor: actionBlue },
                             }}
                         >
-                            Save
+                            {saving ? 'Saving…' : 'Save'}
                         </Button>
                     </Box>
                     <Box
@@ -399,7 +431,7 @@ const EmailServer = () => {
                                         variant="outlined"
                                         placeholder="Enter Test Email"
                                         size="small"
-                                        value={formData.testEmail}
+                                        value={formData.testEmail ?? ''}
                                         onChange={handleChange('testEmail')}
                                         sx={{
                                             '& .MuiOutlinedInput-root': {

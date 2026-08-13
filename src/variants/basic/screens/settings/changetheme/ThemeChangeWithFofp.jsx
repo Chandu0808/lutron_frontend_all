@@ -1,5 +1,9 @@
 import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
+import {
+    buildThemeApplicationSaveKey,
+    buildThemeHeatmapSaveKey,
+} from "../../../../../shared/utils/themeSettingsSaveKey";
 import { Box, Button, Grid, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -92,6 +96,10 @@ const ThemeChange = () => {
     const runThemeSaveOnce = useMemo(() => createSingleFlight(), []);
     const runThemeResetOnce = useMemo(() => createSingleFlight(), []);
     const runHeatmapSaveOnce = useMemo(() => createSingleFlight(), []);
+    const lastThemeSaveKeyRef = useRef(null);
+    const lastHeatmapSaveKeyRef = useRef(null);
+    const [themeBusy, setThemeBusy] = useState(false);
+    const [heatmapBusy, setHeatmapBusy] = useState(false);
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
     const heatMapTheme = useSelector(selectHeatMapTheme)
@@ -226,9 +234,18 @@ const ThemeChange = () => {
             content: normalizeColor(themeColorMap.Content),
             button: normalizeColor(themeColorMap.Button)
         };
+        const saveKey = buildThemeApplicationSaveKey(payload);
+        if (lastThemeSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("No changes to save");
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setThemeBusy(true);
         try {
             const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            lastThemeSaveKeyRef.current = saveKey;
             reloadTheme(payload, backgroundImage);
             const nextApplicationTheme = {
                 ...(appTheme || {}),
@@ -239,9 +256,9 @@ const ThemeChange = () => {
                     ...payload,
                 },
             };
+            // Already persisted + session-cached; skip force GET /theme/application (duplicate Network row).
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
+            setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -249,6 +266,8 @@ const ThemeChange = () => {
             }
         } catch (error) {
             // Optionally handle error feedback here
+        } finally {
+            setThemeBusy(false);
         }
     });
 
@@ -258,14 +277,28 @@ const ThemeChange = () => {
             occupancy: normalizeColor(heatmapColorMap.Occupancy),
             energy: normalizeColor(heatmapColorMap.Energy),
         };
-
-        dispatch(updateHeatMapTheme(payload));
-        // Publish single energy color to CSS variable for gradient usage
-        if (typeof document !== 'undefined') {
-            document.documentElement.style.setProperty('--heatmap-energy', normalizeColor(heatmapColorMap.Energy));
+        const saveKey = buildThemeHeatmapSaveKey(payload);
+        if (lastHeatmapSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("No changes to save");
+            setSnackbarOpen(true);
+            return;
         }
-        setSnackbarMessage("Heatmap colors saved successfully.");
-        setSnackbarOpen(true);
+
+        setHeatmapBusy(true);
+        try {
+            dispatch(updateHeatMapTheme(payload));
+            lastHeatmapSaveKeyRef.current = saveKey;
+            // Publish single energy color to CSS variable for gradient usage
+            if (typeof document !== 'undefined') {
+                document.documentElement.style.setProperty('--heatmap-energy', normalizeColor(heatmapColorMap.Energy));
+            }
+            setSnackbarSeverity('success');
+            setSnackbarMessage("Heatmap colors saved successfully.");
+            setSnackbarOpen(true);
+        } finally {
+            setHeatmapBusy(false);
+        }
     });
 
     // const handleThemeReset = () => {
@@ -292,9 +325,18 @@ const ThemeChange = () => {
             content: normalizeColor(defaultColors.Content),
             button: normalizeColor(defaultColors.Button),
         };
+        const saveKey = buildThemeApplicationSaveKey(payload);
+        if (lastThemeSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("Theme already at default colors.");
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setThemeBusy(true);
         try {
             const response = await dispatch(updateApplicationTheme(payload)).unwrap();
+            lastThemeSaveKeyRef.current = saveKey;
             reloadTheme(payload);
             const nextApplicationTheme = {
                 ...(appTheme || {}),
@@ -305,9 +347,9 @@ const ThemeChange = () => {
                     ...payload,
                 },
             };
+            // Already persisted + session-cached; skip force GET /theme/application (duplicate Network row).
             syncApplicationThemeSessionCache(nextApplicationTheme);
-            await dispatchFetchApplicationThemeOnce(dispatch, fetchApplicationTheme, { force: true });
-            dispatchFetchThemeSettingsOnce(dispatch, fetchThemeSettings, { force: true });
+            setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -315,6 +357,8 @@ const ThemeChange = () => {
             }
         } catch (error) {
             // Optionally handle error feedback here
+        } finally {
+            setThemeBusy(false);
         }
     });
     //background image
@@ -473,7 +517,7 @@ const ThemeChange = () => {
                     borderBottomRightRadius: '10px',
                 }}
             >
-                <UiVariantSelector compact />
+                <UiVariantSelector compact lightChrome={isDefaultWhiteTheme} />
                 <Box sx={themePickerCardsGridSx(3)}>
                     {/* Theme Picker Card */}
                     <Box sx={themePickerCardCellSx}>
@@ -498,6 +542,7 @@ const ThemeChange = () => {
                                     <Button
                                         className="save-button"
                                         onClick={handleThemeReset}
+                                        disabled={themeBusy}
                                         sx={{
                                             backgroundColor: dynamicButtonColor,
                                             color: actionButtonLabel,
@@ -507,11 +552,12 @@ const ThemeChange = () => {
                                             borderRadius: 1,
                                         }}
                                     >
-                                        Reset
+                                        {themeBusy ? 'Working…' : 'Reset'}
                                     </Button>
                                     <Button
                                         className="save-button"
                                         onClick={handleThemeSave}
+                                        disabled={themeBusy}
                                         sx={{
                                             backgroundColor: dynamicButtonColor,
                                             color: actionButtonLabel,
@@ -521,7 +567,7 @@ const ThemeChange = () => {
                                             borderRadius: 1,
                                         }}
                                     >
-                                        Save
+                                        {themeBusy ? 'Saving…' : 'Save'}
                                     </Button>
                                 </Box>
                             </Box>
@@ -550,6 +596,7 @@ const ThemeChange = () => {
                                     <Button
                                         className="save-button"
                                         onClick={handleHeatmapSave}
+                                        disabled={heatmapBusy}
                                         sx={{
                                             backgroundColor: dynamicButtonColor,
                                             color: actionButtonLabel,
@@ -559,7 +606,7 @@ const ThemeChange = () => {
                                             borderRadius: 1,
                                         }}
                                     >
-                                        Save
+                                        {heatmapBusy ? 'Saving…' : 'Save'}
                                     </Button>
                                 </Box>
                             </Box>

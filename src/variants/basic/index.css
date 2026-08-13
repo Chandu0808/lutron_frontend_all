@@ -35,7 +35,8 @@ html.app-native-checkbox-light input[type="checkbox"] {
 
 html.app-native-checkbox-light input[type="checkbox"]:checked {
   background-color: #ffffff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%231565C0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' d='M6.5 12.5l4 4 8-9'/%3E%3C/svg%3E");
+  border-color: #1565c0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%231565C0' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round' d='M6.5 12.5l4 4 8-9'/%3E%3C/svg%3E");
   background-size: 16px 16px;
   background-position: center;
   background-repeat: no-repeat;
@@ -60,10 +61,65 @@ html.app-native-checkbox-light input[type="checkbox"]:focus-visible {
 }
 
 /*
- * MUI Checkbox/Switch embed a native input for a11y; it must stay invisible.
- * `all: revert` is unreliable across browsers — duplicate visible boxes otherwise.
+ * Default light theme MUI Checkbox: hide SVG (filled primary icon) and show the
+ * same white-box + blue-tick native control used on Dashboard Alerts.
+ * Switch keeps a hidden native input — do not restyle it.
  */
-html.app-native-checkbox-light .MuiCheckbox-root input[type="checkbox"],
+html.app-native-checkbox-light .MuiCheckbox-root {
+  color: transparent;
+}
+
+html.app-native-checkbox-light .MuiCheckbox-root .MuiSvgIcon-root {
+  display: none !important;
+}
+
+html.app-native-checkbox-light .MuiCheckbox-root input[type="checkbox"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid #d1d1d1 !important;
+  border-radius: 2px !important;
+  box-sizing: border-box !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  opacity: 1 !important;
+  cursor: inherit !important;
+  z-index: 1 !important;
+  flex-shrink: 0;
+}
+
+html.app-native-checkbox-light .MuiCheckbox-root input[type="checkbox"]:checked {
+  border-color: #1565c0 !important;
+  background-color: #ffffff !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%231565C0' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round' d='M6.5 12.5l4 4 8-9'/%3E%3C/svg%3E") !important;
+  background-size: 16px 16px !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+html.app-native-checkbox-light .MuiCheckbox-root input[type="checkbox"]:indeterminate {
+  border-color: #1565c0 !important;
+  background-color: #ffffff !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='10.5' width='14' height='3' rx='1.5' fill='%231565C0'/%3E%3C/svg%3E") !important;
+  background-size: 16px 16px !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+html.app-native-checkbox-light .MuiCheckbox-root input[type="checkbox"]:disabled {
+  opacity: 1 !important;
+  cursor: default !important;
+}
+
 html.app-native-checkbox-light .MuiSwitch-root input[type="checkbox"] {
   appearance: auto !important;
   -webkit-appearance: auto !important;
@@ -83,6 +139,28 @@ html.app-native-checkbox-light .MuiSwitch-root input[type="checkbox"] {
   inset: 0 !important;
   cursor: inherit !important;
   z-index: 1 !important;
+}
+
+/*
+ * Default light theme: Select/Menu paper still used stale /theme/ content color
+ * (taupe) after Reset. Force white list + dark text to match the default theme.
+ */
+html.app-native-checkbox-light .MuiMenu-paper {
+  background-color: #ffffff !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+html.app-native-checkbox-light .MuiMenu-paper .MuiMenuItem-root {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+html.app-native-checkbox-light .MuiMenu-paper .MuiMenuItem-root.Mui-selected {
+  background-color: rgba(21, 101, 192, 0.08) !important;
+}
+
+html.app-native-checkbox-light .MuiMenu-paper .MuiMenuItem-root:hover,
+html.app-native-checkbox-light .MuiMenu-paper .MuiMenuItem-root.Mui-focusVisible {
+  background-color: rgba(0, 0, 0, 0.04) !important;
 }
 
 body {
