@@ -35,6 +35,7 @@ const QuickControls = () => {
   const navigate = useNavigate();
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = appTheme?.application_theme?.button || '#232323';
+  const quickControlCardBorder = `1.5px solid ${buttonColor}`;
   
   // Get user authentication and role
   const { role } = UseAuth();
@@ -604,6 +605,8 @@ const QuickControls = () => {
         {firstRow.map((qc, idx) => (
           <button
             key={qc.id || idx}
+            type="button"
+            className="quick-control-list-card"
             style={{
               background: '#fff',
               color: buttonColor,
@@ -611,7 +614,8 @@ const QuickControls = () => {
               padding: '12px 20px',
               fontWeight: 700,
               fontSize: 14,
-              border: 'none',
+              border: quickControlCardBorder,
+              boxSizing: 'border-box',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               cursor: 'pointer',
               minWidth: '140px',
@@ -643,6 +647,8 @@ const QuickControls = () => {
           {row.map((qc, idx) => (
             <button
               key={qc.id || idx}
+              type="button"
+              className="quick-control-list-card"
               style={{
                 background: '#fff',
               color: buttonColor,
@@ -650,7 +656,8 @@ const QuickControls = () => {
                 padding: isTablet ? '12px 20px' : '15px 30px',
                 fontWeight: 700,
                 fontSize: isTablet ? 14 : 16,
-                border: 'none',
+                border: quickControlCardBorder,
+                boxSizing: 'border-box',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                 cursor: 'pointer',
                 minWidth: isTablet ? 140 : 180,

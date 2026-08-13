@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
+import { buildEmailServerSaveKey } from "../../../../shared/utils/emailServerSaveKey";
 import {
     Box,
     Typography,
@@ -25,6 +26,8 @@ const EmailServer = () => {
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+    const [saving, setSaving] = useState(false);
+    const lastSavedKeyRef = useRef(null);
     const dispatch = useDispatch()
     const runSaveOnce = useMemo(() => createSingleFlight(), []);
     const navigate = useNavigate();
@@ -74,15 +77,25 @@ const EmailServer = () => {
             sender_name: formData.senderName,
             app_password: formData.password,
         };
+        const saveKey = buildEmailServerSaveKey(payload);
+        if (lastSavedKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage('No changes to save');
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setSaving(true);
         try {
             await dispatch(createEmail(payload)).unwrap();
+            lastSavedKeyRef.current = saveKey;
             setSnackbarSeverity('success');
             setSnackbarMessage('Email configuration saved successfully!');
         } catch (error) {
             setSnackbarSeverity('error');
             setSnackbarMessage('Failed to save email configuration!');
         } finally {
+            setSaving(false);
             setSnackbarOpen(true);
         }
     });
@@ -100,6 +113,13 @@ const EmailServer = () => {
                     sslRequired: true,
                     authRequired: true,
                     password: ''
+                });
+                lastSavedKeyRef.current = buildEmailServerSaveKey({
+                    server_name: latest.server_name || '',
+                    port: Number(latest.port) || 0,
+                    server_email: latest.server_email || '',
+                    sender_name: latest.sender_name || '',
+                    app_password: '',
                 });
             }
         });
@@ -284,9 +304,10 @@ const EmailServer = () => {
                         <Button
                             variant="contained"
                             onClick={handleSave}
+                            disabled={saving}
                             sx={{ bgcolor: 'buttonColor', color: '#fff' }}
                         >
-                            Save
+                            {saving ? 'Saving…' : 'Save'}
                         </Button>
                     </Box>
                     <Typography variant="subtitle1" fontWeight="bold" sx={{ color: '#fff' }}>

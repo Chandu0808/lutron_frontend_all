@@ -39,7 +39,7 @@ const QuickControls = () => {
   const buttonColor = getThemeButtonColor(appTheme?.application_theme?.button, appTheme?.application_theme?.background);
   const modalBg = 'var(--schedule-modal-bg, #d6dde8)';
   const modalTitleColor = 'var(--schedule-modal-title-color, #000000)';
-  const quickControlCardBorder = '1px solid rgba(0, 0, 0, 0.2)';
+  const quickControlCardBorder = '1.5px solid var(--app-button, #2c2820)';
   
   // Get user authentication and role
   const { role } = UseAuth();
@@ -609,6 +609,8 @@ const QuickControls = () => {
         {firstRow.map((qc, idx) => (
           <button
             key={qc.id || idx}
+            type="button"
+            className="quick-control-list-card"
             style={{
               background: '#fff',
               color: buttonColor,
@@ -649,6 +651,8 @@ const QuickControls = () => {
           {row.map((qc, idx) => (
             <button
               key={qc.id || idx}
+              type="button"
+              className="quick-control-list-card"
               style={{
                 background: '#fff',
               color: buttonColor,

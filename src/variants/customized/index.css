@@ -770,6 +770,13 @@ body.schedule-page {
   box-sizing: border-box;
 }
 
+/* Quick Controls list cards — visible outline on light/dark page backgrounds. */
+button.quick-control-list-card {
+  border: 1.5px solid var(--app-button, #232323) !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+}
+
 /* Responsive adjustments for schedule containers */
 @media (max-width: 1440px) {
   .schedule-container {

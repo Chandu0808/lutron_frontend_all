@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
+import { buildHomeSettingsSaveKey } from "../../../../../shared/utils/homeSettingsSaveKey";
 import {
     Box,
     Button,
@@ -200,6 +201,8 @@ const HomeComponent = () => {
     const [address, setAddress] = useState('');
     const [areaSize, setAreaSize] = useState('');
     const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('Data saved successfully!');
+    const [statusSeverity, setStatusSeverity] = useState('success');
     const [showErrorMessage, setShowErrorMessage] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     
@@ -229,6 +232,7 @@ const HomeComponent = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const runSaveOnce = useMemo(() => createSingleFlight(), []);
+    const lastSavedKeyByModeRef = useRef({});
 
     // Get current user role for sidebar filtering
     const { role: currentUserRole } = UseAuth();
@@ -490,6 +494,24 @@ const HomeComponent = () => {
     };
 
     const handleSave = async () => runSaveOnce(async () => {
+        const saveKey = buildHomeSettingsSaveKey({
+            mode: displayMode,
+            description: cleanDescription(description),
+            clientName,
+            locationText,
+            address,
+            areaSize,
+            installedSolutions,
+            imageFile,
+            logoFile,
+        });
+        if (lastSavedKeyByModeRef.current[displayMode] === saveKey) {
+            setStatusSeverity('info');
+            setStatusMessage('No changes to save');
+            setShowSuccessMessage(true);
+            return;
+        }
+
         const formData = new FormData();
 
         if (displayMode === 'Lutron') {
@@ -499,8 +521,13 @@ const HomeComponent = () => {
 
             const result = await dispatch(saveLutronData(formData));
             if (saveLutronData.fulfilled.match(result)) {
+                lastSavedKeyByModeRef.current[displayMode] = saveKey;
+                setImageFile(null);
+                setLogoFile(null);
+                setStatusSeverity('success');
+                setStatusMessage('Data saved successfully!');
                 setShowSuccessMessage(true);
-                dispatch(getLutronData());
+                // Redux save.fulfilled already merges payload — skip GET /home/lutron (avoids duplicate Network row).
             }
         } else if (displayMode === 'Client') {
             if (description) formData.append('description', cleanDescription(description));
@@ -511,9 +538,13 @@ const HomeComponent = () => {
 
             const result = await dispatch(saveClientData(formData));
             if (saveClientData.fulfilled.match(result)) {
+                lastSavedKeyByModeRef.current[displayMode] = saveKey;
+                setImageFile(null);
+                setLogoFile(null);
+                setStatusSeverity('success');
+                setStatusMessage('Data saved successfully!');
                 setShowSuccessMessage(true);
-                // FIXED: Only refresh once after successful save
-                await dispatchFetchClientOnce(dispatch, getLutronDataClient, { force: true });
+                // Redux save.fulfilled already merges payload — skip force GET /home/client.
             }
         } else if (displayMode === 'Project') {
             if (description) formData.append('description', cleanDescription(description));
@@ -527,8 +558,13 @@ const HomeComponent = () => {
 
             const result = await dispatch(saveProjectData(formData));
             if (saveProjectData.fulfilled.match(result)) {
+                lastSavedKeyByModeRef.current[displayMode] = saveKey;
+                setImageFile(null);
+                setLogoFile(null);
+                setStatusSeverity('success');
+                setStatusMessage('Data saved successfully!');
                 setShowSuccessMessage(true);
-                await dispatchFetchProjectOnce(dispatch, getLutronDataProject, { force: true });
+                // Redux save.fulfilled already merges payload — skip force GET /home/project.
             }
         }
     });
@@ -662,14 +698,14 @@ const HomeComponent = () => {
             >
                 <Alert 
                     onClose={handleCloseSuccessMessage} 
-                    severity="success"
+                    severity={statusSeverity}
                     sx={{
                         backgroundColor: '#fff',
                         color: '#000',
-                        border: '1px solid #4CAF50',
+                        border: statusSeverity === 'info' ? '1px solid #2196F3' : '1px solid #4CAF50',
                         borderRadius: '8px',
                         '& .MuiAlert-icon': {
-                            color: '#4CAF50',
+                            color: statusSeverity === 'info' ? '#2196F3' : '#4CAF50',
                         },
                         '& .MuiAlert-message': {
                             color: '#000',
@@ -679,7 +715,7 @@ const HomeComponent = () => {
                         }
                     }}
                 >
-                    Data saved successfully!
+                    {statusMessage}
                 </Alert>
             </Snackbar>
 

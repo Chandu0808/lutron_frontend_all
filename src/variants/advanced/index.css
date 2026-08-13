@@ -3219,6 +3219,13 @@ html.theme-4-page .MuiButton-contained:not(.MuiButton-colorError):hover {
   box-sizing: border-box;
 }
 
+/* Quick Controls list cards — visible outline on light/gold page backgrounds. */
+button.quick-control-list-card {
+  border: 1.5px solid var(--app-button, #2c2820) !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+}
+
 .quick-control-details-list-scroll-wrap {
   position: relative;
   flex: 1;

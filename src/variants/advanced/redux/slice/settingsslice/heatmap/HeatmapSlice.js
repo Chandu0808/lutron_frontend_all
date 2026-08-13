@@ -31,6 +31,14 @@ export const fetchFloorMapData = createAsyncThunk(
     } catch (err) {
       return rejectWithValue(formatFloorMapError(err));
     }
+  },
+  {
+    // Drop duplicate light_status while the same floor is already in flight.
+    condition: ({ floorId }, { getState }) => {
+      const hm = getState()?.heatmap;
+      if (hm?.floorMapFetchingId == null) return true;
+      return String(hm.floorMapFetchingId) !== String(floorId);
+    },
   }
 );
 
@@ -39,6 +47,13 @@ export const fetchAreaOccupancyStatus = createAsyncThunk(
   async ({ floorId }) => {
     const response = await BaseUrl.get(`/floor/occupancy_status?floor_id=${floorId}`);
     return response.data;
+  },
+  {
+    condition: ({ floorId }, { getState }) => {
+      const hm = getState()?.heatmap;
+      if (hm?.occupancyFetchingId == null) return true;
+      return String(hm.occupancyFetchingId) !== String(floorId);
+    },
   }
 );
 
@@ -47,6 +62,35 @@ export const fetchAreaEnergyConsumption = createAsyncThunk(
   async ({ floorId }) => {
     const response = await BaseUrl.get(`/floor/energy_status?floor_id=${floorId}`);
     return response.data;
+  },
+  {
+    condition: ({ floorId }, { getState }) => {
+      const hm = getState()?.heatmap;
+      if (hm?.energyFetchingId == null) return true;
+      return String(hm.energyFetchingId) !== String(floorId);
+    },
+  }
+);
+
+export const fetchFloorStatusRevision = createAsyncThunk(
+  "heatmap/fetchFloorStatusRevision",
+  async ({ floorId }, { rejectWithValue }) => {
+    try {
+      const response = await BaseUrl.get(`/floor/status_revision?floor_id=${floorId}`);
+      return {
+        floorId,
+        revision: response.data?.revision ?? null,
+      };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.detail || err.message || "Failed to fetch floor revision");
+    }
+  },
+  {
+    condition: ({ floorId }, { getState }) => {
+      const hm = getState()?.heatmap;
+      if (hm?.revisionFetchingId == null) return true;
+      return String(hm.revisionFetchingId) !== String(floorId);
+    },
   }
 );
 
@@ -219,6 +263,11 @@ const initialState = {
   areaStatusLoading: false,
   areaStatusError: null,
   areaStatusFetchingId: null,
+  floorMapFetchingId: null,
+  occupancyFetchingId: null,
+  energyFetchingId: null,
+  floorStatusRevisionByFloorId: {},
+  revisionFetchingId: null,
   toggleAllZonesLoading: false,
   toggleAllZonesError: null,
 };
@@ -254,6 +303,11 @@ const heatmapSlice = createSlice({
       state.areaStatusLoading = false;
       state.areaStatusError = null;
       state.areaStatusFetchingId = null;
+      state.floorMapFetchingId = null;
+      state.occupancyFetchingId = null;
+      state.energyFetchingId = null;
+      state.floorStatusRevisionByFloorId = {};
+      state.revisionFetchingId = null;
       state.toggleAllZonesLoading = false;
       state.toggleAllZonesError = null;
       state.loading = false;
@@ -275,9 +329,10 @@ const heatmapSlice = createSlice({
   extraReducers: (builder) => {
     // LIGHT STATUS
     builder
-      .addCase(fetchFloorMapData.pending, (state) => {
+      .addCase(fetchFloorMapData.pending, (state, action) => {
         state.loading = true;
         state.error = null;
+        state.floorMapFetchingId = action.meta.arg?.floorId ?? null;
       })
       .addCase(fetchFloorMapData.fulfilled, (state, action) => {
         const areas = (action.payload.areas || []).map((area) => {
@@ -306,16 +361,23 @@ const heatmapSlice = createSlice({
         state.pdfUrl = resolveFloorPlanMediaUrl(rawPath);
       
         state.loading = false;
+        state.floorMapFetchingId = null;
       })
       .addCase(fetchFloorMapData.rejected, (state, action) => {
         state.loading = false;
+        state.floorMapFetchingId = null;
         state.error = action.payload || action.error?.message || 'Failed to load floor plan';
         state.pdfUrl = null;
         state.heatmapData = { areas: [] };
       });
 
     // OCCUPANCY STATUS
-    builder.addCase(fetchAreaOccupancyStatus.fulfilled, (state, action) => {
+    builder
+      .addCase(fetchAreaOccupancyStatus.pending, (state, action) => {
+        state.occupancyFetchingId = action.meta.arg?.floorId ?? null;
+      })
+      .addCase(fetchAreaOccupancyStatus.fulfilled, (state, action) => {
+      state.occupancyFetchingId = null;
       const updatedAreas = (action.payload.areas || []).map(a => ({
         ...a,
         area_id: a.area_id || a.id // fallback to id if area_id is missing
@@ -337,10 +399,18 @@ const heatmapSlice = createSlice({
             : area;
         });
       }
-    });
+    })
+      .addCase(fetchAreaOccupancyStatus.rejected, (state) => {
+        state.occupancyFetchingId = null;
+      });
 
     // Update the ENERGY STATUS handler to include the new fields
-    builder.addCase(fetchAreaEnergyConsumption.fulfilled, (state, action) => {
+    builder
+      .addCase(fetchAreaEnergyConsumption.pending, (state, action) => {
+        state.energyFetchingId = action.meta.arg?.floorId ?? null;
+      })
+      .addCase(fetchAreaEnergyConsumption.fulfilled, (state, action) => {
+      state.energyFetchingId = null;
       const energyAreas = action.payload.areas || [];
       
       
@@ -376,7 +446,10 @@ const heatmapSlice = createSlice({
         });
         
       }
-    });
+    })
+      .addCase(fetchAreaEnergyConsumption.rejected, (state) => {
+        state.energyFetchingId = null;
+      });
 
     // FULL AREA STATUS
     builder
@@ -384,7 +457,13 @@ const heatmapSlice = createSlice({
         state.areaStatusLoading = true;
         state.areaStatusError = null;
         state.areaStatusFetchingId = action.meta.arg;
-        state.areaStatus = null;
+        // Keep sidebar for same-area retry; clear only when switching areas.
+        if (
+          !state.areaStatus ||
+          String(state.areaStatus.area_id) !== String(action.meta.arg)
+        ) {
+          state.areaStatus = null;
+        }
       })
       .addCase(fetchAreaStatus.fulfilled, (state, action) => {
         state.areaStatusLoading = false;
@@ -543,6 +622,21 @@ const heatmapSlice = createSlice({
 
     // Refresh all heatmap data
     builder
+      .addCase(fetchFloorStatusRevision.pending, (state, action) => {
+        state.revisionFetchingId = action.meta.arg?.floorId ?? null;
+      })
+      .addCase(fetchFloorStatusRevision.fulfilled, (state, action) => {
+        state.revisionFetchingId = null;
+        const floorId = action.payload?.floorId;
+        if (floorId == null) return;
+        state.floorStatusRevisionByFloorId[String(floorId)] =
+          action.payload.revision ?? null;
+      })
+      .addCase(fetchFloorStatusRevision.rejected, (state) => {
+        state.revisionFetchingId = null;
+      });
+
+    builder
       .addCase(refreshAllHeatmapData.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -581,6 +675,8 @@ export const selectAreaStatusFetchingId = (state) => state.heatmap.areaStatusFet
 export const selectToggleAllZonesLoading = (state) => state.heatmap.toggleAllZonesLoading;
 export const selectToggleAllZonesError = (state) => state.heatmap.toggleAllZonesError;
 export const selectHeatmapSearchTerm = (state) => state.heatmap.searchTerm; // added
+export const selectFloorStatusRevisionByFloorId = (state) =>
+  state.heatmap.floorStatusRevisionByFloorId || {};
 
 // Reducer
 export default heatmapSlice.reducer;

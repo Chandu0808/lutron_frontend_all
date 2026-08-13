@@ -94,8 +94,13 @@ export default function UiVariantSelector({ lightChrome = false, compact = false
               ? {
                   PaperProps: {
                     sx: {
+                      bgcolor: '#fff',
                       color: '#000',
                       '& .MuiMenuItem-root': { color: '#000' },
+                      '& .MuiMenuItem-root.Mui-selected': {
+                        backgroundColor: 'rgba(21, 101, 192, 0.08)',
+                        color: '#000',
+                      },
                     },
                   },
                 }

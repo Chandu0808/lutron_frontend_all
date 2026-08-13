@@ -1,4 +1,9 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
+import {
+    buildThemeApplicationSaveKey,
+    buildThemeHeatmapSaveKey,
+} from "../../../../../shared/utils/themeSettingsSaveKey";
 import { Box, Button, Typography } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
@@ -85,6 +90,13 @@ const ThemeChange = () => {
 
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const runThemeSaveOnce = useMemo(() => createSingleFlight(), []);
+    const runThemeResetOnce = useMemo(() => createSingleFlight(), []);
+    const runHeatmapSaveOnce = useMemo(() => createSingleFlight(), []);
+    const lastThemeSaveKeyRef = useRef(null);
+    const lastHeatmapSaveKeyRef = useRef(null);
+    const [themeBusy, setThemeBusy] = useState(false);
+    const [heatmapBusy, setHeatmapBusy] = useState(false);
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
     const contentColor = appTheme?.application_theme?.content || '#ffffff';
@@ -207,16 +219,26 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors saved successfully.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeSave = async () => {
+    const handleThemeSave = async () => runThemeSaveOnce(async () => {
         const payload = {
             background: normalizeColor(themeColorMap.Background),
             content: normalizeColor(themeColorMap.Content),
             button: normalizeColor(themeColorMap.Button)
         };
+        const saveKey = buildThemeApplicationSaveKey(payload);
+        if (lastThemeSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("No changes to save");
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setThemeBusy(true);
         try {
             await dispatch(updateApplicationTheme(payload)).unwrap();
+            lastThemeSaveKeyRef.current = saveKey;
             reloadTheme(payload, backgroundImage);
+            setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -224,24 +246,40 @@ const ThemeChange = () => {
             }
         } catch (error) {
             // Optionally handle error feedback here
+        } finally {
+            setThemeBusy(false);
         }
-    };
+    });
 
-    const handleHeatmapSave = () => {
+    const handleHeatmapSave = () => runHeatmapSaveOnce(async () => {
         const payload = {
             light: normalizeColor(heatmapColorMap.Light),
             occupancy: normalizeColor(heatmapColorMap.Occupancy),
             energy: normalizeColor(heatmapColorMap.Energy),
         };
-
-        dispatch(updateHeatMapTheme(payload));
-        // Publish single energy color to CSS variable for gradient usage
-        if (typeof document !== 'undefined') {
-            document.documentElement.style.setProperty('--heatmap-energy', normalizeColor(heatmapColorMap.Energy));
+        const saveKey = buildThemeHeatmapSaveKey(payload);
+        if (lastHeatmapSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("No changes to save");
+            setSnackbarOpen(true);
+            return;
         }
-        setSnackbarMessage("Heatmap colors saved successfully.");
-        setSnackbarOpen(true);
-    };
+
+        setHeatmapBusy(true);
+        try {
+            dispatch(updateHeatMapTheme(payload));
+            lastHeatmapSaveKeyRef.current = saveKey;
+            // Publish single energy color to CSS variable for gradient usage
+            if (typeof document !== 'undefined') {
+                document.documentElement.style.setProperty('--heatmap-energy', normalizeColor(heatmapColorMap.Energy));
+            }
+            setSnackbarSeverity('success');
+            setSnackbarMessage("Heatmap colors saved successfully.");
+            setSnackbarOpen(true);
+        } finally {
+            setHeatmapBusy(false);
+        }
+    });
 
     // const handleThemeReset = () => {
     //     setThemeColorMap(DEFAULT_THEME_COLORS);
@@ -254,7 +292,7 @@ const ThemeChange = () => {
     //     setSnackbarMessage("Theme colors reset to default.");
     //     setSnackbarOpen(true);
     // };
-    const handleThemeReset = async () => {
+    const handleThemeReset = async () => runThemeResetOnce(async () => {
         const defaultColors = {
             Background: '#CDC0A0',
             Content: '#807864',
@@ -269,10 +307,20 @@ const ThemeChange = () => {
             content: normalizeColor(defaultColors.Content),
             button: normalizeColor(defaultColors.Button),
         };
+        const saveKey = buildThemeApplicationSaveKey(payload);
+        if (lastThemeSaveKeyRef.current === saveKey) {
+            setSnackbarSeverity('info');
+            setSnackbarMessage("Theme already at default colors.");
+            setSnackbarOpen(true);
+            return;
+        }
 
+        setThemeBusy(true);
         try {
             await dispatch(updateApplicationTheme(payload)).unwrap();
+            lastThemeSaveKeyRef.current = saveKey;
             reloadTheme(payload);
+            setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
             if (typeof window !== 'undefined') {
@@ -280,8 +328,10 @@ const ThemeChange = () => {
             }
         } catch (error) {
             // Optionally handle error feedback here
+        } finally {
+            setThemeBusy(false);
         }
-    };
+    });
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
     const fileInputRef = React.useRef();
@@ -430,6 +480,7 @@ const ThemeChange = () => {
                                 <Button
                                     className="save-button"
                                     onClick={handleThemeReset}
+                                    disabled={themeBusy}
                                     sx={{
                                         backgroundColor: dynamicButtonColor,
                                         color: '#fff',
@@ -439,11 +490,12 @@ const ThemeChange = () => {
                                         borderRadius: 1,
                                     }}
                                 >
-                                    Reset
+                                    {themeBusy ? 'Working…' : 'Reset'}
                                 </Button>
                                 <Button
                                     className="save-button"
                                     onClick={handleThemeSave}
+                                    disabled={themeBusy}
                                     sx={{
                                         backgroundColor: dynamicButtonColor,
                                         color: '#fff',
@@ -453,7 +505,7 @@ const ThemeChange = () => {
                                         borderRadius: 1,
                                     }}
                                 >
-                                    Save
+                                    {themeBusy ? 'Saving…' : 'Save'}
                                 </Button>
                             </Box>
 
@@ -483,9 +535,10 @@ const ThemeChange = () => {
                                 <Button
                                     className="save-button"
                                     onClick={handleHeatmapSave}
+                                    disabled={heatmapBusy}
                                     sx={{ backgroundColor: dynamicButtonColor, color: '#fff', fontWeight: 'bold', px: 4, py: 1, borderRadius: 1 }}
                                 >
-                                    Save
+                                    {heatmapBusy ? 'Saving…' : 'Save'}
                                 </Button>
                             </Box>
                         </Box>
