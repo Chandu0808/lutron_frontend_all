@@ -33,7 +33,12 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { Document, Page } from "react-pdf";
 import { configurePdfJsWorker, buildPdfDocumentFile } from "../../../../shared/pdf/floorPlanPdf";
-import { getPolygonRings, flattenAreaCoords } from '../../utils/floorplanCoordinates';
+import {
+  getPolygonRings,
+  flattenAreaCoords,
+  resolveFloorPlanPageDims,
+  pageDimsEqual,
+} from '../../utils/floorplanCoordinates';
 import {
   fetchFloorMapData,
   fetchAreaOccupancyStatus,
@@ -3835,12 +3840,25 @@ function HeatmapPdfSvgViewer({
   const A4_HEIGHT = 1123;
 
   const transformedContentRef = React.useRef(null);
+  const pdfPageRef = React.useRef(null);
 
   const handlePdfPageLoad = (page) => {
-    // Must match CorrectCoordinate / backend area coordinates (originalWidth × originalHeight).
-    setPageDims({ width: page.originalWidth, height: page.originalHeight });
+    // Prefer rotated viewport when CSV coords match the visible page (/Rotate 90|270).
+    // Falls back to MediaBox for unrotated floors so existing CSVs stay aligned.
+    pdfPageRef.current = page;
+    setPageDims(resolveFloorPlanPageDims(page, areas));
     setPdfLoaded(true);
   };
+
+  useEffect(() => {
+    pdfPageRef.current = null;
+  }, [pdfUrl]);
+
+  useEffect(() => {
+    if (!pdfPageRef.current) return;
+    const next = resolveFloorPlanPageDims(pdfPageRef.current, areas);
+    setPageDims((prev) => (pageDimsEqual(prev, next) ? prev : next));
+  }, [areas, setPageDims]);
 
   // Pan/drag functionality
   const handleMouseDown = (e) => {
@@ -4016,6 +4034,11 @@ function HeatmapPdfSvgViewer({
               <Page
                 pageNumber={1}
                 width={pageDims ? pageDims.width : A4_WIDTH}
+                rotate={
+                  pageDims?.source === 'rotated'
+                    ? Number(pageDims.rotate) || 0
+                    : 0
+                }
                 renderAnnotationLayer={false}
                 renderTextLayer={false}
                 onLoadSuccess={handlePdfPageLoad}
@@ -4028,17 +4051,18 @@ function HeatmapPdfSvgViewer({
             <svg
               width={pageDims.width}
               height={pageDims.height}
+              viewBox={`0 0 ${pageDims.width} ${pageDims.height}`}
               style={{ position: 'absolute', top: 0, left: 0, zIndex: 2, pointerEvents: 'auto' }}
             >
               {(areas || []).map((area, index) => {
                 const rings = getPolygonRings(area);
                 const flat = flattenAreaCoords(area);
-                if (!rings.length && !flat.length) return null;
+                if (!rings.length) return null;
 
-                // Use coordinates directly - they should already be in the correct PDF coordinate system
-                const scaledCoords = flat;
+                // Labels/bbox use all points; each ring is drawn as its own polygon
+                // so multi-piece areas are not mashed into one shape.
+                const scaledCoords = flat.length ? flat : rings.flat();
 
-                const points = scaledCoords.map((p) => `${p.x},${p.y}`).join(' ');
                 const displayAreaName = area.name || area.area_name || '';
                 const center = scaledCoords.length > 0
                   ? (() => {
@@ -4221,32 +4245,40 @@ function HeatmapPdfSvgViewer({
 
                 return (
                   <g key={index}>
-                    {/* Define clipping path for this area */}
+                    {/* Define clipping path for this area (union of rings) */}
                     <defs>
                       <clipPath id={`clip-${index}`}>
-                        <polygon points={points} />
+                        {rings.map((ring, ri) => (
+                          <polygon
+                            key={ri}
+                            points={ring.map((p) => `${p.x},${p.y}`).join(' ')}
+                          />
+                        ))}
                       </clipPath>
                     </defs>
 
-                    {/* Base polygon with tooltip - scales with zoom */}
-                    <polygon
-                      points={points}
-                      fill={getFill(area)}
-                      stroke={'#000'}
-                      strokeWidth={2}
-                      vectorEffect="non-scaling-stroke"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAreaClick(area);
-                      }}
-                      style={{
-                        cursor: 'pointer',
-                        pointerEvents: 'auto'
-                      }}
-                    >
-                      {/* Tooltip showing full area name on hover */}
-                      <title>{displayAreaName}</title>
-                    </polygon>
+                    {/* One polygon per ring so multi-piece areas stay separate */}
+                    {rings.map((ring, ri) => (
+                      <polygon
+                        key={ri}
+                        points={ring.map((p) => `${p.x},${p.y}`).join(' ')}
+                        fill={getFill(area)}
+                        stroke={'#000'}
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAreaClick(area);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          pointerEvents: 'auto'
+                        }}
+                      >
+                        {/* Tooltip showing full area name on hover */}
+                        <title>{displayAreaName}</title>
+                      </polygon>
+                    ))}
                     {center.x && center.y && displayAreaName && finalLines.length > 0 && shouldShowText && (
                       <>
                         {/* Multi-line text - consistent size, positioned within the area with strict clipping */}
@@ -4407,24 +4439,30 @@ function HeatmapPdfSvgViewer({
                           animation: searchBounceAnimation ? 'searchBounce 1.5s ease-in-out infinite' : 'none'
                         }}
                       >
-                        <polygon
-                          points={points}
-                          fill={'none'}
-                          stroke={'#ff0000'}
-                          strokeWidth={8}
-                          vectorEffect="non-scaling-stroke"
-                          strokeDasharray="10,5"
-                          opacity={1.0}
-                        />
+                        {rings.map((ring, ri) => (
+                          <polygon
+                            key={`hl-outer-${ri}`}
+                            points={ring.map((p) => `${p.x},${p.y}`).join(' ')}
+                            fill={'none'}
+                            stroke={'#ff0000'}
+                            strokeWidth={8}
+                            vectorEffect="non-scaling-stroke"
+                            strokeDasharray="10,5"
+                            opacity={1.0}
+                          />
+                        ))}
                         {/* Additional inner highlight for better visibility */}
-                        <polygon
-                          points={points}
-                          fill={'rgba(255, 0, 0, 0.15)'}
-                          stroke={'#ff0000'}
-                          strokeWidth={4}
-                          vectorEffect="non-scaling-stroke"
-                          opacity={0.8}
-                        />
+                        {rings.map((ring, ri) => (
+                          <polygon
+                            key={`hl-inner-${ri}`}
+                            points={ring.map((p) => `${p.x},${p.y}`).join(' ')}
+                            fill={'rgba(255, 0, 0, 0.15)'}
+                            stroke={'#ff0000'}
+                            strokeWidth={4}
+                            vectorEffect="non-scaling-stroke"
+                            opacity={0.8}
+                          />
+                        ))}
                       </g>
                     )}
                   </g>

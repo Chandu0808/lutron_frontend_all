@@ -117,6 +117,18 @@ export default function FloorComponent() {
           ConfirmDialog={ConfirmDialog}
           tableHeaderRowSx={tableHeaderRowSx}
           tableHeaderCellSx={tableHeaderCellSx}
+          // Solid blue header + overflow:hidden clips the last cell; keep sort icon fully visible.
+          tableHeaderSortCellSx={{
+            width: 56,
+            minWidth: 56,
+            maxWidth: 64,
+            px: 1,
+            pr: 2,
+            py: 0.75,
+            boxSizing: 'border-box',
+          }}
+          headerSortIconColor="#ffffff"
+          headerSortIconActiveColor="#ffffff"
         />
       </Grid>
     </Grid>

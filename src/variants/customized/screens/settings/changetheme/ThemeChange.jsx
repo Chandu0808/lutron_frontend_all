@@ -35,6 +35,7 @@ import {
     dispatchFetchClientOnce,
     dispatchFetchHeatMapThemeOnce,
     dispatchFetchThemeSettingsOnce,
+    syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
 import CustomizedSettingsPageShell from '../../../components/CustomizedSettingsPageShell';
 import {
@@ -130,6 +131,7 @@ const ThemeChange = () => {
     const [activeThemeTab, setActiveThemeTab] = useState('Background');
     const [activeHeatmapTab, setActiveHeatmapTab] = useState('Light');
     const [dynamicButtonColor, setDynamicButtonColor] = useState('#232323');
+    const [themePickerKey, setThemePickerKey] = useState(0);
     useEffect(() => {
         dispatchFetchClientOnce(dispatch, getLutronDataClient);
     }, [dispatch]);
@@ -235,9 +237,19 @@ const ThemeChange = () => {
 
         setThemeBusy(true);
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             lastThemeSaveKeyRef.current = saveKey;
             reloadTheme(payload, backgroundImage);
+            // Keep session cache in sync so reload does not hydrate stale colors into the picker.
+            syncApplicationThemeSessionCache({
+                ...(appTheme || {}),
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(appTheme?.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            });
             setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors saved successfully.");
             setSnackbarOpen(true);
@@ -294,20 +306,36 @@ const ThemeChange = () => {
     // };
     const handleThemeReset = async () => runThemeResetOnce(async () => {
         const defaultColors = {
-            Background: '#CDC0A0',
-            Content: '#807864',
-            Button: '#232323',
+            Background: DEFAULT_THEME_COLORS.Background,
+            Content: DEFAULT_THEME_COLORS.Content,
+            Button: DEFAULT_THEME_COLORS.Button,
         };
 
+        // Force picker UI onto customized defaults before / after reload.
+        setActiveThemeTab('Background');
         setThemeColorMap(defaultColors);
-        setSelectedThemeColor(defaultColors[activeThemeTab]);
+        setSelectedThemeColor(defaultColors.Background);
+        setThemePickerKey((k) => k + 1);
 
         const payload = {
             background: normalizeColor(defaultColors.Background),
             content: normalizeColor(defaultColors.Content),
             button: normalizeColor(defaultColors.Button),
         };
+        const nextApplicationTheme = {
+            ...(appTheme || {}),
+            application_theme: {
+                ...(appTheme?.application_theme || {}),
+                ...payload,
+            },
+        };
         const saveKey = buildThemeApplicationSaveKey(payload);
+
+        // Always apply defaults locally + keep session cache fresh so a reload
+        // cannot restore the previous Background/Content/Button into the picker.
+        reloadTheme(payload, backgroundImage);
+        syncApplicationThemeSessionCache(nextApplicationTheme);
+
         if (lastThemeSaveKeyRef.current === saveKey) {
             setSnackbarSeverity('info');
             setSnackbarMessage("Theme already at default colors.");
@@ -317,9 +345,18 @@ const ThemeChange = () => {
 
         setThemeBusy(true);
         try {
-            await dispatch(updateApplicationTheme(payload)).unwrap();
+            const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             lastThemeSaveKeyRef.current = saveKey;
-            reloadTheme(payload);
+            reloadTheme(payload, backgroundImage);
+            syncApplicationThemeSessionCache({
+                ...nextApplicationTheme,
+                ...(response && typeof response === 'object' ? response : {}),
+                application_theme: {
+                    ...(nextApplicationTheme.application_theme || {}),
+                    ...(response?.application_theme || {}),
+                    ...payload,
+                },
+            });
             setSnackbarSeverity('success');
             setSnackbarMessage("Theme colors reset to default.");
             setSnackbarOpen(true);
@@ -467,6 +504,7 @@ const ThemeChange = () => {
                             <Box className="color-picker-card" sx={themePickerCardSx}>
                             {renderTabs(['Background', 'Content', 'Button'], activeThemeTab, setActiveThemeTab, themeColorMap, setSelectedThemeColor)}
                             <HexColorPicker
+                                key={themePickerKey}
                                 colorMap={themeColorMap}
                                 setColorMap={setThemeColorMap}
                                 selectedColor={selectedThemeColor}

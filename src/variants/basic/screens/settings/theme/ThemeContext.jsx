@@ -53,9 +53,9 @@ const applyCssVariables = (uiColors = {}, bgImage = "") => {
   const isDefaultWhiteTheme = isWhiteAreaPickerChrome(content);
   const root = document.documentElement;
 
-  // Default/light content: keep body/html white so Settings does not show a beige band.
-  const cssBackground = isDefaultWhiteTheme ? DEFAULT_APP_BACKGROUND : background;
-  root.style.setProperty("--app-background", cssBackground);
+  // Always apply the saved Background color. White-chrome helpers below still
+  // key off light Content for checkboxes / area pickers — not for page bg.
+  root.style.setProperty("--app-background", background);
   root.style.setProperty("--app-content", content);
   root.style.setProperty("--app-button", button);
   root.style.setProperty("--app-checkbox-accent", isDefaultWhiteTheme ? BUTTON_BLUE : "auto");
