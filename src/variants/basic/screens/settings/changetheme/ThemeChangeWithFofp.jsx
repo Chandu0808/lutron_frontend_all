@@ -166,31 +166,68 @@ const ThemeChange = () => {
             dispatchFetchBackgroundImageOnce(dispatch, fetchBackgroundImage);
         }
     }, [dispatch, appTheme, heatMapTheme, apibgImage]);
+
+    // Keep local pickers in sync with Redux, but never clobber in-progress edits.
+    // heatMapTheme must not reset Background/Content/Button (and vice versa).
+    const themeDirtyRef = useRef(false);
+    const heatmapDirtyRef = useRef(false);
+    const lastSyncedAppThemeKeyRef = useRef(null);
+    const lastSyncedHeatmapKeyRef = useRef(null);
+
+    const setThemeColorMapFromPicker = (updater) => {
+        themeDirtyRef.current = true;
+        setThemeColorMap(updater);
+    };
+
+    const setHeatmapColorMapFromPicker = (updater) => {
+        heatmapDirtyRef.current = true;
+        setHeatmapColorMap(updater);
+    };
+
     useEffect(() => {
-        if (appTheme?.application_theme) {
-            const { background, content, button } = appTheme.application_theme;
-            const updatedMap = {
-                Background: background || DEFAULT_APP_BACKGROUND,
-                Content: content || DEFAULT_APP_CONTENT,
-                Button: button || '#232323',
-            };
-            setThemeColorMap(updatedMap);
-            setSelectedThemeColor(normalizeColor(updatedMap[activeThemeTab] || '#ffffff'));
-        }
+        if (!appTheme?.application_theme) return;
+        if (themeDirtyRef.current) return;
 
-        if (heatMapTheme?.application_theme) {
-            const { light, occupancy, energy } = heatMapTheme.application_theme;
+        const { background, content, button } = appTheme.application_theme;
+        const updatedMap = {
+            Background: background || DEFAULT_APP_BACKGROUND,
+            Content: content || DEFAULT_APP_CONTENT,
+            Button: button || '#232323',
+        };
+        const key = buildThemeApplicationSaveKey({
+            background: updatedMap.Background,
+            content: updatedMap.Content,
+            button: updatedMap.Button,
+        });
+        if (lastSyncedAppThemeKeyRef.current === key) return;
+        lastSyncedAppThemeKeyRef.current = key;
 
-            const normalizedHeatmap = {
-                Light: normalizeColor(light || '#f2ff00'),
-                Occupancy: normalizeColor(occupancy || '#4318d1'),
-                Energy: normalizeColor(energy || '#006400'),
-            };
+        setThemeColorMap(updatedMap);
+        setSelectedThemeColor(normalizeColor(updatedMap[activeThemeTab] || '#ffffff'));
+    }, [appTheme, activeThemeTab]);
 
-            setHeatmapColorMap(normalizedHeatmap);
-            setSelectedHeatmapColor(normalizedHeatmap[activeHeatmapTab] || '#ffffff');
-        }
-    }, [appTheme, heatMapTheme]);
+    useEffect(() => {
+        if (!heatMapTheme?.application_theme) return;
+        if (heatmapDirtyRef.current) return;
+
+        const { light, occupancy, energy } = heatMapTheme.application_theme;
+        const normalizedHeatmap = {
+            Light: normalizeColor(light || '#f2ff00'),
+            Occupancy: normalizeColor(occupancy || '#4318d1'),
+            Energy: normalizeColor(energy || '#006400'),
+        };
+        const key = buildThemeHeatmapSaveKey({
+            light: normalizedHeatmap.Light,
+            occupancy: normalizedHeatmap.Occupancy,
+            energy: normalizedHeatmap.Energy,
+        });
+        if (lastSyncedHeatmapKeyRef.current === key) return;
+        lastSyncedHeatmapKeyRef.current = key;
+
+        setHeatmapColorMap(normalizedHeatmap);
+        setSelectedHeatmapColor(normalizedHeatmap[activeHeatmapTab] || '#ffffff');
+    }, [heatMapTheme, activeHeatmapTab]);
+
     const backgroundRemovedRef = useRef(false);
 
     useEffect(() => {
@@ -246,6 +283,8 @@ const ThemeChange = () => {
         try {
             const response = await dispatch(updateApplicationTheme(payload)).unwrap();
             lastThemeSaveKeyRef.current = saveKey;
+            themeDirtyRef.current = false;
+            lastSyncedAppThemeKeyRef.current = saveKey;
             reloadTheme(payload, backgroundImage);
             const nextApplicationTheme = {
                 ...(appTheme || {}),
@@ -289,6 +328,8 @@ const ThemeChange = () => {
         try {
             dispatch(updateHeatMapTheme(payload));
             lastHeatmapSaveKeyRef.current = saveKey;
+            heatmapDirtyRef.current = false;
+            lastSyncedHeatmapKeyRef.current = saveKey;
             // Publish single energy color to CSS variable for gradient usage
             if (typeof document !== 'undefined') {
                 document.documentElement.style.setProperty('--heatmap-energy', normalizeColor(heatmapColorMap.Energy));
@@ -319,6 +360,7 @@ const ThemeChange = () => {
         setThemeColorMap(defaultColors);
         setSelectedThemeColor(HEX_PICKER_DEFAULT_WHITE_SWATCH);
         setThemePickerKey((k) => k + 1);
+        themeDirtyRef.current = false;
 
         const payload = {
             background: normalizeColor(defaultColors.Background),
@@ -326,6 +368,7 @@ const ThemeChange = () => {
             button: normalizeColor(defaultColors.Button),
         };
         const saveKey = buildThemeApplicationSaveKey(payload);
+        lastSyncedAppThemeKeyRef.current = saveKey;
         if (lastThemeSaveKeyRef.current === saveKey) {
             setSnackbarSeverity('info');
             setSnackbarMessage("Theme already at default colors.");
@@ -530,7 +573,7 @@ const ThemeChange = () => {
                                 <HexColorPicker
                                     key={themePickerKey}
                                     colorMap={themeColorMap}
-                                    setColorMap={setThemeColorMap}
+                                    setColorMap={setThemeColorMapFromPicker}
                                     selectedColor={selectedThemeColor}
                                     setSelectedColor={setSelectedThemeColor}
                                     activeTarget={activeThemeTab}
@@ -584,7 +627,7 @@ const ThemeChange = () => {
                                 {renderTabs(['Light', 'Occupancy', 'Energy'], activeHeatmapTab, setActiveHeatmapTab, heatmapColorMap, setSelectedHeatmapColor)}
                                 <HexColorPicker
                                     colorMap={heatmapColorMap}
-                                    setColorMap={setHeatmapColorMap}
+                                    setColorMap={setHeatmapColorMapFromPicker}
                                     selectedColor={selectedHeatmapColor}
                                     setSelectedColor={setSelectedHeatmapColor}
                                     activeTarget={activeHeatmapTab}

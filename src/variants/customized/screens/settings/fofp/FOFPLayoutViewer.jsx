@@ -17,6 +17,10 @@ import { alpha } from "@mui/material/styles";
 import { Document, Page } from "react-pdf";
 import { configurePdfJsWorker, buildPdfDocumentFile } from "../../../../../shared/pdf/floorPlanPdf";
 import {
+  resolveFloorPlanPageDims,
+  pageDimsEqual,
+} from "../../../../../shared/utils/resolveFloorPlanPageDims";
+import {
   clampFofpMarkerConfigSize,
   FOFPMarkerShape,
   FOFP_DEFAULT_MARKER_SIZE,
@@ -355,9 +359,18 @@ const FOFPLayoutViewer = ({
     [canResizeZone, contextMenu?.zoneId, onZoneSelect]
   );
 
+  const pdfPageRef = useRef(null);
+
   const handlePdfLoadSuccess = useCallback((page) => {
-    setPageDims({ width: page.originalWidth, height: page.originalHeight });
-  }, []);
+    pdfPageRef.current = page;
+    setPageDims(resolveFloorPlanPageDims(page, areas));
+  }, [areas]);
+
+  useEffect(() => {
+    if (!pdfPageRef.current) return;
+    const next = resolveFloorPlanPageDims(pdfPageRef.current, areas);
+    setPageDims((prev) => (pageDimsEqual(prev, next) ? prev : next));
+  }, [areas]);
 
   const handlePdfLoadError = useCallback((err) => {
     setPdfError(err?.message || "Failed to load floor plan");
@@ -379,6 +392,7 @@ const FOFPLayoutViewer = ({
   }, [applyCalibratedViewport, bumpCullRevision]);
 
   useEffect(() => {
+    pdfPageRef.current = null;
     setPageDims(null);
     setPdfError(null);
     resetUserAdjusted();

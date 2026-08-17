@@ -208,6 +208,11 @@ export default function FloorSettingsContent({
   /** Optional: Basic/Customized themed header (Users/Processors). Advanced omits → CSS vars. */
   tableHeaderRowSx,
   tableHeaderCellSx,
+  /** Optional: Basic solid-blue header — keep sort icon fully visible (not clipped). */
+  tableHeaderSortCellSx,
+  /** Optional: override sort icon colors (Basic blue header needs white, not button blue). */
+  headerSortIconColor,
+  headerSortIconActiveColor,
 }) {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -231,7 +236,11 @@ export default function FloorSettingsContent({
     ? { fontSize: '13px', ...tableHeaderCellSx }
     : defaultHeaderCellSx;
   const headerIconColor =
-    tableHeaderCellSx?.color || 'var(--settings-panel-text, #000)';
+    headerSortIconColor ||
+    tableHeaderCellSx?.color ||
+    'var(--settings-panel-text, #000)';
+  const headerIconActiveColor =
+    headerSortIconActiveColor || buttonColor;
 
   const [localFloors, setLocalFloors] = useState([]);
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
@@ -392,6 +401,7 @@ export default function FloorSettingsContent({
                     ...headerCellSx,
                     width: 48,
                     p: 1,
+                    ...tableHeaderSortCellSx,
                   }}
                 >
                   <Tooltip
@@ -406,11 +416,18 @@ export default function FloorSettingsContent({
                     <IconButton
                       size="small"
                       onClick={handleSortButtonClick}
+                      aria-label="Floor sorting"
                       sx={{
-                        color: isSortModeActive ? buttonColor : headerIconColor,
+                        color: isSortModeActive ? headerIconActiveColor : headerIconColor,
+                        ...(isSortModeActive && headerSortIconActiveColor
+                          ? {
+                              bgcolor: 'rgba(255, 255, 255, 0.18)',
+                              '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.28)' },
+                            }
+                          : null),
                       }}
                     >
-                      <SwapVertIcon />
+                      <SwapVertIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 </TableCell>

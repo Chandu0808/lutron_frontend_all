@@ -2,6 +2,12 @@
  * Helpers for floorplan area coordinates with multi-polygon (rings) support.
  */
 
+export {
+  resolveFloorPlanPageDims,
+  getAreasCoordinateExtent,
+  pageDimsEqual,
+} from './resolveFloorPlanPageDims';
+
 /** Normalize coordinates to array of rings for multi-polygon support. */
 export function getPolygonRings(area) {
   const c = area?.coordinates || area?.['co-ordinates'] || [];

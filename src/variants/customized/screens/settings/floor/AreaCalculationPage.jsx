@@ -23,7 +23,7 @@ import { fetchFloorMapData, fetchAreaOccupancyStatus, fetchAreaEnergyConsumption
 import { MdArrowBack } from 'react-icons/md';
 import { Document, Page } from "react-pdf";
 import { configurePdfJsWorker, buildPdfDocumentFile } from '../../../../../shared/pdf/floorPlanPdf';
-import { getPolygonRings, flattenAreaCoords } from '../../../utils/floorplanCoordinates';
+import { getPolygonRings, flattenAreaCoords, resolveFloorPlanPageDims } from '../../../utils/floorplanCoordinates';
 
 configurePdfJsWorker();
 
@@ -346,7 +346,7 @@ export default function AreaCalculationPage() {
                       renderAnnotationLayer={false}
                       renderTextLayer={false}
                       onLoadSuccess={(page) => {
-                        setPageDims({ width: page.originalWidth, height: page.originalHeight });
+                        setPageDims(resolveFloorPlanPageDims(page, heatmapData?.areas));
                         if (!hasFit) {
                           setTimeout(() => handleFit(), 100);
                         }
