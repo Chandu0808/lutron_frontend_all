@@ -41,6 +41,24 @@ function themeApplicationCacheKey() {
   }
 }
 
+function currentUiVariant() {
+  try {
+    return getUiVariant();
+  } catch {
+    return null;
+  }
+}
+
+function isThemeSessionCacheKey(cacheKey) {
+  const key = String(cacheKey || '');
+  return (
+    key === 'theme-settings' ||
+    key === 'theme-application' ||
+    key.startsWith('theme-settings:') ||
+    key.startsWith('theme-application:')
+  );
+}
+
 function readSessionCache(cacheKey) {
   try {
     if (typeof sessionStorage === 'undefined') return null;
@@ -48,6 +66,15 @@ function readSessionCache(cacheKey) {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || !('payload' in parsed)) return null;
+    // Drop untagged or cross-variant theme caches so Basic cannot hydrate
+    // Customized/Advanced colors (or the reverse). Non-theme keys unchanged.
+    if (isThemeSessionCacheKey(cacheKey)) {
+      const variant = currentUiVariant();
+      if (!parsed.variant || !variant || parsed.variant !== variant) {
+        sessionStorage.removeItem(SESSION_CACHE_PREFIX + cacheKey);
+        return null;
+      }
+    }
     return parsed.payload;
   } catch {
     return null;
@@ -57,9 +84,14 @@ function readSessionCache(cacheKey) {
 function writeSessionCache(cacheKey, payload) {
   try {
     if (typeof sessionStorage === 'undefined') return;
+    const record = { payload, at: Date.now() };
+    if (isThemeSessionCacheKey(cacheKey)) {
+      const variant = currentUiVariant();
+      if (variant) record.variant = variant;
+    }
     sessionStorage.setItem(
       SESSION_CACHE_PREFIX + cacheKey,
-      JSON.stringify({ payload, at: Date.now() })
+      JSON.stringify(record)
     );
   } catch {
     // quota / private mode — ignore
@@ -162,6 +194,25 @@ export function resetBootstrapFetchGuards() {
   clearAllBootstrapSessionCaches();
 }
 
+/** Drop theme session caches for every variant. Used on UI variant switch. */
+export function invalidateThemeSessionCaches() {
+  completed.delete('theme-settings');
+  completed.delete('theme-application');
+  completedAt.delete('theme-settings');
+  completedAt.delete('theme-application');
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.removeItem(SESSION_CACHE_PREFIX + 'theme-settings');
+    sessionStorage.removeItem(SESSION_CACHE_PREFIX + 'theme-application');
+    UI_VARIANTS.forEach((v) => {
+      sessionStorage.removeItem(SESSION_CACHE_PREFIX + `theme-settings:${v}`);
+      sessionStorage.removeItem(SESSION_CACHE_PREFIX + `theme-application:${v}`);
+    });
+  } catch {
+    // ignore
+  }
+}
+
 /** Skip if already loaded; join in-flight if running. */
 export function dispatchFetchProfileOnce(dispatch, fetchProfile) {
   return getOrStart('profile', () => dispatch(fetchProfile()));
@@ -240,6 +291,8 @@ export function dispatchFetchApplicationThemeOnce(
 /**
  * After a successful theme save, update session cache so the next reload does
  * not hydrate a stale (e.g. gold) application theme over Default white.
+ * Also keep `/theme/` ui_theme_colors in sync — Basic MUI surfaces read that
+ * cache, not only CSS variables from `/theme/application`.
  * @param {object} applicationThemePayload - same shape as fetchApplicationTheme.fulfilled
  */
 export function syncApplicationThemeSessionCache(applicationThemePayload) {
@@ -248,6 +301,30 @@ export function syncApplicationThemeSessionCache(applicationThemePayload) {
   writeSessionCache(themeApplicationCacheKey(), applicationThemePayload);
   completed.add(key);
   completedAt.set(key, Date.now());
+
+  const at = applicationThemePayload.application_theme;
+  if (!at || (!at.background && !at.content && !at.button)) return;
+
+  const settingsCacheKey = themeSettingsCacheKey();
+  const existingSettings = readSessionCache(settingsCacheKey);
+  if (existingSettings && typeof existingSettings === 'object') {
+    writeSessionCache(settingsCacheKey, {
+      ...existingSettings,
+      ui_theme_colors: {
+        ...(existingSettings.ui_theme_colors || {}),
+        background: at.background ?? existingSettings.ui_theme_colors?.background,
+        content: at.content ?? existingSettings.ui_theme_colors?.content,
+        button: at.button ?? existingSettings.ui_theme_colors?.button,
+      },
+    });
+    completed.add('theme-settings');
+    completedAt.set('theme-settings', Date.now());
+    return;
+  }
+
+  clearSessionCache(settingsCacheKey);
+  completed.delete('theme-settings');
+  completedAt.delete('theme-settings');
 }
 
 export function dispatchFetchHeatMapThemeOnce(dispatch, fetchHeatMapTheme, { force = false } = {}) {
@@ -413,7 +490,16 @@ export function dispatchFetchLeafByFloorOnce(
 }
 
 export function dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes, { force = false } = {}) {
-  return getOrStart('alert-types', () => dispatch(fetchAlertTypes()), { force });
+  return getOrStart('alert-types', () => dispatch(fetchAlertTypes()), {
+    force,
+    // Settings toggles change which types belong in the filter; do not cache forever.
+    ttlMs: 2500,
+  });
+}
+
+export function invalidateAlertTypesBootstrap() {
+  completed.delete('alert-types');
+  completedAt.delete('alert-types');
 }
 
 /** Brief TTL so Strict Mode remounts coalesce; revisiting later still refreshes. */

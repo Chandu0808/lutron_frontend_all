@@ -20,6 +20,8 @@ function getAvailableFloors(floors, currentUserRole, userProfile) {
   return floors;
 }
 
+const EMPTY_ID_LIST = [];
+
 function traverseAreas(nodes, out) {
   if (!nodes || !Array.isArray(nodes)) return;
   for (const node of nodes) {
@@ -123,8 +125,8 @@ export default function CustomGraphScopeSection({ mode, onModeChange, draft, onD
     [dispatch]
   );
 
-  const floor_ids = draft?.floor_ids || [];
-  const area_ids = draft?.area_ids || [];
+  const floor_ids = Array.isArray(draft?.floor_ids) ? draft.floor_ids : EMPTY_ID_LIST;
+  const area_ids = Array.isArray(draft?.area_ids) ? draft.area_ids : EMPTY_ID_LIST;
 
   const floorIdsKey = useMemo(
     () => [...floor_ids].map(Number).sort((a, b) => a - b).join(","),
@@ -133,9 +135,10 @@ export default function CustomGraphScopeSection({ mode, onModeChange, draft, onD
 
   /** Expand + fetch trees for saved floor scope so area checkboxes can render. */
   useEffect(() => {
-    if (mode !== "custom" || !floor_ids?.length) return;
-    setExpandedFloorIds((prev) => new Set([...prev, ...floor_ids.map((x) => Number(x))]));
-    floor_ids.forEach((fid) => {
+    if (mode !== "custom" || !floorIdsKey) return;
+    const ids = floorIdsKey.split(",").map((x) => Number(x));
+    setExpandedFloorIds((prev) => new Set([...prev, ...ids]));
+    ids.forEach((fid) => {
       loadTreeForFloor(fid);
     });
   }, [mode, floorIdsKey, loadTreeForFloor]);

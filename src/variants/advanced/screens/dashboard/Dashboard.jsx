@@ -165,6 +165,7 @@ import {
   fetchAlertTypes,
   fetchActiveAlerts,
   selectAlertTypes,
+  selectAlerts,
   selectSelectedAlertType,
   setSelectedAlertType,
 } from '../../redux/slice/dashboard/alertsSlice'
@@ -204,6 +205,7 @@ import {
   dispatchFetchWidgetConfigurationOnce,
   dispatchFetchWidgetTitlesOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards'
+import { resolveAlertFilterTypes } from '../../../../shared/alerts/resolveAlertFilterTypes'
 import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
 import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
 import { useAreaTreeSelection } from '../../../../shared/dashboard/hooks/useAreaTreeSelection'
@@ -294,7 +296,16 @@ function Dashboard() {
   const dashboardChartOrder = useSelector(selectDashboardChartOrder)
   const dashboardChartOrderStatus = useSelector(selectDashboardChartOrderStatus)
 
-  const alertTypes = useSelector(selectAlertTypes)
+  const alertTypesFromApi = useSelector(selectAlertTypes)
+  const activeAlertsList = useSelector(selectAlerts)
+  const alertTypes = useMemo(
+    () =>
+      resolveAlertFilterTypes({
+        apiTypes: alertTypesFromApi,
+        alerts: activeAlertsList,
+      }),
+    [alertTypesFromApi, activeAlertsList]
+  )
   const selectedAlertType = useSelector(selectSelectedAlertType)
   const widgetList = useSelector(getWidgetList)
   const widgetConfiguration = useSelector(selectWidgetConfiguration)
@@ -734,10 +745,10 @@ function Dashboard() {
 
   // Email dialog handlers - removed as emails are now sent directly to logged-in user
 
-  // Fetch alert options/data when Alerts tab is active
+  // Fetch alert options/data when Alerts tab is active (force so Settings toggles apply)
   useEffect(() => {
     if (activeTab === 'alerts') {
-      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes)
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes, { force: true })
       // Note: fetchActiveAlerts is handled by the Alerts component itself
     }
   }, [activeTab, dispatch])

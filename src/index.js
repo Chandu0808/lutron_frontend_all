@@ -3,11 +3,25 @@ import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { getUiVariant } from './utils/uiVariant';
+import {
+  detectUiVariantChangeOnBoot,
+  clearForeignVariantDocumentChrome,
+} from './utils/uiVariant';
+import { invalidateThemeSessionCaches } from './shared/utils/bootstrapFetchGuards';
 import { loadVariantModules } from './variantLoader';
 import { installGlobalAuthHandlers } from './installGlobalAuthHandlers';
 
-const variant = getUiVariant();
+// After Theme variant switch: flush theme session caches and Advanced chrome so
+// Basic/Customized do not hydrate gold/brown from the previous variant.
+// Redux is already replaced by reload + per-variant store; localStorage prefs stay.
+const { active: variant, changed: uiVariantChanged } = detectUiVariantChangeOnBoot();
+if (uiVariantChanged) {
+  invalidateThemeSessionCaches();
+  clearForeignVariantDocumentChrome(variant);
+} else if (variant !== 'advanced') {
+  clearForeignVariantDocumentChrome(variant);
+}
+
 if (variant === 'advanced') {
   require('./variants/advanced/index.css');
   // Apply saved Advanced theme before async chunks load so gold/theme-4 classes

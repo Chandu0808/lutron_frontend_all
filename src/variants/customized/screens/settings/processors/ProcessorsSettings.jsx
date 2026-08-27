@@ -162,7 +162,7 @@ const ProcessorsSettings = () => {
       >
         <SettingsSidebar items={visibleSidebarItemsWithPaths} />
 
-        <Grid item xs={12} lg={9} sx={settingsHelpLayoutContentColumnSx}>
+        <Grid item xs={12} md={9} lg={9} className="settings-help-content-column" sx={settingsHelpLayoutContentColumnSx}>
             <Paper
               sx={{
                 ...settingsHelpWhitePaperSx,

@@ -8,6 +8,14 @@ import {
   isLutronWebsiteRoute,
 } from "../appLayoutPathUtils";
 
+function isCustomizedAreaGroupPath(pathname = "") {
+  // Create/update/edit flows only — do NOT match settings list
+  // `/setting/manage-area-groups` (contains "area-group" as a substring).
+  return /\/(create-area-groups|update-area-groups|update-area-group|create-area-model|create-user-area-group|update-user-area-group)(\/|$)/i.test(
+    pathname
+  );
+}
+
 export const customizedMainLayoutAdapter = {
   variant: "customized",
 
@@ -54,6 +62,7 @@ export const customizedMainLayoutAdapter = {
     const isFullBleedFormRoute =
       isScheduleFormRoute || isQuickControlsFormRoute || isActivityReportRoute;
     const isDetailsWithActionBar = isDetailsWithFixedActionBarPath(location.pathname);
+    const isAreaGroupRoute = isCustomizedAreaGroupPath(location.pathname);
 
     return {
       isDashboard,
@@ -65,6 +74,7 @@ export const customizedMainLayoutAdapter = {
       showSecondaryRibbon: false,
       isFullBleedFormRoute,
       isDetailsWithActionBar,
+      isAreaGroupRoute,
       contentPanelClassName: TOPBAR_ALIGNED_CONTENT_PANEL_CLASS,
       usesMainContentPanel: !isDashboard,
     };
@@ -113,6 +123,23 @@ export const customizedMainLayoutAdapter = {
               : "calc(100dvh - 120px)",
     };
 
+    // Area group pages: fill to footer with white shell so theme contentColor
+    // does not show as a taupe band below the white area-group card.
+    if (ctx.isAreaGroupRoute) {
+      return {
+        ...base,
+        backgroundColor: "#ffffff",
+        p: 0,
+        overflowY: "auto",
+        height: "calc(100dvh - 120px)",
+        minHeight: "calc(100dvh - 120px)",
+        maxHeight: "none",
+        mb: 0,
+        display: "flex",
+        flexDirection: "column",
+      };
+    }
+
     if (ctx.isFullBleedFormRoute) {
       if (ctx.isDetailsWithActionBar) {
         return {
@@ -140,23 +167,23 @@ export const customizedMainLayoutAdapter = {
       ...base,
       overflowY:
         pathname === "/lutronwebsite-page" ||
-        pathname.includes("/settings") ||
-        pathname.startsWith("/setting") ||
-        pathname === "/heatmap"
+          pathname.includes("/settings") ||
+          pathname.startsWith("/setting") ||
+          pathname === "/heatmap"
           ? "hidden"
           : "auto",
       height:
         pathname === "/lutronwebsite-page" ||
-        pathname.includes("/settings") ||
-        pathname.startsWith("/setting") ||
-        pathname === "/heatmap"
+          pathname.includes("/settings") ||
+          pathname.startsWith("/setting") ||
+          pathname === "/heatmap"
           ? "calc(100dvh - 200px)"
           : "auto",
       maxHeight:
         pathname === "/lutronwebsite-page" ||
-        pathname.includes("/settings") ||
-        pathname.startsWith("/setting") ||
-        pathname === "/heatmap"
+          pathname.includes("/settings") ||
+          pathname.startsWith("/setting") ||
+          pathname === "/heatmap"
           ? "calc(100dvh - 200px)"
           : "none",
       mb:

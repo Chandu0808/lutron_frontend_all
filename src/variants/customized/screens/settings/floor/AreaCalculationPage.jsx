@@ -8,7 +8,6 @@ import {
   Button,
   CircularProgress,
   useTheme,
-  useMediaQuery,
   TextField,
   FormControl,
   InputLabel,
@@ -19,7 +18,7 @@ import {
 } from "@mui/material";
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchFloors, fetchSingleFloor, calculateAreaWithReferenceLength, fetchExistingCalculatedAreas } from '../../../redux/slice/floor/floorSlice';
-import { fetchFloorMapData, fetchAreaOccupancyStatus, fetchAreaEnergyConsumption } from '../../../redux/slice/settingsslice/heatmap/HeatmapSlice';
+import { fetchFloorMapData } from '../../../redux/slice/settingsslice/heatmap/HeatmapSlice';
 import { MdArrowBack } from 'react-icons/md';
 import { Document, Page } from "react-pdf";
 import { configurePdfJsWorker, buildPdfDocumentFile } from '../../../../../shared/pdf/floorPlanPdf';
@@ -32,10 +31,6 @@ export default function AreaCalculationPage() {
   const navigate = useNavigate();
   const { floorId } = useParams();
   const dispatch = useDispatch();
-
-  // Add responsive breakpoints
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const floors = useSelector((state) => state.floor.floors);
   const floorStatus = useSelector((state) => state.floor.status);
@@ -82,57 +77,42 @@ export default function AreaCalculationPage() {
 
   // Check if areas are already calculated when heatmap data loads
   useEffect(() => {
-    if (heatmapData?.areas && heatmapData.areas.length > 0 && selectedFloor) {
-      // Fetch existing calculated areas for this floor
-      loadExistingCalculatedAreas();
+    if (!(heatmapData?.areas && heatmapData.areas.length > 0 && selectedFloor)) {
+      return;
     }
-  }, [heatmapData, selectedFloor]);
 
-  const loadExistingCalculatedAreas = async () => {
-    try {
-      const result = await dispatch(fetchExistingCalculatedAreas(selectedFloor.id)).unwrap();
+    const loadExistingCalculatedAreas = async () => {
+      try {
+        const result = await dispatch(fetchExistingCalculatedAreas(selectedFloor.id)).unwrap();
 
-      if (result.status === 'success' && result.calculated_areas && result.calculated_areas.length > 0) {
-        // Set the existing calculated areas
-        setCalculationResults({
-          status: 'success',
-          updated_areas: result.calculated_areas
-        });
+        if (result.status === 'success' && result.calculated_areas && result.calculated_areas.length > 0) {
+          setCalculationResults({
+            status: 'success',
+            updated_areas: result.calculated_areas
+          });
+        }
+      } catch (error) {
+        // Fallback: Check if areas in heatmap data already have calculated sizes
+        const areasWithCalculatedSizes = heatmapData?.areas?.filter(area =>
+          area.area_size || area.area_sqm || area.area_size_feet || area.area_sqft
+        );
+
+        if (areasWithCalculatedSizes && areasWithCalculatedSizes.length > 0) {
+          const mockResults = {
+            status: 'success',
+            updated_areas: areasWithCalculatedSizes.map(area => ({
+              area_id: area.area_id || area.id,
+              area_sqm: area.area_size || area.area_sqm,
+              area_sqft: area.area_size_feet || area.area_sqft
+            }))
+          };
+          setCalculationResults(mockResults);
+        }
       }
-    } catch (error) {
+    };
 
-      // Fallback: Check if areas in heatmap data already have calculated sizes
-      const areasWithCalculatedSizes = heatmapData?.areas?.filter(area =>
-        area.area_size || area.area_sqm || area.area_size_feet || area.area_sqft
-      );
-
-      if (areasWithCalculatedSizes && areasWithCalculatedSizes.length > 0) {
-        const mockResults = {
-          status: 'success',
-          updated_areas: areasWithCalculatedSizes.map(area => ({
-            area_id: area.area_id || area.id,
-            area_sqm: area.area_size || area.area_sqm,
-            area_sqft: area.area_size_feet || area.area_sqft
-          }))
-        };
-        setCalculationResults(mockResults);
-      }
-    }
-  };
-
-  const getLightStatusColor = (status) => {
-    const lightStatus = (status || '').toLowerCase().trim();
-    if (lightStatus === 'on') return '#ffcc00'; // Yellow for lights on
-    if (lightStatus === 'off') return '#95,95,95'; // Gray for lights off
-    return '#e0e0e0'; // Default light gray
-  };
-
-  const getOccupancyStatusColor = (status) => {
-    const occupancyStatus = (status || '').toLowerCase().trim();
-    if (occupancyStatus === 'occupied') return '#00cc66'; // Green for occupied
-    if (occupancyStatus === 'unoccupied') return '#95,95,95'; // Gray for unoccupied
-    return '#e0e0e0'; // Default light gray
-  };
+    loadExistingCalculatedAreas();
+  }, [heatmapData, selectedFloor, dispatch]);
 
   const handleFit = () => {
     if (!containerRef.current || !pageDims.width || !pageDims.height) return;
@@ -152,10 +132,6 @@ export default function AreaCalculationPage() {
   const handleAreaClick = (area, coords) => {
     setSelectedArea(area);
     setSelectedEdge('');
-  };
-
-  const getEdgeLabel = (index) => {
-    return String.fromCharCode(65 + index); // A, B, C, D, etc.
   };
 
   const getSelectedEdgeCoordinates = () => {

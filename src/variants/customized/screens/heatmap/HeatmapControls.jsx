@@ -12,7 +12,6 @@ import {
   setSelectedFloorId,
   setDisplayMode,
   setHeatmapSearchTerm,
-  refreshAllHeatmapData,
 } from '../../redux/slice/settingsslice/heatmap/HeatmapSlice'
 import { useNavigate } from "react-router-dom";
 import GroupOccupancyModel from '../heatmap/GroupOccupancymodel'
@@ -68,9 +67,6 @@ const HeatmapControls = () => {
 
   // Responsive breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
-  const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const floors = useSelector(selectFloors);
   const floorStatus = useSelector((state) => state.floor.status);
 
@@ -83,7 +79,6 @@ const HeatmapControls = () => {
   const displayModeRef = useRef(displayMode);
   displayModeRef.current = displayMode;
   const tabRefs = useRef({});
-  const [searchInput, setSearchInput] = useState(searchTerm); // local input
   // Shared sizing tokens to keep everything aligned in one row - matching Dashboard
   const CONTROL_HEIGHT = { xs: 28, sm: 30, md: 34, lg: 36 };
   const CONTROL_FONT = { xs: '12px', sm: '13px', md: '14px', lg: '14px' };
@@ -185,14 +180,11 @@ const HeatmapControls = () => {
     if (!displayMode) dispatch(setDisplayMode('Light'));
   }, [dispatch, displayMode]);
 
-  useEffect(() => { setSearchInput(searchTerm); }, [searchTerm]); // keep input in sync
-
   // Note: Data fetching is now handled entirely by HeatMap.jsx useEffect
   // This component only manages the UI controls (floor selection, display mode buttons)
 
   const handleFloorChange = (event) => {
     const floorId = event.target.value;
-    const floorName = floors.find(f => f.id === floorId)?.floor_name;
 
     // Check if user can access this floor
     if (!canAccessFloor(floorId)) {
@@ -273,17 +265,6 @@ const HeatmapControls = () => {
 
     // Note: No need to manually refresh data here
     // The HeatMap.jsx useEffect will handle data fetching automatically
-  };
-
-  const handleManualRefresh = () => {
-    if (selectedFloorId && displayMode) {
-      // Force refresh all heatmap data
-      dispatch(refreshAllHeatmapData({
-        floorId: selectedFloorId,
-        areaId: null,
-        displayMode,
-      }));
-    }
   };
 
   // Auto-select a floor on mount even when floors were already loaded elsewhere

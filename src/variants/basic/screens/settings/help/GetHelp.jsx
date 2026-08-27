@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Accordion,
-    AccordionSummary,
-    AccordionDetails,
     Typography,
     Button,
     Box,
@@ -30,9 +27,8 @@ const HELP_ICON_BLUE = "#1976d2";
 const GetHelp = () => {
     const dispatch = useDispatch();
     const helpFiles = useSelector(fetchHelpFileList);
-    const [expandedId, setExpandedId] = useState({});
+    const [expandedCards, setExpandedCards] = useState({});
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#ffffff';
     const contentColor = appTheme?.application_theme?.content || '#ffffff';
     const buttonColor = appTheme?.application_theme?.button || "#232323";
     const isDefaultWhiteTheme = isLightSurface(contentColor);
@@ -56,8 +52,48 @@ const GetHelp = () => {
         void downloadHelpFile(filePath, { fileName });
     };
 
-    const toggle = (id) =>
-        setExpandedId((prev) => ({ ...prev, [id]: !prev[id] }));
+    const toggleCard = (key) => {
+        setExpandedCards((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const helpDownloadButtonSx = (hasFile) => {
+        const base = {
+            borderRadius: "10px",
+            textTransform: "none",
+            px: 2.2,
+            py: 0.9,
+        };
+        if (hasFile) {
+            return {
+                ...base,
+                bgcolor: actionColor,
+                color: "#fff",
+                "&:hover:not(:disabled)": {
+                    bgcolor: lighten(actionColor, 0.12),
+                },
+            };
+        }
+        return {
+            ...base,
+            bgcolor: isDefaultWhiteTheme ? "#f5f5f5" : "rgba(255,255,255,0.12)",
+            color: isDefaultWhiteTheme ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.6)",
+            border: isDefaultWhiteTheme
+                ? "1px dashed rgba(0,0,0,0.28)"
+                : "1px dashed rgba(255,255,255,0.4)",
+            boxShadow: "none",
+            "&.Mui-disabled": {
+                bgcolor: isDefaultWhiteTheme ? "#f5f5f5" : "rgba(255,255,255,0.12)",
+                color: isDefaultWhiteTheme ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.6)",
+                border: isDefaultWhiteTheme
+                    ? "1px dashed rgba(0,0,0,0.28)"
+                    : "1px dashed rgba(255,255,255,0.4)",
+                opacity: 1,
+                WebkitTextFillColor: isDefaultWhiteTheme
+                    ? "rgba(0,0,0,0.5)"
+                    : "rgba(255,255,255,0.6)",
+            },
+        };
+    };
 
     const cards = [
         {
@@ -113,140 +149,131 @@ const GetHelp = () => {
         },
     ];
     return (
-        <Box className="help-container" sx={{ 
-            width: '100%', 
-            height: 'calc(100vh - 180px)',
-            minHeight: 'calc(100vh - 180px)',
-            maxHeight: 'calc(100vh - 180px)',
-            display: 'flex',
-            flexDirection: 'column',
-            p: 0,
-            overflow: 'hidden'
-        }}>
-            <Box sx={{ 
-                flex: 1, 
-                overflow: 'hidden', 
-                width: '100%',
-                px: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
-                py: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
-                display: 'flex',
-                flexDirection: 'column'
-            }}>
-                <Box sx={{ 
-                    flex: 1, 
-                    overflow: 'hidden', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    gap: 2
-                }}>
-                    {cards.map((card) => (
-                        <Accordion
+        <Box className="help-container help-get-help-page" sx={{ width: "100%", p: 0, pb: { xs: 2, md: 3 } }}>
+            <Box
+                className="help-cards-list"
+                sx={{
+                    width: "100%",
+                    px: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
+                    py: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                }}
+            >
+                {cards.map((card) => {
+                    const isExpanded = !!expandedCards[card.key];
+                    return (
+                        <Box
                             key={card.key}
-                            disableGutters
-                            square={true}
+                            className="help-card"
                             sx={{
                                 p: 3,
                                 backgroundColor: cardBg,
                                 color: cardText,
-                                width: '100%',
-                                borderRadius: '8px', // small curve, set 0px if you want perfectly square
-                                boxShadow: '0px 4px 10px rgba(0,0,0,0.15)',
-                                '&:before': { display: 'none' }, // remove MUI default line
-                                flex: '0 0 auto'
+                                width: "100%",
+                                borderRadius: "8px",
+                                boxShadow: "0px 4px 10px rgba(0,0,0,0.15)",
+                                overflow: "visible",
                             }}
                         >
-                    <AccordionSummary
-                        expandIcon={<ExpandMoreIcon sx={{ color: actionColor }} />}
-                        sx={{
-                            px: 3,
-                            py: 1,
-                            minHeight: 0,
-                            "& .MuiAccordionSummary-content": {
-                                margin: 0,
-                                padding: 0,
-                                alignItems: "center",
-                            },
-                            "& .MuiAccordionSummary-content.Mui-expanded": {
-                                margin: 0,
-                            },
-                        }}
-                    >
-                        <Box>
-                            <Box display="flex" alignItems="center" gap={1.5}>
-                                {card.icon}
-                                <Typography variant="h6" sx={{ fontWeight: 500, lineHeight: 1.2, m: 0 }}>
-                                    {card.title}
-                                </Typography>
-                            </Box>
-                            <Typography
-                                variant="body2"
+                            <Box
+                                role="button"
+                                tabIndex={0}
+                                aria-expanded={isExpanded}
+                                onClick={() => toggleCard(card.key)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        toggleCard(card.key);
+                                    }
+                                }}
                                 sx={{
-                                    color: subText,
-                                    m: 1,
-                                    //mb: -1,
-                                    lineHeight: 1.4,
-                                    pl: 3.8,
-                                    width: '100%',
-                                    wordWrap: 'break-word',
-                                    overflowWrap: 'break-word',
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: 1,
+                                    cursor: "pointer",
+                                    userSelect: "none",
                                 }}
                             >
-                                {card.summary}
-                            </Typography>
-                        </Box>
-                    </AccordionSummary>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Box display="flex" alignItems="center" gap={1.5}>
+                                        {card.icon}
+                                        <Typography variant="h6" sx={{ fontWeight: 500, lineHeight: 1.2, m: 0 }}>
+                                            {card.title}
+                                        </Typography>
+                                    </Box>
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            color: subText,
+                                            m: 1,
+                                            lineHeight: 1.4,
+                                            pl: 3.8,
+                                            width: "100%",
+                                            wordWrap: "break-word",
+                                            overflowWrap: "break-word",
+                                        }}
+                                    >
+                                        {card.summary}
+                                    </Typography>
+                                </Box>
+                                <ExpandMoreIcon
+                                    sx={{
+                                        color: actionColor,
+                                        mt: 0.5,
+                                        flexShrink: 0,
+                                        transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                                        transition: "transform 0.2s ease",
+                                    }}
+                                />
+                            </Box>
 
-                    <AccordionDetails sx={{ px: 3, py: 1.25, color: cardText }}>
-                        <Divider sx={{ borderColor: dividerColor, mt: 0.25, mb: 1, pl: 3 }} />
-                        {card.details && (
-                            <Typography variant="body2" sx={{ mb: 1.5, lineHeight: 1.5, pl: 4.9, color: cardText }}>
-                                {card.details}
-                            </Typography>
-                        )}
+                            {isExpanded && (
+                                <Box className="help-card-details" sx={{ px: 3, py: 1.25, pb: 2, color: cardText }}>
+                                    <Divider sx={{ borderColor: dividerColor, mt: 0.25, mb: 1, pl: 3 }} />
+                                    {card.details && (
+                                        <Typography variant="body2" sx={{ mb: 1.5, lineHeight: 1.5, pl: 4.9, color: cardText }}>
+                                            {card.details}
+                                        </Typography>
+                                    )}
 
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", pl: 3.8 }}>
-                            {card.actions.map((btn, idx) => (
-                                <Tooltip
-                                    key={idx}
-                                    title={btn.disabled ? "File not uploaded yet" : ""}
-                                    arrow
-                                    disableHoverListener={!btn.disabled}
-                                >
-                                    <span>
-                                        <Button
-                                            variant="contained"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                btn.onClick?.(e);
-                                            }}
-                                            disabled={btn.disabled}
-                                            sx={{
-                                                bgcolor: actionColor,
-                                                color: "#fff",
-                                                borderRadius: "10px",
-                                                textTransform: "none",
-                                                px: 2.2,
-                                                py: 0.9,
-                                                "&:hover:not(:disabled)": {
-                                                    bgcolor: lighten(actionColor, 0.12),
-                                                },
-                                                "&:disabled": {
-                                                    bgcolor: isDefaultWhiteTheme ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.2)",
-                                                    color: isDefaultWhiteTheme ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.6)",
-                                                },
-                                            }}
-                                        >
-                                            {btn.label}
-                                        </Button>
-                                    </span>
-                                </Tooltip>
-                            ))}
+                                    <Box className="help-download-actions" sx={{ display: "flex", gap: 1, flexWrap: "wrap", pl: 3.8 }}>
+                                        {(card.actions || []).map((btn, idx) => (
+                                            <Tooltip
+                                                key={idx}
+                                                title={btn.disabled ? "File not uploaded yet" : ""}
+                                                arrow
+                                                disableHoverListener={!btn.disabled}
+                                            >
+                                                <span>
+                                                    <Button
+                                                        variant={btn.disabled ? "outlined" : "contained"}
+                                                        disableElevation
+                                                        className={
+                                                            btn.disabled
+                                                                ? "help-download-btn help-download-btn--unavailable"
+                                                                : "help-download-btn help-download-btn--available"
+                                                        }
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            btn.onClick?.(e);
+                                                        }}
+                                                        disabled={btn.disabled}
+                                                        sx={helpDownloadButtonSx(!btn.disabled)}
+                                                    >
+                                                        {btn.label}
+                                                    </Button>
+                                                </span>
+                                            </Tooltip>
+                                        ))}
+                                    </Box>
+                                </Box>
+                            )}
                         </Box>
-                    </AccordionDetails>
-                        </Accordion>
-                    ))}
-                </Box>
+                    );
+                })}
             </Box>
         </Box>
     );

@@ -1,20 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
-    List, ListItem, IconButton, ListItemText, Divider, Snackbar,
-    Grid,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+    List, ListItem, IconButton, Divider, Snackbar
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { RiDeleteBin6Fill } from "react-icons/ri";
 import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch, useSelector } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
-import { deleteAreaGroup, fetchAreaGroups, fetchSingleAreaGroups, getSingleAreaGroup, selectAreaGroups, updateAreaGroup } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
+import { deleteAreaGroup, fetchAreaGroups, fetchSingleAreaGroups, getSingleAreaGroup, updateAreaGroup } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { UseAuth, getOverallPermissionLevel } from '../../customhooks/UseAuth';
 import { selectProfile } from '../../redux/slice/auth/userlogin';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { ConfirmDialog } from '../../utils/FeedbackUI';
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
@@ -29,16 +25,6 @@ const UpdateUserAreaGroup = () => {
     const { role } = UseAuth();
     const userProfile = useSelector(selectProfile);
     const overallPermission = getOverallPermissionLevel(userProfile);
-    
-    
-    // Check if user has permission to view area group details
-    const canViewAreaGroupDetails = () => {
-        // Superadmin and Admin can always view
-        if (role === 'Superadmin' || role === 'Admin') return true;
-        // All Operator roles can view
-        if (role === 'Operator') return true;
-        return false;
-    };
     
     // Check if user has permission to modify area groups
     const canModifyAreaGroup = () => {
@@ -73,12 +59,11 @@ const UpdateUserAreaGroup = () => {
     const [locations, setLocations] = useState([]);
     const [floorAreas, setFloorAreas] = useState([]);
     const [areaDialogOpen, setAreaDialogOpen] = useState(false);
-    const [actionMode, setActionMode] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isCopyMode, setIsCopyMode] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [showSnackbar, setShowSnackbar] = useState(false);
-    const [showCreateFailure, setShowCreateFailure] = useState(false);
+    const [, setShowCreateFailure] = useState(false);
     
     // Add confirmation dialog states
     const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false);
@@ -86,8 +71,6 @@ const UpdateUserAreaGroup = () => {
     const [areaToDelete, setAreaToDelete] = useState(null);
 
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
     const buttonColor = appTheme?.application_theme?.button || '#232323'
     const handleDelete = (groupIndex, areaIndex) => {
         // Set the area to delete and show confirmation dialog
@@ -233,7 +216,7 @@ const UpdateUserAreaGroup = () => {
             setIsEditing(true);
             setIsCopyMode(true);
         }
-    }, [dispatch, searchParams]);
+    }, [dispatch, searchParams, id]);
     // useEffect(() => {
     //     if (areaGroups?.areas?.length) {
     //         const grouped = groupAreasByFloor(areaGroups.areas);

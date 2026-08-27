@@ -4,7 +4,7 @@ import {
     buildThemeApplicationSaveKey,
     buildThemeHeatmapSaveKey,
 } from "../../../../../shared/utils/themeSettingsSaveKey";
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button, Grid, Typography } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import SettingsSidebar from '../../../components/SettingsSidebar';
@@ -37,7 +37,6 @@ import {
     dispatchFetchThemeSettingsOnce,
     syncApplicationThemeSessionCache,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
-import CustomizedSettingsPageShell from '../../../components/CustomizedSettingsPageShell';
 import {
     CUSTOMIZED_THEME_PICKER_HEX,
     customizedThemePageSx,
@@ -46,6 +45,11 @@ import {
     themePickerCardColumnSx,
     themePickerCardSx,
 } from './themePickerLayout';
+import {
+    settingsHelpLayoutShellSx,
+    settingsHelpLayoutGridSx,
+    settingsHelpLayoutContentColumnSx,
+} from '../../../utils/settingsPageLayout';
 
 const THEME_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -100,7 +104,6 @@ const ThemeChange = () => {
     const [heatmapBusy, setHeatmapBusy] = useState(false);
     const { reloadTheme } = useContext(ThemeContext);
     const appTheme = useSelector(selectApplicationTheme);
-    const contentColor = appTheme?.application_theme?.content || '#ffffff';
     const heatMapTheme = useSelector(selectHeatMapTheme)
     const apibgImage = useSelector(selectBackgroundImage)
     const DEFAULT_THEME_COLORS = {
@@ -371,7 +374,6 @@ const ThemeChange = () => {
     });
     //background image
     const [backgroundImage, setBackgroundImage] = useState(null);
-    const fileInputRef = React.useRef();
 
     const handleBackgroundImageSave = async (file) => {
         const formData = new FormData();
@@ -432,10 +434,6 @@ const ThemeChange = () => {
         }
     };
 
-    const triggerFileSelect = () => {
-        if (fileInputRef.current) fileInputRef.current.click();
-    };
-
     const renderTabs = (labels, active, setActive, colorMap, setSelectedColor) => (
         <Box className="pill-tab-container">
             {labels.map(label => (
@@ -482,11 +480,14 @@ const ThemeChange = () => {
 
     return (
         <>
-        <CustomizedSettingsPageShell
-            sidebarItems={visibleSidebarItemsWithPaths}
-            NavigationComponent={(props) => <SettingsSidebar {...props} embedded />}
-            contentColor={contentColor}
-        >
+        <Box className="help-container" sx={settingsHelpLayoutShellSx}>
+          <Grid
+            container
+            spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1.5 }}
+            sx={settingsHelpLayoutGridSx}
+          >
+            <SettingsSidebar items={visibleSidebarItemsWithPaths} />
+            <Grid item xs={12} lg={9} className="settings-help-content-column" sx={settingsHelpLayoutContentColumnSx}>
                 <Box className="customized-theme-page" sx={customizedThemePageSx}>
                 <Box sx={{ margin: "1em", marginBottom: 0 }}>
                     <UiVariantSelector />
@@ -680,7 +681,9 @@ const ThemeChange = () => {
                     </Box>
                 </Box>
                 </Box>
-        </CustomizedSettingsPageShell>
+            </Grid>
+          </Grid>
+        </Box>
             <Snackbar
                 open={snackbarOpen}
                 autoHideDuration={3000}

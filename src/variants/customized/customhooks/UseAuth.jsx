@@ -18,6 +18,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
         "Alerts",
         "Processors",
         "Maintenance",
+        "Application Monitoring",
         "FOFP",
         "Help",
     ];
@@ -46,6 +47,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Alerts' &&
             item !== 'Processors' &&
             item !== 'Maintenance' &&
+            item !== 'Application Monitoring' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'
@@ -73,6 +75,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
                 item !== 'Maintenance' &&
+                item !== 'Application Monitoring' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -95,6 +98,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
                 item !== 'Alerts' &&
                 item !== 'Processors' &&
                 item !== 'Maintenance' &&
+                item !== 'Application Monitoring' &&
                 item !== 'FOFP' &&
                 item !== 'Manage Sensors' &&
                 item !== 'Manage Modules'
@@ -119,6 +123,7 @@ export const getVisibleSidebarItemsWithPaths = (role, userProfile = null) => {
             item !== 'Alerts' &&
             item !== 'Processors' &&
             item !== 'Maintenance' &&
+            item !== 'Application Monitoring' &&
             item !== 'FOFP' &&
             item !== 'Manage Sensors' &&
             item !== 'Manage Modules'

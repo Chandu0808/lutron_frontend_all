@@ -75,7 +75,7 @@ const ManageAreaGroup = () => {
     }, [dispatch]);
 
     return (
-        <Grid container sx={{ml:'18px',p:'18px'}}>
+        <Grid container className="settings-layout-root" sx={{ml:'18px',p:'18px', alignItems: 'flex-start'}}>
             {/* Full-width header (title + 2 horizontal dividers) */}
             <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
                 <Typography
@@ -113,6 +113,7 @@ const ManageAreaGroup = () => {
                 item
                 xs={12}
                 md={10}
+                className="settings-main-content-column"
                 sx={{
                     backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
                     p: 3,

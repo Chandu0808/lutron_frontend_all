@@ -31,6 +31,12 @@ Your app is ready to be deployed!
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
+### UI variants (Superadmin Theme switch)
+
+Active UI is **basic / advanced / customized**. Superadmin selects it in **Settings → Theme** (not via deployment script). See [docs/ui-variant-modes.md](docs/ui-variant-modes.md).
+
+After changing variant-related source, run `npm run build` before `LMS_start.ps1` (deploy serves `build/`, not live `src/`).
+
 ### `npm run eject`
 
 **Note: this is a one-way operation. Once you `eject`, you can't go back!**

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchAreaScenes, selectAreaScenes } from "../../redux/slice/settingsslice/heatmap/areaSettingsSlice";
 import { BaseUrl } from "../../BaseUrl";
-import { Box, Typography, Button, Slider, MenuItem, Select } from "@mui/material";
+import { Slider, MenuItem, Select } from "@mui/material";
 import PaginatedList from '../../utils/PaginatedList';
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { customizedScheduleModalFilterMenuProps } from '../../../../shared/settings/schedule/scheduleSelectMenuProps';
@@ -44,8 +44,8 @@ const Action = ({ areaId, onActionSelect, initialAction = null, menuProps = cust
   // Shade states
   const [shades, setShades] = useState([]);
   const [shadeValue, setShadeValue] = useState(initialAction?.value || 100);
-  const [shadesLoading, setShadesLoading] = useState(false);
-  const [shadesError, setShadesError] = useState(null);
+  const [, setShadesLoading] = useState(false);
+  const [, setShadesError] = useState(null);
   const [selectedShadeId, setSelectedShadeId] = useState(initialAction?.shade?.id ? String(initialAction.shade.id) : "");
 
   // Initialize with initialAction if provided

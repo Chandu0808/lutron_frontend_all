@@ -21,11 +21,8 @@ import {
   addSelectedProcessor,
   removeSelectedProcessor,
   clearSelectedProcessors,
-  createFloor,
-  updateFloor,
   fetchFloors,
   clearProcessorAreaIds,
-  updateAreaFloorAndProcessor,
   createFloorWithAreas,
 } from '../../../redux/slice/floor/floorSlice';
 import { styled } from '@mui/material/styles';
@@ -68,7 +65,6 @@ export default function CreateFloor() {
   const dispatch = useDispatch();
   const { processors, status: processorStatus } = useSelector(state => state.processor);
   const { selectedProcessors, error, status: floorStatus } = useSelector(state => state.floor);
-  const { processorAreaIds } = useSelector(state => state.floor);
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const navigate = useNavigate();
@@ -87,8 +83,8 @@ export default function CreateFloor() {
   const [showCreateSuccess, setShowCreateSuccess] = useState(false);
   const [showCreateError, setShowCreateError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [areaUploadSuccess, setAreaUploadSuccess] = useState({});
-  const [areaUploadMsg, setAreaUploadMsg] = useState({});
+  const [, setAreaUploadSuccess] = useState({});
+  const [, setAreaUploadMsg] = useState({});
 
   const [saving, setSaving] = useState(false);
 
@@ -1073,21 +1069,3 @@ export default function CreateFloor() {
     </>
   );
 }
-
-const buttonStyle = {
-  backgroundColor: '#232323',
-  color: '#fff',
-  fontSize: 12,
-  borderRadius: 1,
-  px: 1.5,
-  '&:hover': { backgroundColor: '#444' },
-};
-
-const footerButtonStyle = {
-  backgroundColor: '#232323',
-  color: '#fff',
-  textTransform: 'none',
-  borderRadius: 1,
-  px: 4,
-  '&:hover': { backgroundColor: '#444' }
-};

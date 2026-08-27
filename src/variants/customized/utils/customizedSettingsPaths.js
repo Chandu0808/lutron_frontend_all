@@ -20,6 +20,7 @@ export const CUSTOMIZED_SETTINGS_SIDEBAR_PATHS = {
   Alerts: `${CUSTOMIZED_SETTINGS_PREFIX}/alerts`,
   Processors: `${CUSTOMIZED_SETTINGS_PREFIX}/processors`,
   Maintenance: `${CUSTOMIZED_SETTINGS_PREFIX}/maintenance`,
+  "Application Monitoring": `${CUSTOMIZED_SETTINGS_PREFIX}/application-monitoring`,
   FOFP: `${CUSTOMIZED_SETTINGS_PREFIX}/fofp`,
   Help: `${CUSTOMIZED_SETTINGS_PREFIX}/create-help/`,
 };

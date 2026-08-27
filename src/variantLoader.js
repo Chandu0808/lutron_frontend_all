@@ -1,4 +1,4 @@
-import { getUiVariant } from './utils/uiVariant';
+import { getUiVariant, reconcileLockedUiVariantFromBackend } from './utils/uiVariant';
 
 const CHUNK_RELOAD_SESSION_KEY = 'lutron_variant_chunk_reload';
 
@@ -32,6 +32,11 @@ async function importWithChunkRetry(importer) {
  * Webpack needs static import paths — one branch per variant.
  */
 export async function loadVariantModules() {
+  const reloading = await reconcileLockedUiVariantFromBackend();
+  if (reloading) {
+    return new Promise(() => {});
+  }
+
   const variant = getUiVariant();
 
   if (variant === 'advanced') {

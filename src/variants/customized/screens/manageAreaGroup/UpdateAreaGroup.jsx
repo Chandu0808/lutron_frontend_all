@@ -1,20 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
-    List, ListItem, IconButton, ListItemText, Divider, Snackbar,
-    Grid,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+    List, ListItem, IconButton, Divider, Snackbar
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { RiDeleteBin6Fill } from "react-icons/ri";
 import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch, useSelector } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
-import { deleteAreaGroup, fetchAreaGroups, fetchSingleAreaGroups, getSingleAreaGroup, selectAreaGroups, updateAreaGroup } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
+import { deleteAreaGroup, fetchAreaGroups, fetchSingleAreaGroups, getSingleAreaGroup, updateAreaGroup } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { UseAuth, getOverallPermissionLevel } from '../../customhooks/UseAuth';
 import { selectProfile } from '../../redux/slice/auth/userlogin';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { ConfirmDialog } from '../../utils/FeedbackUI';
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
@@ -28,16 +24,6 @@ const UpdateAreaGroup = () => {
     const { role } = UseAuth();
     const userProfile = useSelector(selectProfile);
     const overallPermission = getOverallPermissionLevel(userProfile);
-    
-    
-    // Check if user has permission to view area group details
-    const canViewAreaGroupDetails = () => {
-        // Superadmin and Admin can always view
-        if (role === 'Superadmin' || role === 'Admin') return true;
-        // All Operator roles can view
-        if (role === 'Operator') return true;
-        return false;
-    };
     
     // Check if user has permission to modify area groups
     const canModifyAreaGroup = () => {
@@ -68,19 +54,16 @@ const UpdateAreaGroup = () => {
     
     const areaGroups = useSelector(getSingleAreaGroup);
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
     const buttonColor = appTheme?.application_theme?.button || '#232323'
     const [groupName, setGroupName] = useState('');
     const [locations, setLocations] = useState([]);
     const [floorAreas, setFloorAreas] = useState([]);
     const [areaDialogOpen, setAreaDialogOpen] = useState(false);
-    const [actionMode, setActionMode] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isCopyMode, setIsCopyMode] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [showSnackbar, setShowSnackbar] = useState(false);
-    const [showCreateFailure, setShowCreateFailure] = useState(false);
+    const [, setShowCreateFailure] = useState(false);
     
     // Add confirmation dialog states
     const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false);
@@ -231,7 +214,7 @@ const UpdateAreaGroup = () => {
             setIsEditing(true);
             setIsCopyMode(true);
         }
-    }, [dispatch, searchParams]);
+    }, [dispatch, searchParams, id]);
     
     // Check if user is trying to access a special area group without permission
     useEffect(() => {
@@ -371,7 +354,7 @@ const UpdateAreaGroup = () => {
                     <Divider sx={{ my: 2, width: '40%', flexShrink: 0 }} />
 
                     {/* Scrollable List Box - Takes remaining space */}
-                    <Box sx={{ 
+                    <Box className="area-group-scrollable area-group-list-panel" sx={{ 
                         flex: 1, 
                         overflowY: 'auto', 
                         minHeight: 0,
@@ -439,7 +422,7 @@ const UpdateAreaGroup = () => {
                     />
                 </Box>
                 {/* Action Buttons - Fixed at bottom */}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
+                <Box className="area-group-actions" sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
                     {/* Default mode (Copy, Modify, Delete, Close) */}
                     {!isEditing && (
                         <>

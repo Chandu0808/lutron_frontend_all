@@ -21,15 +21,6 @@ import { UseAuth } from '../../customhooks/UseAuth';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import Swal from 'sweetalert2';
 
-// Helper to chunk array into rows of 4 with new row
-function chunkArray(array, size) {
-  const result = [];
-  for (let i = 0; i < array.length; i += size) {
-    result.push(array.slice(i, i + size));
-  }
-  return result;
-}
-
 const QuickControls = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -125,12 +116,10 @@ const QuickControls = () => {
     loading,
     status,
     selectedControl,
-    selectedControlLoading,
     triggerStatus,
     deleteStatus,
     updateStatus,
     shouldRefresh,
-    error,
     // Removed usageCheck as schedules should not affect Quick Controls
   } = useSelector((state) => state.quickControl);
 
@@ -198,17 +187,7 @@ const QuickControls = () => {
   };
 
   // Open details and fetch only if not already loaded or different
-  const handleOpenDetails = (control) => {
-    setDetailsOpen(true);
-    setEditMode(false);
-    setEditableControl(null);
-    setErrorMessage(""); // Clear any previous error messages
-    
-    if (!selectedControl || selectedControl.id !== control.id) {
-      dispatch(fetchQuickControlDetails(control.id));
-      // Removed schedule usage check as schedules should not affect Quick Controls
-    }
-  };
+  // (details open via route navigation to /quickcontrols/:id)
 
   const handleCloseDetails = () => {
     setDetailsOpen(false);
@@ -283,13 +262,6 @@ const QuickControls = () => {
           actions: []
         }))
       ]
-    }));
-  };
-
-  const handleRemoveLocation = (index) => {
-    setEditableControl(prev => ({
-      ...prev,
-      quick_control_areas: prev.quick_control_areas.filter((_, i) => i !== index)
     }));
   };
 

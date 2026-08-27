@@ -4,8 +4,6 @@ import {
     Typography,
     Button,
     Grid,
-    Card,
-    CardContent,
     Table,
     TableBody,
     TableCell,
@@ -15,23 +13,18 @@ import {
     Paper,
     Chip,
     useTheme,
-    useMediaQuery,
     CircularProgress,
     Alert,
     Snackbar,
-    Tabs,
-    Tab,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import SensorIcon from '@mui/icons-material/Sensors';
-import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import SettingsSidebar from '../../../components/SettingsSidebar';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
     fetchSensors, 
     discoverSensors, 
-    clearError as clearSensorsError, 
     clearDiscoverError, 
     clearDiscoverSuccess 
 } from '../../../redux/slice/sensors/sensorsSlice';
@@ -39,9 +32,6 @@ import { fetchProcessors } from '../../../redux/slice/processor/processorSlice';
 
 const ManageSensors = () => {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
-    const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
     const dispatch = useDispatch();
     
     // Get current user role for sidebar filtering
@@ -62,7 +52,7 @@ const ManageSensors = () => {
     const { processors } = useSelector((state) => state.processor);
     
     // Local state
-    const [activeTab, setActiveTab] = useState(0);
+    const [activeTab] = useState(0);
 
     // Fetch data on component mount
     useEffect(() => {
@@ -88,11 +78,6 @@ const ManageSensors = () => {
         }
     };
 
-
-    const handleTabChange = (event, newValue) => {
-        setActiveTab(newValue);
-    };
-
     const getStatusColor = (status) => {
         switch (status?.toLowerCase()) {
             case 'ok':
@@ -111,15 +96,6 @@ const ManageSensors = () => {
                 return 'warning';
             default:
                 return 'default';
-        }
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        try {
-            return new Date(dateString).toLocaleString();
-        } catch {
-            return dateString;
         }
     };
 

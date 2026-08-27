@@ -158,7 +158,6 @@ const QuickControlDetails = () => {
     triggerStatus,
     deleteStatus,
     updateStatus,
-    error // Add this to get error messages
   } = useSelector((state) => state.quickControl);
 
   const floors = useSelector(selectFloors);
@@ -195,9 +194,6 @@ const QuickControlDetails = () => {
   const [editableControl, setEditableControl] = useState(null);
   const [isCopyMode, setIsCopyMode] = useState(false);
   const location = useLocation();
-  
-  const isCopyEdit = location?.state?.isCopy === true;
-  const [isEditing, setIsEditing] = useState(isCopyEdit || false);
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "" });
@@ -260,8 +256,6 @@ const QuickControlDetails = () => {
     // Handle zone_status actions (for specific zone controls with brightness/temperature)
     if (action.type === "zone_status") {
       const status = action.zone_status || action.switched_state;
-      const brightness = action.zone_brightness || action.level;
-      const temperature = action.zone_temperature || action.kelvin;
       const zoneType = action.zone_type;
       
       // For zone_status with specific zone_id, show zone details
@@ -587,13 +581,6 @@ const QuickControlDetails = () => {
     }));
   };
 
-  const handleRemoveLocation = (index) => {
-    setEditableControl(prev => ({
-      ...prev,
-      quick_control_areas: prev.quick_control_areas.filter((_, i) => i !== index)
-    }));
-  };
-
   // Handle action changes
   const handleOpenActionDialog = (idx) => {
     if (!editableControl) {
@@ -725,11 +712,6 @@ const QuickControlDetails = () => {
     setShowDeleteActionDialog(true);
   };
 
-  // Handle edit action - kept for compatibility
-  const handleEditAction = (locationIdx, actionIdx) => {
-    openEditForAction(locationIdx, actionIdx);
-  };
-
   // Handle common action selection
   const handleCommonActionTypeSelect = async (actionType) => {
     setSelectedCommonActionType(actionType);
@@ -841,7 +823,7 @@ const QuickControlDetails = () => {
 
       if (isCopyMode || !editableControl.id) {
         // Create new quick control (either copy mode or no ID)
-        const response = await dispatch(createQuickControl(payload)).unwrap();
+        await dispatch(createQuickControl(payload)).unwrap();
         setToast({ open: true, message: "Quick Control created successfully!" });
         navigate('/quickcontrols');
       } else {
@@ -871,11 +853,6 @@ const QuickControlDetails = () => {
 
   const handleEditChange = (field, value) => {
     setEditableControl(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Handle delete action / location
-  const handleDeleteAction = (areaIndex) => {
-    handleDeleteButtonClick(areaIndex);
   };
 
   const confirmDeleteAction = () => {

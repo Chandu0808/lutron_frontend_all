@@ -112,11 +112,12 @@ export const useViewportTransform = ({
         return;
       }
 
-      const next = computeCalibratedTransform(
-        viewport.clientWidth,
-        viewport.clientHeight,
-        calibratedBounds
-      );
+      // Prefer live client box (handles flex/layout settling after Fit click).
+      const rect = viewport.getBoundingClientRect();
+      const vw = rect.width || viewport.clientWidth;
+      const vh = rect.height || viewport.clientHeight;
+
+      const next = computeCalibratedTransform(vw, vh, calibratedBounds);
       if (!next) return;
       userAdjustedViewRef.current = false;
       applyTransform(next);

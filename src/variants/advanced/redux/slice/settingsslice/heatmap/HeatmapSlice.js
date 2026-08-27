@@ -5,11 +5,27 @@ import { BaseUrl } from "../../../../BaseUrl";
 import {
   areaIdsMatch,
   deriveLightStatusFromZoneUpdates,
+  isCacheLightStaleVsPreferred,
   normalizeLightStatus,
+  patchAreasLightFromSidebar,
   patchAreasLightStatus,
+  reassertOpenAreaLightFromSidebar,
+  sidebarLightStatusFromPayload,
 } from "./heatmapMapSync";
 import { resolveFloorPlanMediaUrl } from "../../../../../../shared/pdf/floorPlanPdf";
 import { mapAreaStatusFetchError } from "../../../../../../shared/heatmap/processorReachable";
+import { patchOpenAreaLiveLightOccupancy } from "../../../../../../shared/heatmap/patchOpenAreaLiveStatus";
+import {
+  applyHeatmapAreaStatusLive,
+  applyHeatmapFloorLightLive,
+  applyHeatmapFloorOccupancyLive,
+} from "../../../../../../shared/heatmap/heatmapLiveActions";
+import {
+  mergeHeatmapAreaStatusLive,
+  mergeHeatmapFloorLightLive,
+  mergeHeatmapFloorOccupancyLive,
+} from "../../../../../../shared/heatmap/heatmapLiveStateMerge";
+import { isAreaAwaitingLiveRead } from "../../../../../../shared/heatmap/liveCachePushGuard";
 
 // Async Thunks
 const formatFloorMapError = (err) => {
@@ -24,9 +40,11 @@ const formatFloorMapError = (err) => {
 
 export const fetchFloorMapData = createAsyncThunk(
   "heatmap/fetchFloorMapData",
-  async ({ floorId }, { rejectWithValue }) => {
+  async ({ floorId, live = 1 }, { rejectWithValue }) => {
     try {
-      const response = await BaseUrl.get(`/floor/light_status?floor_id=${floorId}`);
+      const response = await BaseUrl.get(
+        `/floor/light_status?floor_id=${floorId}&live=${live === 0 ? 0 : 1}`
+      );
       return response.data;
     } catch (err) {
       return rejectWithValue(formatFloorMapError(err));
@@ -44,8 +62,10 @@ export const fetchFloorMapData = createAsyncThunk(
 
 export const fetchAreaOccupancyStatus = createAsyncThunk(
   "heatmap/fetchAreaOccupancyStatus",
-  async ({ floorId }) => {
-    const response = await BaseUrl.get(`/floor/occupancy_status?floor_id=${floorId}`);
+  async ({ floorId, live = 1 }) => {
+    const response = await BaseUrl.get(
+      `/floor/occupancy_status?floor_id=${floorId}&live=${live === 0 ? 0 : 1}`
+    );
     return response.data;
   },
   {
@@ -72,40 +92,25 @@ export const fetchAreaEnergyConsumption = createAsyncThunk(
   }
 );
 
-export const fetchFloorStatusRevision = createAsyncThunk(
-  "heatmap/fetchFloorStatusRevision",
-  async ({ floorId }, { rejectWithValue }) => {
-    try {
-      const response = await BaseUrl.get(`/floor/status_revision?floor_id=${floorId}`);
-      return {
-        floorId,
-        revision: response.data?.revision ?? null,
-      };
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || err.message || "Failed to fetch floor revision");
-    }
-  },
-  {
-    condition: ({ floorId }, { getState }) => {
-      const hm = getState()?.heatmap;
-      if (hm?.revisionFetchingId == null) return true;
-      return String(hm.revisionFetchingId) !== String(floorId);
-    },
-  }
-);
+const normalizeAreaStatusRequest = (arg) =>
+  typeof arg === "object" && arg !== null ? arg : { areaId: arg };
 
 export const fetchAreaStatus = createAsyncThunk(
   "heatmap/fetchAreaStatus",
-  async (areaId, { rejectWithValue }) => {
+  async (arg, { rejectWithValue }) => {
+    const { areaId, live = 1 } = normalizeAreaStatusRequest(arg);
     try {
-      const response = await BaseUrl.get(`/area/full_area_status?area_id=${areaId}`);
+      const response = await BaseUrl.get(
+        `/area/full_area_status?area_id=${areaId}&live=${live === 0 ? 0 : 1}`
+      );
       return response.data;
     } catch (err) {
       return rejectWithValue(mapAreaStatusFetchError(err));
     }
   },
   {
-    condition: (areaId, { getState }) => {
+    condition: (arg, { getState }) => {
+      const { areaId } = normalizeAreaStatusRequest(arg);
       const hm = getState()?.heatmap;
       if (!hm?.areaStatusLoading) return true;
       return String(hm.areaStatusFetchingId) !== String(areaId);
@@ -266,8 +271,6 @@ const initialState = {
   floorMapFetchingId: null,
   occupancyFetchingId: null,
   energyFetchingId: null,
-  floorStatusRevisionByFloorId: {},
-  revisionFetchingId: null,
   toggleAllZonesLoading: false,
   toggleAllZonesError: null,
 };
@@ -306,8 +309,6 @@ const heatmapSlice = createSlice({
       state.floorMapFetchingId = null;
       state.occupancyFetchingId = null;
       state.energyFetchingId = null;
-      state.floorStatusRevisionByFloorId = {};
-      state.revisionFetchingId = null;
       state.toggleAllZonesLoading = false;
       state.toggleAllZonesError = null;
       state.loading = false;
@@ -356,6 +357,7 @@ const heatmapSlice = createSlice({
         });
         
         state.heatmapData = { ...action.payload, areas };
+        patchOpenAreaLiveLightOccupancy(state, areas);
       
         const rawPath = action.payload.floor_plan || action.payload.floor_image || "";
         state.pdfUrl = resolveFloorPlanMediaUrl(rawPath);
@@ -398,6 +400,7 @@ const heatmapSlice = createSlice({
               }
             : area;
         });
+        patchOpenAreaLiveLightOccupancy(state, updatedAreas);
       }
     })
       .addCase(fetchAreaOccupancyStatus.rejected, (state) => {
@@ -454,39 +457,80 @@ const heatmapSlice = createSlice({
     // FULL AREA STATUS
     builder
       .addCase(fetchAreaStatus.pending, (state, action) => {
-        state.areaStatusLoading = true;
+        const request = normalizeAreaStatusRequest(action.meta.arg);
+        const requestedAreaId = request.areaId;
+        const silent = Boolean(request.silent);
+        state.areaStatusLoading = !silent;
         state.areaStatusError = null;
-        state.areaStatusFetchingId = action.meta.arg;
+        state.areaStatusFetchingId = requestedAreaId;
         // Keep sidebar for same-area retry; clear only when switching areas.
         if (
           !state.areaStatus ||
-          String(state.areaStatus.area_id) !== String(action.meta.arg)
+          String(state.areaStatus.area_id) !== String(requestedAreaId)
         ) {
-          state.areaStatus = null;
+          if (!silent) {
+            state.areaStatus = null;
+          }
         }
       })
       .addCase(fetchAreaStatus.fulfilled, (state, action) => {
+        const request = normalizeAreaStatusRequest(action.meta.arg);
+        const preserveEnergy = Boolean(request.preserveEnergy);
+        const previousAreaStatus = state.areaStatus;
+        const sameArea =
+          previousAreaStatus &&
+          String(previousAreaStatus.area_id) === String(action.payload?.area_id);
         state.areaStatusLoading = false;
         state.areaStatusFetchingId = null;
-        state.areaStatus = action.payload;
 
-        const payloadAreaId = action.payload?.area_id;
-        const mapLight = normalizeLightStatus(action.payload?.light_status);
+        const rawPayload = action.payload;
+        const areaStatusPayload =
+          rawPayload?.zones?.length > 0
+            ? {
+                ...rawPayload,
+                light_status: sidebarLightStatusFromPayload(rawPayload),
+              }
+            : rawPayload;
+
+        state.areaStatus =
+          preserveEnergy && sameArea
+            ? {
+                ...areaStatusPayload,
+                consumption:
+                  previousAreaStatus?.consumption ??
+                  areaStatusPayload?.consumption,
+                savings:
+                  previousAreaStatus?.savings ?? areaStatusPayload?.savings,
+              }
+            : areaStatusPayload;
+
+        const payloadAreaId = areaStatusPayload?.area_id;
         if (payloadAreaId != null && state.heatmapData?.areas) {
           state.heatmapData.areas = state.heatmapData.areas.map((area) =>
             areaIdsMatch(area, payloadAreaId)
               ? {
                   ...area,
-                  occupancy_status: (action.payload.occupancy_status || "").toLowerCase().trim(),
-                  light_status: mapLight ?? area.light_status,
-                  energy_status:
-                    area.energy_status !== undefined
+                  occupancy_status: (areaStatusPayload.occupancy_status || "")
+                    .toLowerCase()
+                    .trim(),
+                  energy_status: preserveEnergy
+                    ? area.energy_status
+                    : area.energy_status !== undefined
                       ? area.energy_status
-                      : action.payload.energy_status,
-                  energy_consumption: action.payload.consumption,
-                  energy_savings: action.payload.savings,
+                      : areaStatusPayload.energy_status,
+                  energy_consumption: preserveEnergy
+                    ? area.energy_consumption
+                    : areaStatusPayload.consumption,
+                  energy_savings: preserveEnergy
+                    ? area.energy_savings
+                    : areaStatusPayload.savings,
                 }
               : area
+          );
+          state.heatmapData.areas = patchAreasLightFromSidebar(
+            state.heatmapData.areas,
+            payloadAreaId,
+            areaStatusPayload
           );
         }
       })
@@ -620,22 +664,6 @@ const heatmapSlice = createSlice({
         // Handle error if needed
       });
 
-    // Refresh all heatmap data
-    builder
-      .addCase(fetchFloorStatusRevision.pending, (state, action) => {
-        state.revisionFetchingId = action.meta.arg?.floorId ?? null;
-      })
-      .addCase(fetchFloorStatusRevision.fulfilled, (state, action) => {
-        state.revisionFetchingId = null;
-        const floorId = action.payload?.floorId;
-        if (floorId == null) return;
-        state.floorStatusRevisionByFloorId[String(floorId)] =
-          action.payload.revision ?? null;
-      })
-      .addCase(fetchFloorStatusRevision.rejected, (state) => {
-        state.revisionFetchingId = null;
-      });
-
     builder
       .addCase(refreshAllHeatmapData.pending, (state) => {
         state.loading = true;
@@ -647,6 +675,52 @@ const heatmapSlice = createSlice({
       .addCase(refreshAllHeatmapData.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload || action.error.message;
+      });
+
+    builder
+      .addCase(applyHeatmapFloorLightLive, (state, action) => {
+        mergeHeatmapFloorLightLive(state, action.payload);
+        reassertOpenAreaLightFromSidebar(state);
+      })
+      .addCase(applyHeatmapFloorOccupancyLive, (state, action) => {
+        mergeHeatmapFloorOccupancyLive(state, action.payload);
+      })
+      .addCase(applyHeatmapAreaStatusLive, (state, action) => {
+        const incoming = action.payload;
+        // A live=1 read is already on its way for this area; it wins over cache.
+        if (isAreaAwaitingLiveRead(state, incoming?.area_id)) return;
+
+        const previousAreaStatus = state.areaStatus;
+        const staleVsLive = isCacheLightStaleVsPreferred(
+          previousAreaStatus,
+          incoming
+        );
+
+        mergeHeatmapAreaStatusLive(state, incoming);
+
+        if (
+          staleVsLive &&
+          previousAreaStatus &&
+          state.areaStatus &&
+          String(state.areaStatus.area_id) === String(previousAreaStatus.area_id)
+        ) {
+          state.areaStatus = {
+            ...state.areaStatus,
+            light_status:
+              sidebarLightStatusFromPayload(previousAreaStatus) ||
+              previousAreaStatus.light_status,
+            zones: previousAreaStatus.zones,
+          };
+        }
+
+        const patchPayload = state.areaStatus;
+        if (patchPayload?.area_id != null && state.heatmapData?.areas) {
+          state.heatmapData.areas = patchAreasLightFromSidebar(
+            state.heatmapData.areas,
+            patchPayload.area_id,
+            patchPayload
+          );
+        }
       });
   },
 });
@@ -675,8 +749,6 @@ export const selectAreaStatusFetchingId = (state) => state.heatmap.areaStatusFet
 export const selectToggleAllZonesLoading = (state) => state.heatmap.toggleAllZonesLoading;
 export const selectToggleAllZonesError = (state) => state.heatmap.toggleAllZonesError;
 export const selectHeatmapSearchTerm = (state) => state.heatmap.searchTerm; // added
-export const selectFloorStatusRevisionByFloorId = (state) =>
-  state.heatmap.floorStatusRevisionByFloorId || {};
 
 // Reducer
 export default heatmapSlice.reducer;

@@ -11,6 +11,7 @@ export default function ScheduleFormPanel({
   timeMinutes, setTimeMinutes,
   keepUntil, setKeepUntil,
   groups = [], // Add groups prop
+  exceptionDates = [],
   editable = true
 }) {
   // Add responsive state

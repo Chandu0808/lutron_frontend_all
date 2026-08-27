@@ -377,7 +377,7 @@ const UpdateAreaGroup = () => {
                     <Divider sx={{ my: 2, width: '40%', flexShrink: 0 }} />
 
                     {/* Scrollable List Box - Takes remaining space */}
-                <Box className="area-group-list-panel" sx={{ 
+                <Box className="area-group-list-panel area-group-scrollable" sx={{ 
                     flex: 1, 
                     overflowY: 'auto', 
                     minHeight: 0,
@@ -446,7 +446,7 @@ const UpdateAreaGroup = () => {
                     />
                 </Box>
                 {/* Action Buttons - Fixed at bottom */}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
+                <Box className="area-group-actions" sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
                     {/* Default mode (Copy, Modify, Delete, Close) */}
                     {!isEditing && (
                         <>

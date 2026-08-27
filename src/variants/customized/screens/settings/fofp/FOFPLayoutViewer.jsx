@@ -140,7 +140,6 @@ const FOFPLayoutViewer = ({
 
   const {
     transformRef,
-    applyTransform,
     applyCalibratedViewport,
     markViewAdjusted,
     zoomAtCenter,

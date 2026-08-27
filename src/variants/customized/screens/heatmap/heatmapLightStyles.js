@@ -43,7 +43,8 @@ export function getLightLevelFillColor(
 
 /**
  * Resolve Light-mode polygon fill for an area.
- * Prefers light_level gradient; falls back to light_status on/off.
+ * Prefers light_level gradient (floor truth when present); falls back to light_status on/off.
+ * Per-area light_level is patched from the sidebar in customized HeatmapSlice only.
  */
 export function resolveLightModeFill(area, lightColorHex) {
   if (isMapProcessorUnreachable(area)) {

@@ -284,7 +284,7 @@ const SettingsSidebar = ({ items = [], embedded = false }) => {
   }
 
   return (
-    <Grid item xs={12} md={3} sx={settingsSidebarGridItemSx}>
+    <Grid item xs={12} md={3} className="settings-sidebar-column" sx={settingsSidebarGridItemSx}>
       <Typography
         variant="h6"
         sx={{

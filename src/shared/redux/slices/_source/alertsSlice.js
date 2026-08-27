@@ -191,6 +191,11 @@ export const selectAlerts = createSelector(
       time: a?.time ?? a?.created_at ?? null,
       reported_time: a?.reported_time ?? null,
       description: a?.description ?? '',
+      // Required for heatmap floorplan alert icons (LEAP code / LMS id match)
+      area_code: a?.area_code ?? null,
+      area_id: a?.area_id ?? null,
+      floor_id: a?.floor_id ?? null,
+      floor_name: a?.floor_name ?? null,
       // Add parsed time for sorting
       _parsedTime: parseBackendTime(a?.reported_time ?? a?.time ?? a?.created_at)
     }));

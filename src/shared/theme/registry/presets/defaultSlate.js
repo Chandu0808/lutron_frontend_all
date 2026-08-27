@@ -5,6 +5,7 @@ import {
 } from "../../../../variants/advanced/config/themeConstants";
 import { onContentColors } from "../../../../variants/advanced/utils/themeOnSurface";
 import { applyHeatmapTabPillTokens } from "../../utils/applyHeatmapTabPillTokens";
+import { resolveWordmarkLogoFilter } from "../../utils/resolveWordmarkLogoFilter";
 
 /**
  * Default slate preset CSS variables (non-gold, non-custom shared surface).
@@ -109,7 +110,7 @@ export function applyDefaultSlatePreset(root, context = {}) {
     root.style.removeProperty("--footer-background-image");
   }
   root.style.setProperty("--footer-text-color", "#1a1a1a");
-  root.style.setProperty("--footer-logo-filter", "none");
+  root.style.setProperty("--footer-logo-filter", resolveWordmarkLogoFilter("#d7d9e4"));
   root.style.setProperty("--schedule-grid-bg", "#3d4a5c");
   root.style.setProperty("--schedule-panel-bg", "#d6dde8");
   root.style.setProperty("--schedule-panel-border", "#b8c5d6");

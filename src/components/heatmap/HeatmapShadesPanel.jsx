@@ -259,7 +259,7 @@ export default function HeatmapShadesPanel({
         border: theme.sectionBorder,
         borderRadius: variant === "advanced" ? 1.5 : 0,
         boxShadow: "none",
-        minHeight: { xs: 118, md: 136 },
+        minHeight: { xs: 100, md: 112 },
         flexShrink: 0,
         p: 0,
         m: 0,
@@ -270,8 +270,10 @@ export default function HeatmapShadesPanel({
       <Box
         sx={{
           writingMode: "vertical-rl",
-          fontWeight: "bold",
-          fontSize: { xs: 10, md: 12 },
+          fontWeight: 600,
+          fontSize: { xs: 9, sm: 10, md: 11 },
+          fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
+          lineHeight: 1.15,
           color: theme.labelColor,
           px: 0.5,
           py: 0.2,
@@ -311,7 +313,7 @@ export default function HeatmapShadesPanel({
             alignItems: "stretch",
             gap: 0.5,
             flexShrink: 0,
-            minHeight: { xs: 90, md: 108 },
+            minHeight: { xs: 78, md: 90 },
           }}
         >
           <Box

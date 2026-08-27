@@ -29,6 +29,9 @@ const Footer = () => {
         right: 0,
         bottom: 0,
         zIndex: 1300,
+        // Decorative only — must not intercept Cancel/Save (bottom-right) clicks
+        pointerEvents: "none",
+        overflow: "hidden",
       }}
     >
       <Typography sx={{ color: "#000000", fontSize: FOOTER_VERSION_FONT_SIZE }}>

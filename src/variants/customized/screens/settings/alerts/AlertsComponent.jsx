@@ -28,6 +28,11 @@ import {
   selectAlertsDisplayUpdating,
   selectAlertsDisplayUpdateError,
 } from "../../../redux/slice/settingsslice/alerts/alertsDisplaySlice";
+import { fetchAlertTypes } from "../../../redux/slice/dashboard/alertsSlice";
+import {
+  dispatchFetchAlertTypesOnce,
+  invalidateAlertTypesBootstrap,
+} from "../../../../../shared/utils/bootstrapFetchGuards";
 
 const ALERT_TYPES_ORDER = [
   "Processor Not Responding",
@@ -104,6 +109,8 @@ const AlertsComponent = () => {
 
       await dispatch(disableAlerts({ alert_type: alertType, display: desiredDisplay })).unwrap();
       await dispatch(fetchAlertsDisplayStatus());
+      invalidateAlertTypesBootstrap();
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes, { force: true });
     } finally {
       setLocallyUpdatingType(null);
     }
@@ -118,7 +125,7 @@ const AlertsComponent = () => {
       >
         <SettingsSidebar items={visibleSidebarItemsWithPaths} />
 
-        <Grid item xs={12} lg={9} sx={settingsHelpLayoutContentColumnSx}>
+        <Grid item xs={12} md={9} lg={9} className="settings-help-content-column" sx={settingsHelpLayoutContentColumnSx}>
             <Paper sx={settingsHelpWhitePaperSx}>
               <Typography
                 variant="h4"

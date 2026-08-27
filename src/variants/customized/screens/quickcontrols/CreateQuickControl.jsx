@@ -4,14 +4,11 @@ import AreaTreeDialog from "./AreaTreeDialog";
 import Action from "./Action";
 import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
 import { dispatchFetchFloorsOnce } from "../../../../shared/utils/bootstrapFetchGuards";
-import { selectAreaScenes } from "../../redux/slice/settingsslice/heatmap/areaSettingsSlice";
 import { createQuickControl, fetchQuickControls } from "../../redux/slice/quickcontrols/quickControlSlice";
 import { useNavigate } from "react-router-dom";
 import { ConfirmDialog } from "../../utils/FeedbackUI";
 import { UseAuth } from "../../customhooks/UseAuth";
-import { selectProfile } from "../../redux/slice/auth/userlogin";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
-import { BaseUrl } from "../../BaseUrl";
 import {
   getScheduleDetailsActionBarStyle,
   getScheduleDetailsViewportShellStyle,
@@ -53,7 +50,6 @@ const CreateQuickControl = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const floors = useSelector(selectFloors);
-  const areaScenes = useSelector(selectAreaScenes);
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const panelBackground =
@@ -148,12 +144,6 @@ const CreateQuickControl = () => {
         actions: []
       }))
     ]);
-  };
-
-  // Delete location - Updated to show confirmation first
-  const handleDelete = (index) => {
-    setLocationToDelete({ index, location: locations[index] });
-    setShowDeleteDialog(true);
   };
 
   // Confirm delete location

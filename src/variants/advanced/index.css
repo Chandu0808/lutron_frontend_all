@@ -954,7 +954,7 @@ body, #root {
   }
 }
 
-/* Area status sidebar — shell clips; body scrolls so Shades Apply is reachable */
+/* Area status sidebar — shell + body clip; only zones list scrolls */
 .heatmap-container .heatmap-area-sidebar {
   overflow: hidden !important;
   overflow-x: hidden !important;
@@ -972,81 +972,91 @@ body, #root {
   height: 0 !important;
   min-height: 0 !important;
   max-height: none !important;
-  padding-bottom: 96px !important;
+  padding-bottom: 8px !important;
   box-sizing: border-box !important;
+  overflow: hidden !important;
   overflow-x: hidden !important;
-  overflow-y: scroll !important;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, var(--app-button, #4a586c))
-    var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.18));
+  overflow-y: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar {
-  width: 10px !important;
+.heatmap-container .heatmap-area-sidebar-zones-list {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  padding-right: 8px !important;
+  box-sizing: border-box !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, rgba(30, 116, 197, 0.7))
+    var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.08)) !important;
+}
+
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar {
+  width: 4px !important;
   display: block !important;
 }
 
-.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-track {
-  background: var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.18)) !important;
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-track {
+  background: var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.06)) !important;
+  margin-block: 2px !important;
 }
 
-.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
-  background: var(--heatmap-sidebar-scrollbar-thumb, var(--app-button, #4a586c)) !important;
-  border-radius: 5px !important;
-  min-height: 48px !important;
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
+  background: var(--heatmap-sidebar-scrollbar-thumb, rgba(30, 116, 197, 0.65)) !important;
+  border-radius: 4px !important;
+  min-height: 24px !important;
 }
 
-.heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb:hover {
-  background: var(--heatmap-sidebar-scrollbar-thumb-hover, var(--heatmap-sidebar-scrollbar-thumb, var(--app-button, #3a4658))) !important;
-}
-
-/* Theme fallbacks if tokens not yet applied */
-html.gold-theme .heatmap-container .heatmap-area-sidebar-body {
+/* Theme fallbacks if tokens not yet applied — zones list scrollbar */
+html.gold-theme .heatmap-container .heatmap-area-sidebar-zones-list {
   scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, #4A4334)
     var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.2));
 }
 
-html.gold-theme .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
+html.gold-theme .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
   background: var(--heatmap-sidebar-scrollbar-thumb, #4A4334) !important;
 }
 
-html.gold-theme .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb:hover {
+html.gold-theme .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb:hover {
   background: var(--heatmap-sidebar-scrollbar-thumb-hover, #3a3428) !important;
 }
 
-html.theme-4-page .heatmap-container .heatmap-area-sidebar-body {
+html.theme-4-page .heatmap-container .heatmap-area-sidebar-zones-list {
   scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, #403A31)
     var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.2));
 }
 
-html.theme-4-page .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
+html.theme-4-page .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
   background: var(--heatmap-sidebar-scrollbar-thumb, #403A31) !important;
 }
 
-html.theme-4-page .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb:hover {
+html.theme-4-page .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb:hover {
   background: var(--heatmap-sidebar-scrollbar-thumb-hover, #322e27) !important;
 }
 
-html.theme-3-page .heatmap-container .heatmap-area-sidebar-body {
+html.theme-3-page .heatmap-container .heatmap-area-sidebar-zones-list {
   scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, #3D4A5C)
     var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.18));
 }
 
-html.theme-3-page .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
+html.theme-3-page .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
   background: var(--heatmap-sidebar-scrollbar-thumb, #3D4A5C) !important;
 }
 
-html.theme-3-page .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb:hover {
+html.theme-3-page .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb:hover {
   background: var(--heatmap-sidebar-scrollbar-thumb-hover, #2f3948) !important;
 }
 
-html.custom-theme .heatmap-container .heatmap-area-sidebar-body {
+html.custom-theme .heatmap-container .heatmap-area-sidebar-zones-list {
   scrollbar-color: var(--heatmap-sidebar-scrollbar-thumb, var(--app-button, #4a586c))
     var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.18));
 }
 
-html.custom-theme .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollbar-thumb {
+html.custom-theme .heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
   background: var(--heatmap-sidebar-scrollbar-thumb, var(--app-button, #4a586c)) !important;
 }
 
@@ -1069,8 +1079,15 @@ html.custom-theme .heatmap-container .heatmap-area-sidebar-body::-webkit-scrollb
   }
 
   .heatmap-container .heatmap-area-sidebar-body {
+    overflow: hidden !important;
     overflow-x: hidden !important;
-    overflow-y: scroll !important;
+    overflow-y: hidden !important;
+  }
+
+  .heatmap-container .heatmap-area-sidebar-zones-list {
+    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
   }
 }
 
@@ -2400,6 +2417,11 @@ html.theme-4-page .activity-report-page .MuiOutlinedInput-root fieldset {
   border-color: var(--activity-report-filter-field-border, rgba(64, 58, 49, 0.28)) !important;
 }
 
+/* Select Area (Add Location): no page-dimming overlay behind the dialog */
+.MuiModal-root.select-area-dialog-root .MuiBackdrop-root {
+  background-color: transparent !important;
+}
+
 /* Area group pages specific styles */
 .area-group-container {
   min-height: calc(100vh - 120px) !important;
@@ -2504,9 +2526,31 @@ html.theme-4-page .activity-report-page .MuiOutlinedInput-root fieldset {
   border-color: var(--users-border, rgba(0, 0, 0, 0.23)) !important;
 }
 
-.area-group-list-panel {
+/* Higher specificity than `.area-group-container *` so the location list can scroll */
+.area-group-container .area-group-list-panel,
+.area-group-container .area-group-scrollable {
+  overflow: auto !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+/* Keep Cancel/Save (and update actions) above the fixed footer hit area */
+.area-group-container .area-group-actions {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 2 !important;
+  padding-bottom: 28px !important;
+  pointer-events: auto !important;
+}
+
+.area-group-container .area-group-actions * {
+  overflow: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Settings and Lutron website pages specific styles */
@@ -3316,21 +3360,78 @@ button.quick-control-list-card {
   }
 }
 
-/* Settings: full-width content, scrollable tables and forms */
+/* Settings: sticky sidebar (full tab list), content pane scrolls when long. */
 .settings-layout-root {
   box-sizing: border-box;
-}
-
-.settings-layout-root,
-.settings-main-inner-panel {
   min-width: 0;
   max-width: 100%;
   min-height: auto !important;
   max-height: none !important;
   height: auto !important;
   overflow: visible !important;
+  color: var(--settings-panel-text, #1c2330);
+}
+
+.settings-main-inner-panel {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  max-height: calc(100dvh - 280px);
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   box-sizing: border-box;
   color: var(--settings-panel-text, #1c2330);
+}
+
+@media (min-width: 900px) {
+  .settings-layout-root,
+  .MuiGrid-container.settings-layout-root {
+    align-items: flex-start !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .settings-layout-root [data-testid="settings-sidebar-nav"],
+  .settings-layout-root .settings-sidebar-column {
+    position: sticky !important;
+    top: 20px !important;
+    align-self: flex-start !important;
+    max-height: none !important;
+    overflow: visible !important;
+    z-index: 2;
+  }
+
+  .settings-layout-root > .settings-main-outer-panel {
+    max-height: none !important;
+    overflow: visible !important;
+    align-self: flex-start !important;
+  }
+
+  .settings-layout-root .settings-main-inner-panel {
+    max-height: calc(100dvh - 280px) !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .settings-main-inner-panel {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+/* Avoid a second scrollbar inside Home Lutron/Client/Project cards. */
+.settings-main-inner-panel .lutron-content-scrollable,
+.settings-main-inner-panel .client-content-scrollable,
+.settings-main-inner-panel .project-content-scrollable {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  max-height: none !important;
+  height: auto !important;
 }
 
 .settings-main-inner-panel .MuiTypography-root {

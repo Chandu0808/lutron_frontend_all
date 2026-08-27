@@ -9,6 +9,7 @@ import {
 } from "../../../../variants/advanced/config/themeConstants";
 import { applySettingsSidebarTypographyVars } from "../settingsSidebarTabStyles";
 import { applyHeatmapTabPillTokens } from "../../utils/applyHeatmapTabPillTokens";
+import { resolveWordmarkLogoFilter } from "../../utils/resolveWordmarkLogoFilter";
 
 /**
  * Gold preset CSS variables (Phase 4.3B extraction from ThemeContext).
@@ -101,7 +102,7 @@ export function applyGoldPreset(root, context) {
   root.style.setProperty("--footer-background-color", background);
   root.style.removeProperty("--footer-background-image");
   root.style.setProperty("--footer-text-color", GOLD_THEME_LIGHT_SURFACE_TEXT);
-  root.style.setProperty("--footer-logo-filter", "none");
+  root.style.setProperty("--footer-logo-filter", resolveWordmarkLogoFilter(veryLightBg));
   root.style.setProperty("--schedule-grid-bg", "#3D3629");
   root.style.setProperty("--schedule-panel-bg", GOLD_THEME_LIGHT_PANEL_BG);
   root.style.setProperty("--schedule-panel-border", "rgba(74, 67, 52, 0.22)");

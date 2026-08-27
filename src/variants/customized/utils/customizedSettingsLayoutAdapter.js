@@ -19,6 +19,9 @@ export const customizedSettingsLayoutAdapter = {
     contentMd: 9,
     p: 2,
   }),
+  getSidebarClassName: () => 'settings-sidebar-column',
+  getContentInnerClassName: () =>
+    'settings-main-inner-panel settings-help-content-column',
   getContentOuterSx: (ctx) => ({
     backgroundColor: ctx.isDefaultWhiteTheme ? '#ffffff' : ctx.contentColor,
     p: 3,
@@ -29,7 +32,6 @@ export const customizedSettingsLayoutAdapter = {
     width: '100%',
     minWidth: 0,
     maxWidth: '100%',
-    minHeight: 'auto',
     maxHeight: { xs: 'none', md: 'calc(100vh - 200px)' },
     display: 'flex',
     flexDirection: 'column',

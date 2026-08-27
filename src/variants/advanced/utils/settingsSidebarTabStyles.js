@@ -27,6 +27,7 @@ export const SETTINGS_SIDEBAR_ITEM_ORDER = [
   'Alerts',
   'Processors',
   'Maintenance',
+  'Application Monitoring',
   'FOFP',
   'Help',
   'Manage Sensors',

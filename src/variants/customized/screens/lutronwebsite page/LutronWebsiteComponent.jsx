@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Typography, Paper, TextField, Button } from '@mui/material';
+import { Box, Typography, Paper, Button } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
@@ -16,20 +16,6 @@ import { IoLocationOutline } from "react-icons/io5";
 import { TfiViewList } from "react-icons/tfi";
 import { useNavigate } from 'react-router-dom';
 import { Link } from '@mui/material';
-import { selectProfile } from "../../redux/slice/auth/userlogin"; // adjust path as needed
-
-const ALL_SOLUTIONS = [
-  'Smart Lighting Controls',
-  'Automated Shades',
-  'Mobile App Control',
-  // Add more solutions here if needed
-];
-
-const MODES = [
-  { key: 'Lutron', label: 'Lutron', fetch: getLutronData, selector: homeDataList },
-  { key: 'ARM', label: 'ARM', fetch: getLutronDataClient, selector: homeDataClient },
-  { key: 'Project', label: 'Project', fetch: getLutronDataProject, selector: homeDataProject },
-];
 
 const CARD_HEIGHT_RESPONSIVE = {
   maxHeight: {
@@ -104,12 +90,8 @@ const LutronWebsiteComponent = () => {
   const lutronData = useSelector(homeDataList);
   const amazonData = useSelector(homeDataClient);
   const projectData = useSelector(homeDataProject);
-  const homeLutron = useSelector(homeDataList);
   const homeClient = useSelector(homeDataClient);
-  const homeProject = useSelector(homeDataProject);
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-  const floorId = homeProject?.floor_id || null;
 
   // UI state
   const [displayMode, setDisplayMode] = useState('Lutron');
@@ -124,7 +106,6 @@ const LutronWebsiteComponent = () => {
   // const [filteredDescription, setFilteredDescription] = useState('');
   // const [filteredSolutions, setFilteredSolutions] = useState([]);
 
-  const profile = useSelector(selectProfile);
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = appTheme?.application_theme?.button || '#232323';
 

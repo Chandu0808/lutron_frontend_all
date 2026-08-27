@@ -21,6 +21,7 @@ export const BASIC_SETTINGS_SIDEBAR_PATHS = {
   Alerts: `${BASIC_SETTINGS_PREFIX}/alerts`,
   Processors: `${BASIC_SETTINGS_PREFIX}/processors`,
   Maintenance: `${BASIC_SETTINGS_PREFIX}/maintenance`,
+  "Application Monitoring": `${BASIC_SETTINGS_PREFIX}/application-monitoring`,
   FOFP: `${BASIC_SETTINGS_PREFIX}/fofp`,
   Help: `${BASIC_SETTINGS_PREFIX}/create-help/`,
 };
@@ -49,7 +50,13 @@ export function isBasicAreaGroupSettingsChildRoute(pathname) {
   );
 }
 
-/** Child routes that stay at root but belong to settings (floor/users/help/area-group flows). */
+/** Public Help page (`/get-help`) — scrollable content, not the fixed settings panel shell. */
+export function isBasicGetHelpRoute(pathname) {
+  const p = normalizePathname(pathname);
+  return p === "/get-help" || p.startsWith("/get-help/");
+}
+
+/** Child routes that stay at root but belong to settings (floor/users/area-group flows). */
 function isBasicSettingsRelatedRoute(pathname) {
   const p = normalizePathname(pathname);
   return (
@@ -60,9 +67,7 @@ function isBasicSettingsRelatedRoute(pathname) {
     p.startsWith("/editfloor/") ||
     p.startsWith("/correct-coordinate/") ||
     p.startsWith("/area-calculation/") ||
-    isBasicAreaGroupSettingsChildRoute(p) ||
-    p === "/get-help" ||
-    p.startsWith("/get-help/")
+    isBasicAreaGroupSettingsChildRoute(p)
   );
 }
 
@@ -141,6 +146,12 @@ export function getBasicSettingsSectionLabel(pathname) {
     return "Maintenance";
   }
   if (
+    p === `${BASIC_SETTINGS_PREFIX}/application-monitoring` ||
+    p.startsWith(`${BASIC_SETTINGS_PREFIX}/application-monitoring/`)
+  ) {
+    return "Application Monitoring";
+  }
+  if (
     p === `${BASIC_SETTINGS_PREFIX}/fofp` ||
     p.startsWith(`${BASIC_SETTINGS_PREFIX}/fofp/`)
   ) {
@@ -171,4 +182,11 @@ export function getBasicSettingsSectionLabel(pathname) {
 
 export function isBasicMaintenanceRoute(pathname) {
   return normalizePathname(pathname) === BASIC_SETTINGS_SIDEBAR_PATHS.Maintenance;
+}
+
+/** Application Monitoring — tall content; use scrollable shell so Resource Usage isn't clipped. */
+export function isBasicApplicationMonitoringRoute(pathname) {
+  const p = normalizePathname(pathname);
+  const base = BASIC_SETTINGS_SIDEBAR_PATHS["Application Monitoring"];
+  return p === base || p.startsWith(`${base}/`);
 }

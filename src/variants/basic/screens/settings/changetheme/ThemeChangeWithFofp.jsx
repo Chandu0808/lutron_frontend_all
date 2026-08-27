@@ -42,7 +42,6 @@ import {
 import {
     DEFAULT_APP_BACKGROUND,
     DEFAULT_APP_CONTENT,
-    onContentColors,
     isLightSurface,
 } from '../../../utils/themeOnSurface';
 import { settingsSidebarColumnDividerSx } from '../../../utils/settingsSidebarTabStyles';
@@ -127,8 +126,6 @@ const ThemeChange = () => {
     const [selectedThemeColor, setSelectedThemeColor] = useState('#ffffff');
     const [selectedHeatmapColor, setSelectedHeatmapColor] = useState('#ffffff');
 
-    // Add responsive breakpoints
-    const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
     const settingsSidebarMdUp = useMediaQuery(theme.breakpoints.up('md'));
 
     const [activeThemeTab, setActiveThemeTab] = useState('Background');
@@ -509,13 +506,12 @@ const ThemeChange = () => {
     if (!canAccessTheme) return null;
 
     const contentForSidebar = appTheme?.application_theme?.content || DEFAULT_APP_CONTENT;
-    const side = onContentColors(contentForSidebar);
     const isDefaultWhiteTheme = isLightSurface(contentForSidebar);
 
     return (
-        <Grid container className="settings-layout-root" sx={{ ml: '12px', p: '12px' }}>
-            {/* Full-width header (title + 2 horizontal dividers) */}
-            <Grid item xs={12} sx={{ pt: '8px', mb: 1 }}>
+        <Grid container className="settings-layout-root" sx={{ ml: '18px', p: '18px', alignItems: 'flex-start' }}>
+            {/* Full-width header (title + 2 horizontal dividers) — match Alerts */}
+            <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
                 <Typography
                     variant="h6"
                     sx={{
@@ -534,16 +530,13 @@ const ThemeChange = () => {
                 </Box>
             </Grid>
 
-            {/* Sidebar */}
+            {/* Sidebar — same column as Alerts */}
             <Grid
                 item
                 xs={12}
                 md={2}
                 sx={{
-                    p: 0,
-                    borderTopLeftRadius: "10px",
-                    borderBottomLeftRadius: "10px",
-                    ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp && !isTablet),
+                    ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp),
                 }}
             >
                 <SettingsSidebarNav items={visibleSidebarItemsWithPaths} />
@@ -553,6 +546,7 @@ const ThemeChange = () => {
                 item
                 xs={12}
                 md={10}
+                className="settings-main-content-column"
                 sx={{
                     backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentForSidebar,
                     p: { xs: 1.5, md: 2 },

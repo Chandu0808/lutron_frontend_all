@@ -22,8 +22,28 @@ import {
 } from '../../utils/themePageBackground';
 import {
   dispatchFetchFloorsOnce,
-  dispatchFetchLeafByFloorOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards';
+
+/** Theme accent scrollbar (matches heatmap sidebar tokens). Avoids low-contrast #888 on light shells. */
+const AREA_PICKER_SCROLLBAR_SX = {
+  scrollbarWidth: 'thin',
+  scrollbarColor:
+    'var(--heatmap-sidebar-scrollbar-thumb, #4A4334) var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.18))',
+  '&::-webkit-scrollbar': {
+    width: '8px',
+  },
+  '&::-webkit-scrollbar-track': {
+    background: 'var(--heatmap-sidebar-scrollbar-track, rgba(0, 0, 0, 0.12))',
+    borderRadius: '4px',
+  },
+  '&::-webkit-scrollbar-thumb': {
+    background: 'var(--heatmap-sidebar-scrollbar-thumb, #4A4334)',
+    borderRadius: '4px',
+  },
+  '&::-webkit-scrollbar-thumb:hover': {
+    background: 'var(--heatmap-sidebar-scrollbar-thumb-hover, #3a3428)',
+  },
+};
 
 const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   const dispatch = useDispatch();
@@ -88,6 +108,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
     return floors;
   };
 
+  // Keep as number|'' so MUI Select value matches MenuItem value={floor.id}.
   const [selectedFloor, setSelectedFloor] = useState('');
   const [explicitlySelectedNodeCodes, setExplicitlySelectedNodeCodes] = useState(new Set());
   const [expanded, setExpanded] = useState({});
@@ -96,6 +117,24 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [showDoneDialog, setShowDoneDialog] = useState(false);
   const [areaToRemove, setAreaToRemove] = useState(null);
+
+  // Only track selected area codes (parents and leaves)
+  const [selectedAreaCodes, setSelectedAreaCodes] = useState([]);
+
+  const resetPickerState = () => {
+    setSelectedFloor('');
+    setSelectedAreaCodes([]);
+    setExpanded({});
+    setExplicitlySelectedNodeCodes(new Set());
+    setShowRemoveDialog(false);
+    setShowDoneDialog(false);
+    setAreaToRemove(null);
+  };
+
+  // Closing must not restore the previous floor/checks on reopen (dialog stays mounted).
+  useEffect(() => {
+    if (!open) resetPickerState();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -110,15 +149,23 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   useEffect(() => {
     if (!open) return;
     const availableFloors = getAvailableFloors();
-    if (availableFloors && availableFloors.length > 0 && !selectedFloor) {
-      setSelectedFloor(availableFloors[0].id.toString());
+    if (availableFloors && availableFloors.length > 0 && selectedFloor === '') {
+      setSelectedFloor(Number(availableFloors[0].id));
     }
   }, [open, floors, currentUserRole, userProfile, selectedFloor]);
 
+  // Always load tree for the selected floor (shared leafData is a single slot; once-guard
+  // would leave a stale tree when switching e.g. Terrace → 1st Floor).
   useEffect(() => {
-    if (!open || !selectedFloor) return;
-    dispatchFetchLeafByFloorOnce(dispatch, getLeafByFloorID, selectedFloor);
+    if (!open || selectedFloor === '') return;
+    dispatch(getLeafByFloorID(selectedFloor));
   }, [dispatch, open, selectedFloor]);
+
+  // Drop checks when the floor changes so codes from another floor cannot stick.
+  useEffect(() => {
+    setSelectedAreaCodes([]);
+    setExpanded({});
+  }, [selectedFloor]);
 
   // Helper to get all area_codes under a node (including itself and ALL descendants)
   const getAllAreaCodes = (node) => {
@@ -139,13 +186,13 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
     return node.children.flatMap(getAllLeafNodes);
   };
 
-  // Only track selected area codes (parents and leaves)
-  const [selectedAreaCodes, setSelectedAreaCodes] = useState([]);
-
   // Toggle selection for a node (parent or leaf) - select ALL descendants
   const toggleArea = (area) => {
     if (!area) return;
-    const codesToToggle = getAllAreaCodes(area);
+    const codesToToggle = getAllAreaCodes(area).filter(
+      (code) => code != null && code !== ''
+    );
+    if (!codesToToggle.length) return;
     const allSelected = codesToToggle.every(code => selectedAreaCodes.includes(code));
     if (allSelected) {
       // Deselect the node and ALL its descendants
@@ -201,6 +248,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
   // Only return selected leaf nodes on Done
   const handleDone = () => {
     if (selectedAreaCodes.length === 0) {
+      resetPickerState();
       onClose();
       return;
     }
@@ -288,15 +336,22 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
     
     setSelectedAreaCodes([]);
     setSelectedFloor('');
-    onClose();
-    
-    // Close dialog
+    setExpanded({});
     setShowDoneDialog(false);
+    onClose();
   };
 
   const toggleExpand = (code) => {
     setExpanded(prev => ({ ...prev, [code]: !prev[code] }));
   };
+
+  // Tree expand (+/−) must stay high-contrast on dark picker shells (buttonColor is often dark).
+  const treeExpandIconColor = useLightShell ? lightDialogTitleColor : '#ffffff';
+  const treeExpandButtonBg = isDarkThemedPickerShell
+    ? 'rgba(255, 255, 255, 0.18)'
+    : useLightShell
+      ? 'rgba(0, 0, 0, 0.08)'
+      : 'rgba(255, 255, 255, 0.18)';
 
   const renderAreaTree = (nodes, level = 0) => {
     return nodes.map((area) => {
@@ -338,15 +393,23 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
               <IconButton 
                 size="small" 
                 onClick={() => toggleExpand(area.area_code)}
+                aria-label={isExpanded ? 'Collapse area' : 'Expand area'}
                 sx={{ 
                   p: 0.5,
-                  '&:hover': { backgroundColor: 'rgba(0,0,0,0.1)' }
+                  ml: 0.5,
+                  backgroundColor: treeExpandButtonBg,
+                  borderRadius: '4px',
+                  '&:hover': {
+                    backgroundColor: isDarkThemedPickerShell || !useLightShell
+                      ? 'rgba(255, 255, 255, 0.28)'
+                      : 'rgba(0, 0, 0, 0.14)',
+                  },
                 }}
               >
                 {isExpanded ? (
-                  <IndeterminateCheckBoxOutlined fontSize="small" sx={{ color: buttonColor, fontSize: '18px' }} />
+                  <IndeterminateCheckBoxOutlined fontSize="small" sx={{ color: treeExpandIconColor, fontSize: '18px' }} />
                 ) : (
-                  <AddBoxOutlined fontSize="small" sx={{ color: buttonColor, fontSize: '18px' }} />
+                  <AddBoxOutlined fontSize="small" sx={{ color: treeExpandIconColor, fontSize: '18px' }} />
                 )}
               </IconButton>
             )}
@@ -372,6 +435,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
       setAreaToRemove(null);
       return;
     }
+    resetPickerState();
     onClose();
   };
 
@@ -381,9 +445,11 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
       onClose={handleOuterClose}
       maxWidth="md"
       fullWidth
+      disableScrollLock
+      className="select-area-dialog-root"
       BackdropProps={{
         sx: {
-          backgroundColor: useLightShell ? 'transparent' : 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: 'transparent',
         }
       }}
       PaperProps={{ 
@@ -434,9 +500,12 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
         }}>
           <FormControl fullWidth size="small" sx={{ mb: 2, flexShrink: 0 }}>
             <Select
-              value={selectedFloor}
+              value={selectedFloor === '' ? '' : selectedFloor}
               displayEmpty
-              onChange={(e) => setSelectedFloor(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSelectedFloor(next === '' ? '' : Number(next));
+              }}
               sx={{
                 color: useLightShell ? lightDialogFieldTextColor : '#fff',
                 backgroundColor: useLightShell ? 'var(--users-input-bg, #ffffff)' : 'transparent',
@@ -458,26 +527,17 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
                     borderRadius: '10px',
                     maxHeight: '200px',
                     overflowY: 'auto',
+                    ...AREA_PICKER_SCROLLBAR_SX,
                     '&::-webkit-scrollbar': {
+                      ...AREA_PICKER_SCROLLBAR_SX['&::-webkit-scrollbar'],
                       width: '6px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      background: '#f1f1f1',
-                      borderRadius: '3px',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      background: '#888',
-                      borderRadius: '3px',
-                    },
-                    '&::-webkit-scrollbar-thumb:hover': {
-                      background: '#555',
                     },
                   } 
                 } 
               }}
             >
               {getAvailableFloors()?.map((floor) => (
-                <MenuItem key={floor.id} value={floor.id}>
+                <MenuItem key={floor.id} value={Number(floor.id)}>
                   {floor.floor_name}
                 </MenuItem>
               ))}
@@ -500,20 +560,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
               minHeight: 0,
               maxHeight: '300px',
               maxWidth: '100%',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: useLightShell ? '#f1f1f1' : 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '4px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: useLightShell ? '#888' : 'rgba(255, 255, 255, 0.25)',
-                borderRadius: '4px',
-              },
-              '&::-webkit-scrollbar-thumb:hover': {
-                background: useLightShell ? '#555' : 'rgba(255, 255, 255, 0.4)',
-              },
+              ...AREA_PICKER_SCROLLBAR_SX,
             }}>
               {renderAreaTree(tree)}
             </Box>
@@ -554,7 +601,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
         }}
         aria-labelledby="remove-area-dialog-title"
         aria-describedby="remove-area-dialog-description"
-        BackdropProps={{ sx: { backgroundColor: useLightShell ? 'transparent' : 'rgba(0, 0, 0, 0.5)' } }}
+        BackdropProps={{ sx: { backgroundColor: 'transparent' } }}
         PaperProps={{
           sx: {
             backgroundColor: 'transparent',
@@ -627,7 +674,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd, variant = "dark" }) => {
         onClose={() => setShowDoneDialog(false)}
         aria-labelledby="done-dialog-title"
         aria-describedby="done-dialog-description"
-        BackdropProps={{ sx: { backgroundColor: useLightShell ? 'transparent' : 'rgba(0, 0, 0, 0.5)' } }}
+        BackdropProps={{ sx: { backgroundColor: 'transparent' } }}
         PaperProps={{
           sx: {
             backgroundColor: 'transparent',

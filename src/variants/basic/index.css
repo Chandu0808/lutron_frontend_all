@@ -225,11 +225,16 @@ html.dashboard-route-shell #root {
   }
   
   /* Optimize container heights for laptop screens */
-  .area-group-container,
   .lutron-website-container,
   .help-container,
   .schedule-container {
     min-height: calc(100vh - 150px) !important;
+  }
+
+  .area-group-container {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
   }
   
   /* Ensure tables and lists are scrollable */
@@ -249,20 +254,25 @@ html.dashboard-route-shell #root {
     max-height: calc(100vh - 96px) !important;
   }
   
-  /* Area group scrollable adjustments */
+  /* Area group list scrolls inside panel; do not force 100vh caps */
   .area-group-scrollable {
-    max-height: calc(100vh - 360px) !important;
+    max-height: none !important;
   }
 }
 
 /* Laptop size breakpoint for 1280x720 resolution - specific adjustments */
 @media (min-width: 1280px) and (max-width: 1365px) and (max-height: 800px) {
   /* Optimize for 1280x720 specifically */
-  .area-group-container,
   .lutron-website-container,
   .help-container,
   .schedule-container {
     min-height: calc(100vh - 140px) !important;
+  }
+
+  .area-group-container {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
   }
   
   .heatmap-container {
@@ -270,17 +280,22 @@ html.dashboard-route-shell #root {
   }
   
   .area-group-scrollable {
-    max-height: calc(100vh - 350px) !important;
+    max-height: none !important;
   }
 }
 
 @media (max-width: 1024px) {
   /* Tablet adjustments */
-  .area-group-container,
   .lutron-website-container,
   .help-container,
   .schedule-container {
     min-height: calc(100vh - 140px) !important;
+  }
+
+  .area-group-container {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
   }
 }
 
@@ -290,11 +305,16 @@ html.dashboard-route-shell #root {
   }
   
   /* Mobile adjustments */
-  .area-group-container,
   .lutron-website-container,
   .help-container,
   .schedule-container {
     min-height: calc(100vh - 120px) !important;
+  }
+
+  .area-group-container {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
   }
   
   /* Reduce padding on mobile */
@@ -306,11 +326,16 @@ html.dashboard-route-shell #root {
 
 @media (max-width: 480px) {
   /* Small mobile adjustments */
-  .area-group-container,
   .lutron-website-container,
   .help-container,
   .schedule-container {
     min-height: calc(100vh - 100px) !important;
+  }
+
+  .area-group-container {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
   }
 }
 
@@ -349,21 +374,46 @@ html.dashboard-route-shell #root {
   overflow: hidden !important;
 }
 
-/* Area status sidebar: vertical scroll so Shades Apply / full content is reachable */
+/* Area status sidebar: fill column height; no outer scroll (zones list scrolls). */
 .heatmap-container .heatmap-area-sidebar {
+  overflow: hidden !important;
   overflow-x: hidden !important;
-  overflow-y: scroll !important;
+  overflow-y: hidden !important;
   overscroll-behavior: contain;
   min-height: 0 !important;
   height: 100% !important;
   max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 
 .heatmap-container .heatmap-area-sidebar-body {
-  padding-bottom: 72px !important;
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  padding-bottom: 8px !important;
   box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.heatmap-container .heatmap-area-sidebar-zones-list {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  /* Gap between value chips (0% / 4500K) and scrollbar / right edge */
+  padding-right: 8px !important;
+  box-sizing: border-box !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(30, 116, 197, 0.7) rgba(0, 0, 0, 0.08) !important;
 }
 
 /* Shade % field — border on wrapper (native input; MUI outline was invisible) */
@@ -404,18 +454,20 @@ html.dashboard-route-shell #root {
   box-sizing: border-box !important;
 }
 
-.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar {
-  width: 10px !important;
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar {
+  width: 4px !important;
   display: block !important;
 }
 
-.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.08) !important;
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.06) !important;
+  margin-block: 2px !important;
 }
 
-.heatmap-container .heatmap-area-sidebar::-webkit-scrollbar-thumb {
+.heatmap-container .heatmap-area-sidebar-zones-list::-webkit-scrollbar-thumb {
   background: rgba(30, 116, 197, 0.65) !important;
-  border-radius: 5px !important;
+  border-radius: 4px !important;
+  min-height: 24px !important;
 }
 
 /* Keep floorplan canvas from scrolling; never clip sidebar or bottom legend bar */
@@ -433,8 +485,15 @@ html.dashboard-route-shell #root {
   }
 
   .heatmap-container .heatmap-area-sidebar {
+    overflow: hidden !important;
     overflow-x: hidden !important;
-    overflow-y: scroll !important;
+    overflow-y: hidden !important;
+  }
+
+  .heatmap-container .heatmap-area-sidebar-zones-list {
+    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
   }
 
   /* Legend / floor nav / Create Area Group must stay fully visible */
@@ -460,47 +519,57 @@ html.dashboard-route-shell #root {
   box-sizing: border-box !important;
 }
 
-/* Area group pages specific styles */
+/* Area group pages specific styles — fill MainLayout content panel (do NOT use 100vh;
+   panel is shorter, e.g. calc(100dvh - 260px) with overflow:hidden, which clipped actions). */
 .area-group-container {
-  min-height: calc(100vh - 120px) !important;
-  max-height: none !important;
-  width: calc(100% - 16px) !important;
-  overflow: visible !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  overflow: hidden !important;
   position: relative !important;
   box-sizing: border-box !important;
-  margin: 8px !important;
-  margin-right: 8px !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-/* Responsive adjustments for area group containers */
+/* Responsive: keep filling the parent panel (no 100vh) */
 @media (max-width: 1440px) {
   .area-group-container {
-    min-height: calc(100vh - 120px) !important;
-    overflow: visible !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 }
 
-/* Laptop size (1280x720) adjustments for area group containers */
 @media (min-width: 1280px) and (max-width: 1365px) {
   .area-group-container {
-    min-height: calc(100vh - 140px) !important;
-    overflow: visible !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
   }
 }
 
 @media (max-width: 768px) {
   .area-group-container {
-    min-height: calc(100vh - 120px) !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
     overflow: visible !important;
   }
 }
 
 .area-group-scrollable {
-  max-height: calc(100vh - 340px) !important;
+  max-height: none !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   overflow-y: auto !important;
 }
 
-/* Prevent scroll on area group pages */
+/* Prevent page-level scroll bleed on area group chrome; list scrolls via .area-group-scrollable */
 .area-group-container * {
   overflow: hidden !important;
   overflow-y: hidden !important;
@@ -513,52 +582,185 @@ html.dashboard-route-shell #root {
   overflow-x: hidden !important;
 }
 
-/* Settings and Lutron website pages specific styles */
-.settings-layout-root,
+/* Keep Copy / Modify / Delete / Close (and Save / Cancel) visible */
+.area-group-container .area-group-actions {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 2 !important;
+  background-color: #ffffff !important;
+  padding-top: 8px !important;
+  padding-bottom: 28px !important;
+  pointer-events: auto !important;
+}
+
+.area-group-container .area-group-actions * {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Settings layout — sidebar stays put, content pane scrolls (advanced/customized pattern). */
+.settings-layout-root {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .settings-main-inner-panel {
-  min-height: auto !important;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+@media (min-width: 900px) {
+  .settings-layout-root,
+  .MuiGrid-container.settings-layout-root,
+  .MuiGrid-container:has(> .MuiGrid-item .settings-sidebar-nav-track) {
+    align-items: flex-start !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
+
+  .settings-layout-root [data-testid="settings-sidebar-nav"],
+  .MuiGrid-container:has(> .MuiGrid-item .settings-sidebar-nav-track)
+    > .MuiGrid-item:has(.settings-sidebar-nav-track) {
+    position: sticky !important;
+    top: 20px !important;
+    align-self: flex-start !important;
+    max-height: none !important;
+    overflow: visible !important;
+    z-index: 2;
+  }
+
+  .settings-layout-root > .settings-main-outer-panel {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Maintenance: do not stretch the content pane to sidebar height. */
+  .settings-layout-root:has(.basic-maintenance-page) > .settings-main-outer-panel {
+    align-self: flex-start !important;
+    height: auto !important;
+  }
+
+  .settings-main-inner-panel,
+  .settings-main-content-column,
+  .settings-home-content-column {
+    max-height: calc(100dvh - 360px) !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  .settings-container.settings-home-page .settings-home-content-column {
+    padding-bottom: 12px !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .settings-main-inner-panel,
+  .settings-main-content-column,
+  .settings-home-content-column {
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+}
+
+/* Avoid a second scrollbar inside Home Lutron/Client/Project cards. */
+.settings-main-inner-panel .lutron-content-scrollable,
+.settings-main-inner-panel .client-content-scrollable,
+.settings-main-inner-panel .project-content-scrollable,
+.settings-home-page .lutron-content-scrollable,
+.settings-home-page .client-content-scrollable,
+.settings-home-page .project-content-scrollable {
+  overflow: visible !important;
+  overflow-y: visible !important;
   max-height: none !important;
   height: auto !important;
+  box-sizing: border-box !important;
+}
+
+/*
+ * Basic Settings → Home: Lutron/Client/Project tabs stay visible;
+ * only the content column scrolls (no page + inner double bar).
+ */
+.settings-container.settings-home-page {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+.settings-container.settings-home-page .settings-home-content-column {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  padding-bottom: 12px !important;
+  box-sizing: border-box !important;
+}
+
+.settings-container.settings-home-page .home-content-type-tabs {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  flex-shrink: 0 !important;
+}
+
+/* Lutron / Client / Project dialogue box — colored shell shows full border (incl. bottom). */
+.settings-container.settings-home-page .settings-home-panel-shell {
+  box-sizing: border-box !important;
+  padding: 2px !important;
+  border-radius: 12px !important;
+  background-color: var(--settings-home-panel-border-color, #1565C0) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
+  margin-bottom: 8px !important;
+  overflow: visible !important;
+}
+
+.settings-container.settings-home-page .settings-home-panel {
+  box-sizing: border-box !important;
+  background-color: #fff !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 10px !important;
+  width: 100% !important;
   overflow: visible !important;
 }
 
 .settings-container {
-  height: 100% !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
   position: relative !important;
   box-sizing: border-box !important;
+  min-height: 0 !important;
 }
 
 /* Responsive adjustments for settings containers */
 @media (max-width: 1440px) {
   .settings-container {
-    height: 100% !important;
     min-height: 0 !important;
-    max-height: 100% !important;
-    overflow: hidden !important;
   }
 }
 
 /* Laptop size (1280x720) adjustments for settings containers */
 @media (min-width: 1280px) and (max-width: 1365px) {
   .settings-container {
-    height: 100% !important;
     min-height: 0 !important;
-    max-height: 100% !important;
-    overflow: hidden !important;
   }
 }
 
 @media (max-width: 768px) {
   .settings-container {
-    height: 100% !important;
     min-height: 0 !important;
-    max-height: 100% !important;
-    overflow: hidden !important;
   }
 }
 
@@ -635,15 +837,14 @@ html.dashboard-route-shell #root {
   }
 }
 
-/* Allow natural scrolling for child elements */
-.settings-container *,
+/* Allow natural scrolling for child elements — except settings scroll columns */
+.settings-container *:not(.settings-layout-root):not(.settings-main-inner-panel):not(.settings-main-content-column):not(.settings-home-content-column):not(.home-content-type-tabs),
 .lutron-website-container *,
-.help-container * {
+.help-container *:not(.settings-main-inner-panel) {
   overflow: visible !important;
 }
 
 /* Allow natural scrolling on lutron website pages */
-.settings-container,
 .help-container {
   overflow: visible !important;
   overflow-y: visible !important;
@@ -671,11 +872,18 @@ html.dashboard-route-shell #root {
     overflow-x: hidden !important;
     max-height: calc(100vh - 250px) !important;
   }
+
+  .settings-home-page .project-content-scrollable,
+  .settings-home-page .client-content-scrollable,
+  .settings-home-page .lutron-content-scrollable {
+    overflow: visible !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
   
   .settings-container {
-    overflow: visible !important;
-    height: auto !important;
-    max-height: none !important;
+    min-height: 0 !important;
   }
   
   html, body, #root {
@@ -695,25 +903,15 @@ html.dashboard-route-shell #root {
     max-height: none !important;
   }
   
-  /* Also disable scroll on main containers for smaller screens */
+  /* Keep settings shell height-capped; content column scrolls (see min-width 900px rules). */
   .settings-container {
-    overflow: hidden !important;
-    height: 100% !important;
-    max-height: 100% !important;
     min-height: 0 !important;
-  }
-  
-  /* Disable scroll on all nested containers for smaller screens */
-  .settings-container * {
-    overflow: visible !important;
-    overflow-y: visible !important;
-    overflow-x: hidden !important;
   }
   
 }
 
-.settings-container *:not(.project-content-scrollable):not(.client-content-scrollable):not(.lutron-content-scrollable),
-.help-container *:not(.project-content-scrollable):not(.client-content-scrollable):not(.lutron-content-scrollable) {
+.settings-container *:not(.project-content-scrollable):not(.client-content-scrollable):not(.lutron-content-scrollable):not(.settings-layout-root):not(.settings-main-inner-panel):not(.settings-main-content-column):not(.settings-home-content-column):not(.home-content-type-tabs):not(.settings-home-panel-shell),
+.help-container *:not(.project-content-scrollable):not(.client-content-scrollable):not(.lutron-content-scrollable):not(.settings-main-inner-panel) {
   overflow: visible !important;
   overflow-y: visible !important;
   overflow-x: hidden !important;
@@ -756,6 +954,39 @@ html.dashboard-route-shell #root {
 .help-container {
   position: relative !important;
   box-sizing: border-box !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+/* Help page cards — avoid MUI Collapse height clipping on multi-row download actions */
+.help-container .help-card,
+.help-container .help-card-details,
+.help-container .help-download-actions {
+  overflow: visible !important;
+}
+
+.help-container .help-download-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  padding-bottom: 6px !important;
+}
+
+.help-container .help-download-actions .MuiButton-root {
+  flex-shrink: 0 !important;
+}
+
+/* Public /get-help page — natural height; do not cap like settings panel */
+.help-get-help-page,
+.help-get-help-page .help-cards-list,
+.help-get-help-page .help-card,
+.help-get-help-page .help-card-details,
+.help-get-help-page .help-download-actions {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 /* Specific styles for Lutron page - NO scrolling for 1440px+ screens */

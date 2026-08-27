@@ -63,11 +63,12 @@ const Footer = () => {
         height: 32,
         display: 'flex',
         alignItems: 'center',
+        // Decorative only — must not intercept Cancel/Save (bottom-right) clicks
         pointerEvents: 'none',
         backgroundColor: 'transparent',
       }}
     >
-      <Box
+    <Box
         className="app-footer-track"
         sx={{
           display: 'flex',
@@ -77,7 +78,7 @@ const Footer = () => {
           maxWidth: '100%',
           mx: 'auto',
           boxSizing: 'border-box',
-          pointerEvents: 'auto',
+          pointerEvents: 'none',
           minHeight: 20,
           pl: 0,
           pr: 0,

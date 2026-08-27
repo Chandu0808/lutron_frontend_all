@@ -1,4 +1,4 @@
-﻿// lutron_frontend_app/src/screens/dashboard/Alerts.jsx
+// lutron_frontend_app/src/screens/dashboard/Alerts.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -7,8 +7,6 @@ import {
   sendAlertsByEmail,
   selectAlerts,
   selectAlertsLoading,
-  selectAlertsError,
-  selectAlertTypes,
   selectDownloadLoading,
   selectDownloadError,
   selectDownloadSuccess,
@@ -25,11 +23,10 @@ import {
   dispatchFetchActiveAlertsOnce,
   dispatchFetchProfileOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards';
+import { findFocusedAlertIndex } from '../../../../shared/heatmap/alertAreaMatch';
 import {
   Snackbar,
   Alert,
-  useTheme,
-  useMediaQuery,
   Pagination,
   FormControl,
   Select,
@@ -37,12 +34,6 @@ import {
   Box,
   Typography,
   Button,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField
 } from '@mui/material';
 import { FileUpload as FileUploadIcon } from '@mui/icons-material';
 
@@ -94,14 +85,9 @@ const formatDateTime = (timeStr) => {
 
 function Alerts({ selectedTypes = [], focusAlert = null }) {
   const dispatch = useDispatch();
-  const theme = useTheme();
-  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
-  const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'));
   
   const alerts = useSelector(selectAlerts);
   const loading = useSelector(selectAlertsLoading);
-  const error = useSelector(selectAlertsError);
-  const alertTypes = useSelector(selectAlertTypes);
   const downloadLoading = useSelector(selectDownloadLoading);
   const downloadError = useSelector(selectDownloadError);
   const downloadSuccess = useSelector(selectDownloadSuccess);
@@ -112,7 +98,6 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
   
   // User profile for email functionality
   const userProfile = useSelector((state) => state.user?.profile);
-  const profileLoading = useSelector((state) => state.user?.profileLoading);
 
   // Snackbar state
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -130,10 +115,6 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
   // Export dropdown state
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   // Email dialog state - DISABLED: No popup, using saved email only
-  // State variables kept for compatibility but not used
-  const [emailDialogOpen] = useState(false);
-  const [emailInput] = useState('');
-  const pendingEmailActionRef = useRef(null);
   
   // Snackbar handlers
   const handleSnackbarClose = () => {
@@ -286,36 +267,7 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
   useEffect(() => {
     if (!focusAlert || loading || !Array.isArray(filtered) || filtered.length === 0) return;
 
-    const targetLocation = normalizeText(focusAlert.location);
-    const targetAreaName = normalizeText(focusAlert.areaName);
-    const targetType = normalizeText(focusAlert.alertType);
-    const targetDevice = normalizeText(focusAlert.deviceName);
-    const targetSerial = normalizeText(focusAlert.serialNo);
-    const targetTime = normalizeText(focusAlert.reportedTime || focusAlert.time);
-
-    let matchedIndex = filtered.findIndex((alert) => {
-      const location = normalizeText(alert?.location);
-      const type = normalizeText(alert?.alert_type);
-      const device = normalizeText(alert?.device_name);
-      const serial = normalizeText(alert?.serial_no);
-      const time = normalizeText(alert?.reported_time || alert?.time);
-
-      if (targetLocation && location === targetLocation) {
-        const typeOk = !targetType || type === targetType;
-        const deviceOk = !targetDevice || device === targetDevice;
-        const serialOk = !targetSerial || serial === targetSerial;
-        const timeOk = !targetTime || time === targetTime;
-        return typeOk && deviceOk && serialOk && timeOk;
-      }
-
-      if (targetAreaName) {
-        if (location === targetAreaName || location.endsWith(targetAreaName)) return true;
-        const lastPart = location.split('/').pop()?.trim() || '';
-        return lastPart === targetAreaName;
-      }
-
-      return false;
-    });
+    const matchedIndex = findFocusedAlertIndex(filtered, focusAlert);
 
     if (matchedIndex < 0) return;
 

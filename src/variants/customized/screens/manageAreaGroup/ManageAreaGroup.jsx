@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { SidebarItems, getVisibleSidebarItems } from '../../utils/sidebarItems';
 import {
     Grid,
     Typography,
@@ -19,7 +18,6 @@ import {
     selectAreaGroupsLoading,
     selectAreaGroupsError,
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
-import UploadIcon from '@mui/icons-material/Upload';
 import { getVisibleSidebarItemsWithPaths, UseAuth, getOverallPermissionLevel } from '../../customhooks/UseAuth';
 import { selectProfile } from '../../redux/slice/auth/userlogin';
 
@@ -34,7 +32,6 @@ const ManageAreaGroup = () => {
     const { role } = UseAuth();
     const userProfile = useSelector(selectProfile);
     const overallPermission = getOverallPermissionLevel(userProfile);
-    const visibleSidebarItems = getVisibleSidebarItems(role);
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(role);
     
     // Check if user has permission to create area groups
@@ -46,22 +43,11 @@ const ManageAreaGroup = () => {
         return false;
     };
     
-    // Check if user has permission to view area groups
-    const canViewAreaGroups = () => {
-        // Superadmin and Admin can always view
-        if (role === 'Superadmin' || role === 'Admin') return true;
-        // All Operator roles can view
-        if (role === 'Operator') return true;
-        return false;
-    };
-    
-    
     // Check if user can view special area groups (only Superadmin)
     const canViewSpecialAreaGroups = () => {
         return role === 'Superadmin';
     };
 
-    const buttonColor = appTheme?.application_theme?.button || '#232323'
     const contentColor = appTheme?.application_theme?.content || '#a89d83';
 
     useEffect(() => {

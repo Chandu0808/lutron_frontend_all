@@ -186,7 +186,7 @@ const ManageModules = () => {
                 mx: 'auto',
                 px: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
             }}>
-                <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1 }}>
+                <Grid container className="settings-layout-root" spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1 }} sx={{ alignItems: 'flex-start' }}>
                     {/* Full-width header (title + 2 horizontal dividers) */}
                     <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
                         <Typography
@@ -219,7 +219,7 @@ const ManageModules = () => {
                     </Grid>
 
                     {/* Right Content Area */}
-                    <Grid item xs={12} lg={10} sx={{
+                    <Grid item xs={12} lg={10} className="settings-main-content-column" sx={{
                         order: { xs: 2, lg: 2 }
                     }}>
                         {/* White container */}

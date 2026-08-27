@@ -102,6 +102,7 @@ export const ThemeProviderCustom = ({ children }) => {
     resolveReloadBackgroundImage: backgroundResolvers.onReload,
     applicationTheme,
     pickThemeBackgroundImage,
+    applyApplicationThemeToMui: true,
   });
 
   return (

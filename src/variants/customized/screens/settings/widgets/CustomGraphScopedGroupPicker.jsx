@@ -18,9 +18,10 @@ export default function CustomGraphScopedGroupPicker({
   disabled = false,
   dark = false,
 }) {
-  const areaGroups = useSelector(selectAreaGroups) || {};
+  const areaGroupsRaw = useSelector(selectAreaGroups);
 
   const rows = useMemo(() => {
+    const areaGroups = areaGroupsRaw || {};
     const s = String(groupScope || "").trim();
     let lists = [];
     if (s === CUSTOM_GRAPH_GROUP_SCOPES.SPECIAL_ONLY) {
@@ -43,7 +44,7 @@ export default function CustomGraphScopedGroupPicker({
       out.push({ id, name });
     }
     return out;
-  }, [areaGroups, groupScope]);
+  }, [areaGroupsRaw, groupScope]);
 
   if (!groupScope || rows.length === 0) return null;
 

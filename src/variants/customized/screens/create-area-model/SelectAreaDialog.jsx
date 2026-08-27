@@ -15,7 +15,6 @@ import {selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
 import { UseAuth } from '../../customhooks/UseAuth';
 import {
   dispatchFetchFloorsOnce,
-  dispatchFetchLeafByFloorOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards';
 
 const SelectAreaDialog = ({ open, onClose, onAdd }) => {
@@ -48,6 +47,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
     return floors;
   };
 
+  // Keep as number|'' so MUI Select value matches MenuItem value={floor.id}.
   const [selectedFloor, setSelectedFloor] = useState('');
   const [expanded, setExpanded] = useState({});
   const [selectedAreaCodes, setSelectedAreaCodes] = useState([]);
@@ -55,6 +55,20 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [showDoneDialog, setShowDoneDialog] = useState(false);
   const [areaToRemove, setAreaToRemove] = useState(null);
+
+  const resetPickerState = () => {
+    setSelectedFloor('');
+    setSelectedAreaCodes([]);
+    setExpanded({});
+    setShowRemoveDialog(false);
+    setShowDoneDialog(false);
+    setAreaToRemove(null);
+  };
+
+  // Closing must not restore the previous floor/checks on reopen (dialog stays mounted).
+  useEffect(() => {
+    if (!open) resetPickerState();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -69,23 +83,23 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
   useEffect(() => {
     if (!open) return;
     const availableFloors = getAvailableFloors();
-    if (availableFloors && availableFloors.length > 0 && !selectedFloor) {
-      setSelectedFloor(availableFloors[0].id.toString());
+    if (availableFloors && availableFloors.length > 0 && selectedFloor === '') {
+      setSelectedFloor(Number(availableFloors[0].id));
     }
   }, [open, floors, currentUserRole, userProfile, selectedFloor]);
 
+  // Always load tree for the selected floor (shared leafData is a single slot; once-guard
+  // would leave a stale tree when switching e.g. Terrace → 1st Floor).
   useEffect(() => {
-    if (!open || !selectedFloor) return;
-    dispatchFetchLeafByFloorOnce(dispatch, getLeafByFloorID, selectedFloor);
+    if (!open || selectedFloor === '') return;
+    dispatch(getLeafByFloorID(selectedFloor));
   }, [dispatch, open, selectedFloor]);
 
+  // Drop checks when the floor changes so codes from another floor cannot stick.
   useEffect(() => {
     setSelectedAreaCodes([]);
+    setExpanded({});
   }, [selectedFloor]);
-
-  useEffect(() => {
-    if (open) setSelectedAreaCodes([]);
-  }, [open]);
 
   // Helper to get all area_codes under a node (including itself and ALL descendants)
   const getAllAreaCodes = (node) => {
@@ -109,7 +123,10 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
   // Toggle selection for a node (parent or leaf) - select ALL descendants
   const toggleArea = (area) => {
     if (!area) return;
-    const codesToToggle = getAllAreaCodes(area);
+    const codesToToggle = getAllAreaCodes(area).filter(
+      (code) => code != null && code !== ''
+    );
+    if (!codesToToggle.length) return;
     const allSelected = codesToToggle.every(code => selectedAreaCodes.includes(code));
     if (allSelected) {
       setSelectedAreaCodes(prev => prev.filter(code => !codesToToggle.includes(code)));
@@ -126,13 +143,6 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
     return selectedCodes.length > 0 && selectedCodes.length < allCodes.length;
   };
 
-  // Remove a selected area
-  const handleRemoveSelectedArea = (area_code) => {
-    // Set the area to remove and show confirmation dialog
-    setAreaToRemove(area_code);
-    setShowRemoveDialog(true);
-  };
-
   const confirmRemoveArea = () => {
     if (!areaToRemove) return;
     
@@ -145,6 +155,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
 
   const handleDone = () => {
     if (selectedAreaCodes.length === 0) {
+      resetPickerState();
       onClose();
       return;
     }
@@ -229,10 +240,9 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
     
     setSelectedAreaCodes([]);
     setSelectedFloor('');
-    onClose();
-    
-    // Close dialog
+    setExpanded({});
     setShowDoneDialog(false);
+    onClose();
   };
 
   const toggleExpand = (code) => {
@@ -278,15 +288,20 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
               <IconButton 
                 size="small" 
                 onClick={() => toggleExpand(area.area_code)}
+                aria-label={isExpanded ? 'Collapse area' : 'Expand area'}
                 sx={{ 
                   p: 0.5,
-                  '&:hover': { backgroundColor: 'rgba(0,0,0,0.1)' }
+                  ml: 0.5,
+                  // High contrast on dark contentColor dialogs (buttonColor alone is often invisible)
+                  backgroundColor: buttonColor || '#232323',
+                  borderRadius: '4px',
+                  '&:hover': { backgroundColor: buttonColor || '#232323', opacity: 0.9 },
                 }}
               >
                 {isExpanded ? (
-                  <IndeterminateCheckBoxOutlined fontSize="small" sx={{ color: buttonColor, fontSize: '18px' }} />
+                  <IndeterminateCheckBoxOutlined fontSize="small" sx={{ color: '#fff', fontSize: '18px' }} />
                 ) : (
-                  <AddBoxOutlined fontSize="small" sx={{ color: buttonColor, fontSize: '18px' }} />
+                  <AddBoxOutlined fontSize="small" sx={{ color: '#fff', fontSize: '18px' }} />
                 )}
               </IconButton>
             )}
@@ -305,12 +320,17 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
   return (
     <Dialog 
       open={open} 
-      onClose={onClose}
+      onClose={() => {
+        resetPickerState();
+        onClose();
+      }}
       maxWidth="md"
       fullWidth
+      disableScrollLock
+      className="select-area-dialog-root"
       BackdropProps={{
         sx: {
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: 'transparent',
         }
       }}
       PaperProps={{ 
@@ -346,9 +366,12 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
         }}>
           <FormControl fullWidth size="small" sx={{ mb: 2, flexShrink: 0 }}>
             <Select
-              value={selectedFloor}
+              value={selectedFloor === '' ? '' : selectedFloor}
               displayEmpty
-              onChange={(e) => setSelectedFloor(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSelectedFloor(next === '' ? '' : Number(next));
+              }}
               MenuProps={{ 
                 PaperProps: { 
                   sx: { 
@@ -375,7 +398,7 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
               }}
             >
               {getAvailableFloors()?.map((floor) => (
-                <MenuItem key={floor.id} value={floor.id}>
+                <MenuItem key={floor.id} value={Number(floor.id)}>
                   {floor.floor_name}
                 </MenuItem>
               ))}
@@ -445,6 +468,9 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
         }}
         aria-labelledby="remove-area-dialog-title"
         aria-describedby="remove-area-dialog-description"
+        disableScrollLock
+        className="select-area-dialog-root"
+        BackdropProps={{ sx: { backgroundColor: 'transparent' } }}
       >
         <DialogTitle id="remove-area-dialog-title" sx={{ fontWeight: 'bold', color: '#fff' }}>
           Remove Area
@@ -489,6 +515,9 @@ const SelectAreaDialog = ({ open, onClose, onAdd }) => {
         onClose={() => setShowDoneDialog(false)}
         aria-labelledby="done-dialog-title"
         aria-describedby="done-dialog-description"
+        disableScrollLock
+        className="select-area-dialog-root"
+        BackdropProps={{ sx: { backgroundColor: 'transparent' } }}
       >
         <DialogTitle id="done-dialog-title" sx={{ fontWeight: 'bold', color: '#fff' }}>
           Add Selected Areas

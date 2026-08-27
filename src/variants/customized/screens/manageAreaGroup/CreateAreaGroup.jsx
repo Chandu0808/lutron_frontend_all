@@ -1,15 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box, Button, TextField, Typography,
-    List, ListItem, IconButton, ListItemText, Divider, Snackbar
+    List, ListItem, IconButton, Divider, Snackbar
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate } from 'react-router-dom';
-import { RiDeleteBin6Fill } from "react-icons/ri";
 import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch, useSelector } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';
-import {  selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { fetchAreaGroups } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { UseAuth, getOverallPermissionLevel } from '../../customhooks/UseAuth';
 import { selectProfile } from '../../redux/slice/auth/userlogin';
@@ -24,21 +22,18 @@ const CreateAreaGroup = () => {
     const userProfile = useSelector(selectProfile);
     const overallPermission = getOverallPermissionLevel(userProfile);
     
-    // Check if user has permission to create area groups
-    const canCreateAreaGroup = () => {
-        // Superadmin and Admin can always create
-        if (role === 'Superadmin' || role === 'Admin') return true;
-        // Only Operator with "Monitoring, edit and control" permission can create
-        if (role === 'Operator' && overallPermission === 'Monitoring, edit and control') return true;
-        return false;
-    };
-    
+    // Stable boolean (avoids new function identity each render / hook-deps churn)
+    const canCreateAreaGroup =
+        role === 'Superadmin' ||
+        role === 'Admin' ||
+        (role === 'Operator' && overallPermission === 'Monitoring, edit and control');
+
     // Redirect if user doesn't have permission
     useEffect(() => {
-        if (!canCreateAreaGroup()) {
+        if (!canCreateAreaGroup) {
             navigate('/setting/manage-area-groups', { replace: true });
         }
-    }, [role, navigate]);
+    }, [canCreateAreaGroup, navigate]);
     const [groupName, setGroupName] = useState('');
     const [locations, setLocations] = useState([]);
     const [floorAreas, setFloorAreas] = useState([]);
@@ -46,25 +41,6 @@ const CreateAreaGroup = () => {
     const [showCreateSuccess, setShowCreateSuccess] = useState(false);
     const [showCreateFailure, setShowCreateFailure] = useState(false);
     const [isDisable, setIsDisable] = useState(false);
-    const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
-    const buttonColor = appTheme?.application_theme?.button || '#232323'
-    const handleDelete = (index) => {
-        const updatedLocations = [...locations];
-        const removed = updatedLocations.splice(index, 1)[0];
-        setLocations(updatedLocations);
-        const removedFloorId = removed.floorId;
-        const removedAreaIds = new Set(removed.areaIds);
-        const updatedFloorAreas = floorAreas.map(floor => {
-            if (floor.floor_id === removedFloorId) {
-                const filteredIds = floor.area_ids.filter(id => !removedAreaIds.has(id));
-                return { ...floor, area_ids: filteredIds };
-            }
-            return floor;
-        }).filter(f => f.area_ids.length > 0);
-        setFloorAreas(updatedFloorAreas);
-    };
 
     const handleAddLocation = () => {
         setAreaDialogOpen(true);
@@ -239,7 +215,7 @@ const CreateAreaGroup = () => {
                     <Divider sx={{ my: 2, width: '40%', flexShrink: 0 }} />
 
                     {/* Scrollable List Box - Takes remaining space */}
-                    <Box sx={{ 
+                    <Box className="area-group-scrollable area-group-list-panel" sx={{ 
                         flex: 1, 
                         overflowY: 'auto', 
                         minHeight: 0,
@@ -318,7 +294,7 @@ const CreateAreaGroup = () => {
                     />
                 </Box>
 
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
+                <Box className="area-group-actions" sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
                     <Button
                         variant="contained"
                         onClick={() => navigate('/setting/manage-area-groups')}

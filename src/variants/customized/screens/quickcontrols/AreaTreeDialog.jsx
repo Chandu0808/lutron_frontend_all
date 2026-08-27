@@ -24,7 +24,6 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
   const appTheme = useSelector(selectApplicationTheme);
   const buttonColor = appTheme?.application_theme?.button || '#232323';
   const [selectedFloor, setSelectedFloor] = useState('');
-  const [selectedAreas, setSelectedAreas] = useState([]);
   const [expanded, setExpanded] = useState({});
   
   // Get user role and profile for floor filtering
@@ -48,32 +47,12 @@ const AreaTreeDialog = ({ open, onClose, onAdd }) => {
     return floors;
   };
 
-  // Helper to get all area_codes under a node (including itself and ALL descendants)
-  const getAllAreaCodes = (node) => {
-    let codes = [node.area_code];
-    if (node.children && node.children.length > 0) {
-      node.children.forEach(child => {
-        codes = codes.concat(getAllAreaCodes(child));
-      });
-    }
-    return codes;
-  };
-
   // Helper to get all leaf nodes under a node
   const getAllLeafNodes = (node) => {
     if (!node.children || node.children.length === 0) {
       return [node];
     }
     return node.children.flatMap(getAllLeafNodes);
-  };
-
-  // Returns the node itself and its direct children (not all descendants)
-  const getNodeAndDirectChildren = (node) => {
-    let codes = [node.area_code];
-    if (node.children && node.children.length > 0) {
-      codes = codes.concat(node.children.map(child => child.area_code));
-    }
-    return codes;
   };
 
   // Use area_code for selection tracking (parents and leaves)

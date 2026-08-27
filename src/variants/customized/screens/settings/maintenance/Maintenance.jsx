@@ -160,7 +160,7 @@ const Maintenance = () => {
       <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1.5 }} sx={settingsHelpLayoutGridSx}>
         <SettingsSidebar items={visibleSidebarItemsWithPaths} />
 
-        <Grid item xs={12} lg={9} sx={settingsHelpLayoutContentColumnSx}>
+        <Grid item xs={12} lg={9} className="settings-help-content-column" sx={settingsHelpLayoutContentColumnSx}>
           <Paper
             sx={{
               ...settingsHelpWhitePaperSx,
