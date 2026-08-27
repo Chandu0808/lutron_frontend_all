@@ -7,6 +7,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
 
 import alertsDisplayReducer from "../../../redux/slice/settingsslice/alerts/alertsDisplaySlice";
+import AlertsComponent from "./AlertsComponent";
 
 // Mock API module used by thunks.
 const mockGet = jest.fn();
@@ -23,8 +24,6 @@ jest.mock("../../../customhooks/UseAuth", () => ({
   UseAuth: () => ({ role: "Superadmin" }),
   getVisibleSidebarItemsWithPaths: () => [],
 }));
-
-import AlertsComponent from "./AlertsComponent";
 
 const renderWithStore = (preloadedState = {}) => {
   const store = configureStore({

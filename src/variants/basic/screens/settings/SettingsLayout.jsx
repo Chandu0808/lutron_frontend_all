@@ -3,6 +3,7 @@
  */
 import React from "react";
 import { useTheme, useMediaQuery } from "@mui/material";
+import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { UseAuth, getVisibleSidebarItemsWithPaths } from "../../customhooks/UseAuth";
 import { selectApplicationTheme } from "../../redux/slice/theme/themeSlice";
@@ -11,15 +12,18 @@ import { settingsSidebarColumnDividerSx } from "../../utils/settingsSidebarTabSt
 import SettingsSidebarNav from "../../components/SettingsSidebarNav";
 import SharedSettingsShell from "../../../../shared/layout/SharedSettingsShell";
 import { basicSettingsLayoutAdapter } from "../../../../shared/layout/adapters/basicSettingsLayoutAdapter";
+import { isBasicApplicationMonitoringRoute } from "../../utils/basicSettingsPaths";
 
 const SettingsLayout = ({ children }) => {
   const theme = useTheme();
+  const location = useLocation();
   const settingsSidebarMdUp = useMediaQuery(theme.breakpoints.up("md"));
   const { role } = UseAuth();
   const sidebarItems = getVisibleSidebarItemsWithPaths(role);
   const appTheme = useSelector(selectApplicationTheme);
   const contentColor = appTheme?.application_theme?.content || "#ffffff";
   const isDefaultWhiteTheme = isLightSurface(contentColor);
+  const isApplicationMonitoring = isBasicApplicationMonitoringRoute(location.pathname);
 
   return (
     <SharedSettingsShell
@@ -29,6 +33,9 @@ const SettingsLayout = ({ children }) => {
           md: 2,
           contentMd: 10,
           ...settingsSidebarColumnDividerSx(isDefaultWhiteTheme, settingsSidebarMdUp),
+          position: { xs: "static", md: "sticky" },
+          top: { xs: "auto", md: "20px" },
+          alignSelf: "flex-start",
         }),
       }}
       NavigationComponent={SettingsSidebarNav}
@@ -39,6 +46,7 @@ const SettingsLayout = ({ children }) => {
         settingsSidebarMdUp,
         settingsSidebarColumnDividerSx,
         theme,
+        isApplicationMonitoring,
       }}
     >
       {children}

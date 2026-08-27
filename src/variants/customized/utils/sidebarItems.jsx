@@ -12,6 +12,7 @@ export const SidebarItems = [
   "Alerts",
   "Processors",
   "Maintenance",
+  "Application Monitoring",
   "FOFP",
   "Help",
 ];
@@ -31,6 +32,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       i !== 'Alerts' &&
       i !== 'Processors' &&
       i !== 'Maintenance' &&
+      i !== 'Application Monitoring' &&
       i !== 'FOFP' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'
@@ -53,6 +55,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
         i !== 'Alerts' &&
         i !== 'Processors' &&
         i !== 'Maintenance' &&
+        i !== 'Application Monitoring' &&
         i !== 'FOFP' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
@@ -70,6 +73,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
         i !== 'Alerts' &&
         i !== 'Processors' &&
         i !== 'Maintenance' &&
+        i !== 'Application Monitoring' &&
         i !== 'FOFP' &&
         i !== 'Manage Sensors' &&
         i !== 'Manage Modules'
@@ -88,6 +92,7 @@ export const getVisibleSidebarItems = (role, userProfile = null) => {
       i !== 'Alerts' &&
       i !== 'Processors' &&
       i !== 'Maintenance' &&
+      i !== 'Application Monitoring' &&
       i !== 'FOFP' &&
       i !== 'Manage Sensors' &&
       i !== 'Manage Modules'

@@ -56,6 +56,7 @@ export default function FloorComponent() {
   return (
     <Grid
       container
+      className="settings-layout-root"
       sx={{
         maxWidth: '100%',
         borderRadius: '10px',
@@ -99,6 +100,7 @@ export default function FloorComponent() {
         item
         xs={12}
         md={10}
+        className="settings-main-content-column"
         sx={{
           backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
           p: 3,

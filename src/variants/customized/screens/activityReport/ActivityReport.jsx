@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
-    Box, Button, Checkbox, Chip, FormControlLabel, Grid, Stack, TextField, Typography, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip
+    Box, Button, Checkbox, Chip, FormControlLabel, Grid, Stack, TextField, Typography, Snackbar, Alert, Tooltip
 } from "@mui/material";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import AddIcon from "@mui/icons-material/Add";
@@ -17,11 +17,9 @@ import {
     selectActivityReportExportLoading,
     selectActivityReportExportError,
     selectActivityReportExportSuccess,
-    selectActivityReportExportSuccessTimestamp,
     selectActivityReportEmailLoading,
     selectActivityReportEmailError,
     selectActivityReportEmailSuccess,
-    selectActivityReportEmailSuccessTimestamp,
     fetchEmailConfigs,
     clearExportSuccess,
     clearEmailSuccess
@@ -134,12 +132,7 @@ const ActivityReport = ({ onGenerate }) => {
     // Track if component has just mounted to prevent showing stale success messages
     const [hasMounted, setHasMounted] = useState(false);
 
-    // Email dialog state
     // Email dialog state - DISABLED: No popup, using saved email only
-    // State variables kept for compatibility but not used
-    const [emailDialogOpen] = useState(false);
-    const [emailInput] = useState('');
-    const [pendingEmailAction] = useState(null);
 
     // Redux selectors for activity report data
     const rows = useSelector(selectActivityReport) || [];
@@ -153,18 +146,13 @@ const ActivityReport = ({ onGenerate }) => {
     const exportLoading = useSelector(selectActivityReportExportLoading);
     const exportError = useSelector(selectActivityReportExportError);
     const exportSuccess = useSelector(selectActivityReportExportSuccess);
-    const exportSuccessTimestamp = useSelector(selectActivityReportExportSuccessTimestamp);
     const emailLoading = useSelector(selectActivityReportEmailLoading);
     const emailError = useSelector(selectActivityReportEmailError);
     const emailSuccess = useSelector(selectActivityReportEmailSuccess);
-    const emailSuccessTimestamp = useSelector(selectActivityReportEmailSuccessTimestamp);
 
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
     const buttonColor = appTheme?.application_theme?.button || '#232323';
 
-    const openDialog = () => setDialogOpen(true);
     const closeDialog = () => setDialogOpen(false);
 
     // Snackbar handlers

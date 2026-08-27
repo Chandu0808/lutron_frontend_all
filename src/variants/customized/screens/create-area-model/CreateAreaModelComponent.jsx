@@ -1,14 +1,12 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createSingleFlight } from '../../../../shared/utils/createSingleFlight';
 import {
   Box, Button, TextField, Typography,
-  List, ListItem, IconButton, ListItemText, Divider, Snackbar,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+  List, ListItem, IconButton, Divider, Snackbar,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate } from 'react-router-dom';
-import { RiDeleteBin6Fill } from "react-icons/ri";
 import SelectAreaDialog from '../../screens/create-area-model/SelectAreaDialog';
 import { useDispatch, useSelector } from 'react-redux';
 import { createAreaGroup } from '../../redux/slice/floor/floorSlice';

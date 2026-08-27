@@ -158,13 +158,14 @@ const FOFPLayoutViewer = ({
     setCullRevision((n) => n + 1);
   }, []);
 
-  // Keep imperative pan/zoom after React re-renders (do not let sx reset scale).
+  // Keep imperative pan/zoom after every React re-render (MUI/emotion can
+  // clear DOM transforms when unrelated props update).
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
     const { x, y, scale } = transformRef.current;
     content.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
-  }, [cullRevision, dims.width, dims.height, pdfUrl, transformRef]);
+  });
 
   const clientPointToSvg = useCallback((clientX, clientY) => {
     const svg = svgRef.current;
@@ -374,6 +375,18 @@ const FOFPLayoutViewer = ({
     setPdfError(err?.message || "Failed to load floor plan");
   }, []);
 
+  const fitToViewport = useCallback(() => {
+    // Force a fresh layout read so Fit uses the real viewer size (not a stale 0).
+    const run = () => {
+      applyCalibratedViewport({ force: true });
+      bumpCullRevision();
+    };
+    run();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(run);
+    });
+  }, [applyCalibratedViewport, bumpCullRevision]);
+
   const zoomIn = useCallback(() => {
     zoomAtCenter(true);
     bumpCullRevision();
@@ -385,9 +398,8 @@ const FOFPLayoutViewer = ({
   }, [bumpCullRevision, zoomAtCenter]);
 
   const resetZoom = useCallback(() => {
-    applyCalibratedViewport({ force: true });
-    bumpCullRevision();
-  }, [applyCalibratedViewport, bumpCullRevision]);
+    fitToViewport();
+  }, [fitToViewport]);
 
   useEffect(() => {
     pdfPageRef.current = null;
@@ -579,10 +591,7 @@ const FOFPLayoutViewer = ({
             +
           </Button>
           <Button
-            onClick={() => {
-              applyCalibratedViewport({ force: true });
-              bumpCullRevision();
-            }}
+            onClick={fitToViewport}
             sx={{ ...getFofpViewerZoomButtonSx(theme), minWidth: 44 }}
           >
             Fit

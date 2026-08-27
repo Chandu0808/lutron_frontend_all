@@ -319,6 +319,28 @@ const HomeComponent = () => {
         }
     }, [canAccessHome, navigate]);
 
+    // One scroller only: lock the page so Home's content column can scroll.
+    useEffect(() => {
+        if (!canAccessHome) return undefined;
+        const html = document.documentElement;
+        const body = document.body;
+        const root = document.getElementById('root');
+        html.style.setProperty('overflow-y', 'hidden', 'important');
+        body.style.setProperty('overflow-y', 'hidden', 'important');
+        root?.style.setProperty('overflow-y', 'hidden', 'important');
+        html.style.setProperty('height', '100dvh', 'important');
+        body.style.setProperty('height', '100dvh', 'important');
+        root?.style.setProperty('height', '100dvh', 'important');
+        return () => {
+            html.style.removeProperty('overflow-y');
+            body.style.removeProperty('overflow-y');
+            root?.style.removeProperty('overflow-y');
+            html.style.removeProperty('height');
+            body.style.removeProperty('height');
+            root?.style.removeProperty('height');
+        };
+    }, [canAccessHome]);
+
     // Redux selectors
     const appTheme = useSelector(selectApplicationTheme);
     const buttonColor = appTheme?.application_theme?.button || '#232323';
@@ -328,17 +350,28 @@ const HomeComponent = () => {
     const SETTINGS_ACTION_BLUE_HOVER = '#0d47a1';
     /** Pills, Save, uploads: blue instead of black when default white theme is active */
     const settingsAccentColor = isDefaultWhiteTheme ? SETTINGS_ACTION_BLUE : buttonColor;
-    const settingsPanelBorder = isDefaultWhiteTheme ? `2px solid ${SETTINGS_ACTION_BLUE}` : '2px solid #000';
     const settingsHomePanelSx = {
         backgroundColor: '#fff',
         p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
         borderRadius: { xs: '6px', sm: '8px', md: '10px', lg: '12px' },
-        border: settingsPanelBorder,
+        border: 'none',
+        boxSizing: 'border-box',
         width: '100%',
+        maxWidth: '100%',
         overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',
         gap: { xs: 0.8, sm: 1, md: 1.2 },
+    };
+    const settingsHomePanelShellSx = {
+        p: '2px',
+        borderRadius: { xs: '8px', sm: '10px', md: '12px', lg: '14px' },
+        backgroundColor: 'var(--settings-home-panel-border-color, #1565C0)',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        flexShrink: 0,
+        mb: 1,
     };
     /** Match reference Settings Home Description editor (gray toolbar + gray body, dark icons). */
     const settingsHomeQuillSx = {
@@ -751,7 +784,14 @@ const HomeComponent = () => {
             justifyContent: 'flex-start',
             gap: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
             mb: { xs: 0.8, sm: 1, md: 1.5, lg: 2 },
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
+            flexShrink: 0,
+            overflow: 'visible',
+            position: 'sticky',
+            top: 0,
+            zIndex: 3,
+            backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
+            py: 0.5,
         }}>
             {HOME_TAB_KEYS.map((mode) => (
                 <Button
@@ -796,16 +836,18 @@ const HomeComponent = () => {
     if (!canAccessHome) return null;
 
     return (
-        <Box className="settings-container" sx={{
+        <Box className="settings-container settings-home-page" sx={{
             height: '100%',
+            minHeight: 0,
+            maxHeight: '100%',
             width: '100%',
             p: 0,
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            minHeight: 0,
             boxSizing: 'border-box',
+            '--settings-home-panel-border-color': isDefaultWhiteTheme ? SETTINGS_ACTION_BLUE : '#000000',
         }}>
             {/* Success/Error Messages */}
             <Snackbar
@@ -948,6 +990,7 @@ const HomeComponent = () => {
             }}>
                 <Grid
                     container
+                    className="settings-layout-root"
                     spacing={isDefaultWhiteTheme ? 0 : { xs: 0.3, sm: 0.5, md: 1, lg: 1 }}
                     sx={{
                         flex: 1,
@@ -999,29 +1042,25 @@ const HomeComponent = () => {
                     </Grid>
 
                     {/* Main Content - Mobile: Full width, Desktop: 10/12 */}
-                    <Grid item xs={12} lg={10} sx={{
+                    <Grid item xs={12} lg={10} className="settings-main-content-column settings-home-content-column" sx={{
                         order: { xs: 2, lg: 2 },
                         flex: 1,
                         minHeight: 0,
                         display: 'flex',
                         flexDirection: 'column',
-                        overflowY: 'auto',
                         overflowX: 'hidden',
-                        scrollbarWidth: 'none',
-                        msOverflowStyle: 'none',
-                        '&::-webkit-scrollbar': { display: 'none', width: 0, height: 0 },
+                        overflowY: 'auto',
                         // Keep sidebar divider visible, but give content some breathing room (like other settings pages).
                         pl: isDefaultWhiteTheme ? { xs: 0, md: 3 } : 0,
+                        pr: 1,
+                        pb: 1.5,
+                        boxSizing: 'border-box',
                         position: 'relative',
                         zIndex: { xs: 'auto', md: isDefaultWhiteTheme ? 0 : 'auto' },
                     }}>
                         {/* Export Button - BEFORE the white container starts */}
                         <Box sx={{
-                            display: { xs: 'none', md: 'flex' },
-                            justifyContent: 'flex-end',
-                            alignItems: 'center',
-                            mb: 2,
-                            mt: 1
+                            display: { xs: 'none', md: 'none' },
                         }}>
 
                         </Box>
@@ -1044,8 +1083,9 @@ const HomeComponent = () => {
                                 {renderTabs()}
 
                                 {displayMode === 'Client' && (
+                                    <Box className="settings-home-panel-shell" sx={settingsHomePanelShellSx}>
                                     <Box
-                                        className="client-content-scrollable"
+                                        className="client-content-scrollable settings-home-panel"
                                         sx={settingsHomePanelSx}
                                     >
                                         <Grid container spacing={{ xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 }} sx={{ flex: 1 }}>
@@ -1185,10 +1225,12 @@ const HomeComponent = () => {
                                             </Button>
                                         </Box>
                                     </Box>
+                                    </Box>
                                 )}
 
                                 {displayMode === 'Lutron' && (
-                                    <Box className="lutron-content-scrollable" sx={settingsHomePanelSx}>
+                                    <Box className="settings-home-panel-shell" sx={settingsHomePanelShellSx}>
+                                    <Box className="lutron-content-scrollable settings-home-panel" sx={settingsHomePanelSx}>
                                         <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                             Description
                                         </Typography>
@@ -1271,10 +1313,12 @@ const HomeComponent = () => {
                                             </Button>
                                         </Box>
                                     </Box>
+                                    </Box>
                                 )}
 
                                 {displayMode === 'Project' && (
-                                    <Box className="project-content-scrollable" sx={settingsHomePanelSx}>
+                                    <Box className="settings-home-panel-shell" sx={settingsHomePanelShellSx}>
+                                    <Box className="project-content-scrollable settings-home-panel" sx={settingsHomePanelSx}>
                                         <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                             Description
                                         </Typography>
@@ -1620,6 +1664,7 @@ const HomeComponent = () => {
                                                 {saveLoading ? 'Saving...' : 'Save'}
                                             </Button>
                                         </Box>
+                                    </Box>
                                     </Box>
                                 )}
                             </Box>

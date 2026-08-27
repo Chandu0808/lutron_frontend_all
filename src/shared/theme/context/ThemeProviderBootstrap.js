@@ -16,6 +16,9 @@ function applicationThemeHasColors(applicationTheme) {
  * @param {boolean} [preferApplicationThemeCss=false]
  *   Advanced-only: when true, `/theme/application` owns CSS vars + MUI theme once
  *   loaded, so stale `/theme/` settings cannot overwrite the selected theme on refresh.
+ * @param {boolean} [applyApplicationThemeToMui=false]
+ *   Basic-only: apply `/theme/application` to MUI (dialogs/inputs) and do not let a
+ *   stale `/theme/` session cache overwrite it. Customized leaves this false.
  */
 export function useThemeProviderBootstrap({
   createAppTheme,
@@ -31,6 +34,7 @@ export function useThemeProviderBootstrap({
   applicationTheme,
   pickThemeBackgroundImage,
   preferApplicationThemeCss = false,
+  applyApplicationThemeToMui = false,
 }) {
   const dispatch = useDispatch();
 
@@ -76,7 +80,12 @@ export function useThemeProviderBootstrap({
     }
 
     // Advanced: do not let /theme/ settings paint over a loaded application theme.
-    if (preferApplicationThemeCss && applicationThemeHasColors(applicationTheme)) {
+    // Basic: same skip so a stale settings session cache cannot override MUI after
+    // /theme/application is loaded. Customized does not set applyApplicationThemeToMui.
+    if (
+      (preferApplicationThemeCss || applyApplicationThemeToMui) &&
+      applicationThemeHasColors(applicationTheme)
+    ) {
       return;
     }
 
@@ -92,6 +101,7 @@ export function useThemeProviderBootstrap({
     createAppTheme,
     resolveApiBackgroundImage,
     preferApplicationThemeCss,
+    applyApplicationThemeToMui,
     applicationTheme,
   ]);
 
@@ -123,7 +133,8 @@ export function useThemeProviderBootstrap({
     applyCssVariables(ui, appBgImage);
 
     // Advanced: application theme is also the MUI theme source of truth.
-    if (preferApplicationThemeCss) {
+    // Basic: same MUI update so dialogs/inputs match CSS vars; Customized unchanged.
+    if (preferApplicationThemeCss || applyApplicationThemeToMui) {
       if (explicitBg !== undefined) {
         setBackgroundImage(appBgImage);
       }
@@ -140,6 +151,7 @@ export function useThemeProviderBootstrap({
     applyCssVariables,
     pickThemeBackgroundImage,
     preferApplicationThemeCss,
+    applyApplicationThemeToMui,
     createAppTheme,
   ]);
 

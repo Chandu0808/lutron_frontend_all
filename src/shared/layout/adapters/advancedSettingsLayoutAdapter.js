@@ -69,16 +69,17 @@ export const advancedSettingsLayoutAdapter = {
     p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
     width: "100%",
     flex: "0 1 auto",
-    minHeight: "auto",
+    minHeight: 0,
+    maxHeight: { xs: "none", md: "calc(100dvh - 280px)" },
     display: "flex",
     flexDirection: "column",
-    overflow: "visible",
+    overflowX: "hidden",
+    overflowY: { xs: "visible", md: "auto" },
     minWidth: 0,
     maxWidth: "100%",
     boxSizing: "border-box",
   }),
-  getSidebarClassName: (ctx) =>
-    ctx.useThemedSidebarChrome ? "settings-sidebar-column" : undefined,
+  getSidebarClassName: () => "settings-sidebar-column",
 };
 
 export default advancedSettingsLayoutAdapter;

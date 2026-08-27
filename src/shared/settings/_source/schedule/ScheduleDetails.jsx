@@ -392,18 +392,11 @@ const ScheduleDetails = () => {
   const doTrigger = async () => {
     setShowConfirm(false);
     try {
-      // DEBUG: Log the current schedule details before triggering
-      console.log('Triggering Schedule ID:', id);
-      console.log('Current Schedule Event:', event);
-      console.log('Current Schedule Areas:', areas);
-      
       // Use the correct API parameters for internal schedules
-      const result = await dispatch(triggerSchedule({ 
+      await dispatch(triggerSchedule({ 
         schedule_type: "internal", 
         schedule_id: parseInt(id) 
       })).unwrap();
-      
-      console.log('Trigger Response:', result);
       
       setToast({ open: true, message: "Schedule triggered successfully!" });
       
@@ -684,9 +677,6 @@ const ScheduleDetails = () => {
     };
 
     try {
-      // DEBUG: Log the payload to verify brightness is being saved
-      console.log('Schedule Save Payload:', JSON.stringify(payload, null, 2));
-      
       if (isCopyMode) {
         // Create new schedule
         const response = await dispatch(createSchedule(payload)).unwrap();
@@ -698,8 +688,7 @@ const ScheduleDetails = () => {
         }
       } else {
         // Update existing schedule
-        const updateResponse = await dispatch(updateSchedule({ id: parseInt(id), ...payload })).unwrap();
-        console.log('Schedule Update Response:', updateResponse);
+        await dispatch(updateSchedule({ id: parseInt(id), ...payload })).unwrap();
         setEditMode(false);
         setEditableEvent(null);
         

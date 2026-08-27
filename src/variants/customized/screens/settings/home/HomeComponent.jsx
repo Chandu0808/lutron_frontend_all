@@ -6,7 +6,6 @@ import {
     Button,
     Typography,
     TextField,
-    useMediaQuery,
     useTheme,
     Grid,
     Alert,
@@ -19,10 +18,8 @@ import CustomizedHomeDescriptionEditor from './CustomizedHomeDescriptionEditor';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
-import { MdFileUpload } from "react-icons/md";
 import { useNavigate } from 'react-router-dom';
 import SettingsSidebar from '../../../components/SettingsSidebar';
-import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import {
     getLutronData,
@@ -41,22 +38,22 @@ import {
     dispatchFetchProjectOnce,
 } from '../../../../../shared/utils/bootstrapFetchGuards';
 import {
-  getRovingTabIndex,
-  handleRovingTablistKeyDown,
+    getRovingTabIndex,
+    handleRovingTablistKeyDown,
 } from '../../../../../utils/keyboard/rovingTablistKeyboard';
 import {
-  registerSettingsHomeTabFocusHandler,
-  requestSettingsSidebarFocus,
+    registerSettingsHomeTabFocusHandler,
+    requestSettingsSidebarFocus,
 } from '../../../../../utils/keyboard/pageSubNavBridge';
 import { isKeyboardNavBlockedTarget } from '../../../../../utils/keyboard/keyboardNavUtils';
 
 // Suppress findDOMNode warning for ReactQuill (third-party library issue)
 const originalError = console.error;
 console.error = (...args) => {
-  if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
-    return;
-  }
-  originalError.call(console, ...args);
+    if (typeof args[0] === 'string' && args[0].includes('findDOMNode is deprecated')) {
+        return;
+    }
+    originalError.call(console, ...args);
 };
 
 const HOME_TAB_KEYS = ['Lutron', 'Client', 'Project'];
@@ -138,43 +135,6 @@ const LogoUploadArea = styled(Box)(({ theme }) => ({
     },
 }));
 
-// Helper function to strip HTML tags but preserve line breaks
-const stripHtmlTags = (html) => {
-    if (!html) return '';
-    
-    // First, normalize the HTML by converting common line break elements
-    let normalizedHtml = html
-        .replace(/&nbsp;/gi, ' ') // Convert &nbsp; to regular spaces first
-        .replace(/&amp;/gi, '&') // Convert &amp; to &
-        .replace(/&lt;/gi, '<') // Convert &lt; to <
-        .replace(/&gt;/gi, '>') // Convert &gt; to >
-        .replace(/&quot;/gi, '"') // Convert &quot; to "
-        .replace(/&#39;/gi, "'") // Convert &#39; to '
-        .replace(/<p><br\s*\/?><\/p>/gi, '\n\n') // Preserve intentional empty paragraphs
-        .replace(/<p[^>]*>/gi, '\n\n') // Convert opening <p> tags to double line breaks
-        .replace(/<\/p>/gi, '') // Remove closing </p> tags
-        .replace(/<br[^>]*>/gi, '\n') // Convert <br> tags to single line breaks
-        .replace(/<div[^>]*>/gi, '\n') // Convert opening <div> tags to line breaks
-        .replace(/<\/div>/gi, '\n') // Convert closing </div> tags to line breaks
-        .replace(/<li[^>]*>/gi, '\n• ') // Convert list items to bullet points
-        .replace(/<\/li>/gi, '\n') // Convert closing </li> tags to line breaks
-        .replace(/<ul[^>]*>/gi, '\n') // Convert opening <ul> tags to line breaks
-        .replace(/<\/ul>/gi, '\n') // Convert closing </ul> tags to line breaks
-        .replace(/<ol[^>]*>/gi, '\n') // Convert opening <ol> tags to line breaks
-        .replace(/<\/ol>/gi, '\n') // Convert closing </ol> tags to line breaks
-        .replace(/<h[1-6][^>]*>/gi, '\n\n') // Ensure blank line before headings
-        .replace(/<\/h[1-6]>/gi, '\n') // Single break after headings
-        .replace(/<[^>]*>/g, '') // Remove all remaining HTML tags
-        .replace(/\n\s*\n\s*\n+/g, '\n\n') // Clean up multiple consecutive line breaks (3+ becomes 2)
-        .replace(/^\s+|\s+$/g, '') // Trim leading and trailing whitespace
-        .replace(/[ \t]+/g, ' ') // Replace multiple spaces/tabs with single space
-        .replace(/\n /g, '\n') // Remove spaces at the beginning of lines
-        .replace(/ \n/g, '\n') // Remove spaces at the end of lines
-        .replace(/\n{3,}/g, '\n\n'); // Cap at double line breaks
-    
-    return normalizedHtml;
-};
-
 /**
  * HomeComponent - Settings Home Page Component
  * 
@@ -205,7 +165,7 @@ const HomeComponent = () => {
     const [statusSeverity, setStatusSeverity] = useState('success');
     const [showErrorMessage, setShowErrorMessage] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    
+
     // Track if user has manually edited fields to prevent override
     const [userEditedFields, setUserEditedFields] = useState({
         locationText: false,
@@ -225,9 +185,6 @@ const HomeComponent = () => {
     });
 
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
-    const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
 
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -237,17 +194,30 @@ const HomeComponent = () => {
     // Get current user role for sidebar filtering
     const { role: currentUserRole } = UseAuth();
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(currentUserRole);
-    
+
     const normalizedRole = currentUserRole ? currentUserRole.toLowerCase() : '';
     const canAccessHome = normalizedRole === 'superadmin' || normalizedRole === 'super admin' || normalizedRole === 'admin';
-    
+
     // Redirect if user doesn't have permission
     useEffect(() => {
         if (!canAccessHome) {
             navigate('/setting/manage-area-groups', { replace: true });
         }
     }, [canAccessHome, navigate]);
-    
+
+    // One scroller only: lock the page so Home's content column can scroll.
+    useEffect(() => {
+        if (!canAccessHome) return undefined;
+        const html = document.documentElement;
+        const body = document.body;
+        html.style.setProperty('overflow-y', 'hidden', 'important');
+        body.style.setProperty('overflow-y', 'hidden', 'important');
+        return () => {
+            html.style.removeProperty('overflow-y');
+            body.style.removeProperty('overflow-y');
+        };
+    }, [canAccessHome]);
+
     // Redux selectors
     const appTheme = useSelector(selectApplicationTheme);
     const buttonColor = appTheme?.application_theme?.button || '#232323';
@@ -324,7 +294,7 @@ const HomeComponent = () => {
     const homeData = useSelector(homeDataList);
     const homeClientData = useSelector(homeDataClient);
     const homeProjectData = useSelector(homeDataProject); // Fixed: was using homeProjectData instead of homeDataProject
-    const { loading, saveLoading, saveError } = useSelector((state) => state.home);
+    const { saveLoading, saveError } = useSelector((state) => state.home);
 
     // Load data on component mount - only run once
     useEffect(() => {
@@ -412,7 +382,7 @@ const HomeComponent = () => {
             // Load installed solutions from Redux data
             if (homeProjectData.installed_solutions) {
                 try {
-                    const solutions = typeof homeProjectData.installed_solutions === 'string' 
+                    const solutions = typeof homeProjectData.installed_solutions === 'string'
                         ? JSON.parse(homeProjectData.installed_solutions)
                         : homeProjectData.installed_solutions;
                     // Handle array of objects with 'solution' key
@@ -478,7 +448,7 @@ const HomeComponent = () => {
     // Helper function to clean description HTML
     const cleanDescription = (desc) => {
         if (!desc) return '';
-        
+
         // Clean up the HTML content
         return desc
             .replace(/&nbsp;/gi, ' ') // Convert &nbsp; to regular spaces
@@ -606,7 +576,7 @@ const HomeComponent = () => {
     };
 
     const updateSolutionName = (id, newName) => {
-        setInstalledSolutions(prev => 
+        setInstalledSolutions(prev =>
             prev.map(s => s.id === id ? { ...s, name: newName } : s)
         );
     };
@@ -617,12 +587,12 @@ const HomeComponent = () => {
             role="tablist"
             aria-label="Home content type"
             sx={{
-            display: 'flex',
-            justifyContent: 'flex-start',
-            gap: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
-            mb: { xs: 0.8, sm: 1, md: 1.5, lg: 2 },
-            flexWrap: 'wrap'
-        }}>
+                display: 'flex',
+                justifyContent: 'flex-start',
+                gap: { xs: 0.3, sm: 0.5, md: 1, lg: 1.5 },
+                mb: { xs: 0.8, sm: 1, md: 1.5, lg: 2 },
+                flexWrap: 'wrap'
+            }}>
             {HOME_TAB_KEYS.map((mode) => (
                 <Button
                     key={mode}
@@ -666,16 +636,16 @@ const HomeComponent = () => {
     if (!canAccessHome) return null;
 
     return (
-        <Box className="settings-container" sx={{
-            height: 'calc(100vh - 180px)',
-            minHeight: 'calc(100vh - 180px)',
-            maxHeight: 'calc(100vh - 180px)',
+        <Box className="settings-container settings-home-page" sx={{
+            height: '100%',
+            minHeight: 0,
+            maxHeight: '100%',
             width: '100%',
             p: 0,
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'visible' // Remove overflow constraint
+            overflow: 'hidden',
         }}>
             {/* Success/Error Messages */}
             <Snackbar
@@ -696,8 +666,8 @@ const HomeComponent = () => {
                     }
                 }}
             >
-                <Alert 
-                    onClose={handleCloseSuccessMessage} 
+                <Alert
+                    onClose={handleCloseSuccessMessage}
                     severity={statusSeverity}
                     sx={{
                         backgroundColor: '#fff',
@@ -737,8 +707,8 @@ const HomeComponent = () => {
                     }
                 }}
             >
-                <Alert 
-                    onClose={handleCloseError} 
+                <Alert
+                    onClose={handleCloseError}
                     severity="error"
                     sx={{
                         backgroundColor: '#fff',
@@ -779,8 +749,8 @@ const HomeComponent = () => {
                     }
                 }}
             >
-                <Alert 
-                    onClose={handleCloseErrorMessage} 
+                <Alert
+                    onClose={handleCloseErrorMessage}
                     severity="error"
                     sx={{
                         backgroundColor: '#fff',
@@ -806,14 +776,15 @@ const HomeComponent = () => {
             <Box sx={{
                 width: '100%',
                 mx: 'auto',
-               p:'18px',
+                p: '18px',
                 height: '100%',
+                minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'visible', // Remove overflow constraint
-                ml:'18px'
+                overflow: 'hidden',
+                ml: '18px'
             }}>
-                <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1 }} sx={{ height: '100%', overflow: 'visible' }}>
+                <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1 }} sx={{ height: '100%', minHeight: 0, overflow: 'hidden' }}>
                     {/* Sidebar - Mobile: Full width, Desktop: 3/12 */}
 
                     <Grid item xs={12} md={3} sx={{
@@ -840,10 +811,17 @@ const HomeComponent = () => {
                     </Grid>
 
                     {/* Main Content - Mobile: Full width, Desktop: 9/12 */}
-                    <Grid item xs={12} lg={9} sx={{
+                    <Grid
+                        item
+                        xs={12}
+                        lg={9}
+                        className="settings-home-content-column"
+                        sx={{
                         order: { xs: 2, lg: 2 },
                         height: '100%',
-                        overflow: 'visible'
+                        minHeight: 0,
+                        overflowX: 'hidden',
+                        overflowY: 'auto',
                     }}>
                         {/* Export Button - BEFORE the white container starts */}
                         <Box sx={{
@@ -853,7 +831,7 @@ const HomeComponent = () => {
                             mb: 2,
                             mt: 1
                         }}>
-                            
+
                         </Box>
 
                         {/* White container starts here */}
@@ -882,29 +860,11 @@ const HomeComponent = () => {
                                             borderRadius: { xs: '6px', sm: '8px', md: '10px', lg: '12px' },
                                             border: '2px solid black',
                                             width: '100%',
-                                            maxHeight: { xs: '58vh', sm: '60vh', md: '62vh', lg: '65vh' },
-                                            overflowY: 'auto',
-                                            overflowX: 'hidden',
+                                            maxHeight: 'none',
+                                            overflow: 'visible',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             gap: { xs: 0.8, sm: 1, md: 1.2 },
-                                            // Hide scrollbars for all browsers
-                                            scrollbarWidth: 'none', // Firefox
-                                            msOverflowStyle: 'none', // IE and Edge
-                                            '&::-webkit-scrollbar': {
-                                                display: 'none',
-                                                width: 0,
-                                                height: 0,
-                                            },
-                                            '& *': {
-                                                scrollbarWidth: 'none', // Firefox
-                                                msOverflowStyle: 'none', // IE and Edge
-                                                '&::-webkit-scrollbar': {
-                                                    display: 'none',
-                                                    width: 0,
-                                                    height: 0,
-                                                },
-                                            },
                                         }}
                                     >
                                         <Grid container spacing={{ xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 }} sx={{ flex: 1 }}>
@@ -1045,29 +1005,11 @@ const HomeComponent = () => {
                                             p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
                                             width: '100%',
                                             border: '2px solid #000',
-                                            maxHeight: { xs: '58vh', sm: '60vh', md: '62vh', lg: '65vh' },
-                                            overflowY: 'auto',
-                                            overflowX: 'hidden',
+                                            maxHeight: 'none',
+                                            overflow: 'visible',
                                             display: 'flex',
                                             flexDirection: 'column',
                                             gap: { xs: 0.8, sm: 1, md: 1.2 },
-                                            // Hide scrollbars for all browsers
-                                            scrollbarWidth: 'none', // Firefox
-                                            msOverflowStyle: 'none', // IE and Edge
-                                            '&::-webkit-scrollbar': {
-                                                display: 'none',
-                                                width: 0,
-                                                height: 0,
-                                            },
-                                            '& *': {
-                                                scrollbarWidth: 'none', // Firefox
-                                                msOverflowStyle: 'none', // IE and Edge
-                                                '&::-webkit-scrollbar': {
-                                                    display: 'none',
-                                                    width: 0,
-                                                    height: 0,
-                                                },
-                                            },
                                         }}
                                     >
                                         <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
@@ -1145,7 +1087,7 @@ const HomeComponent = () => {
                                             border: '2px solid #000',
                                             p: { xs: 0.5, sm: 0.8, md: 1.2, lg: 1.5 },
                                             pt: { xs: 1, sm: 1.2, md: 1.5, lg: 1.5 },
-                                            overflowY: 'visible',
+                                            overflow: 'visible',
                                             overflowX: 'hidden',
                                             mb: 2,
                                             borderRadius: { xs: '4px', sm: '6px', md: '8px', lg: '10px' },
@@ -1154,23 +1096,6 @@ const HomeComponent = () => {
                                             display: 'flex',
                                             flexDirection: 'column',
                                             gap: { xs: 0.8, sm: 1, md: 1.2 },
-                                            // Hide scrollbars for all browsers
-                                            scrollbarWidth: 'none', // Firefox
-                                            msOverflowStyle: 'none', // IE and Edge
-                                            '&::-webkit-scrollbar': {
-                                                display: 'none',
-                                                width: 0,
-                                                height: 0,
-                                            },
-                                            '& *': {
-                                                scrollbarWidth: 'none', // Firefox
-                                                msOverflowStyle: 'none', // IE and Edge
-                                                '&::-webkit-scrollbar': {
-                                                    display: 'none',
-                                                    width: 0,
-                                                    height: 0,
-                                                },
-                                            },
                                         }}
                                     >
                                         <Typography fontWeight="bold" mb={0.5} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
@@ -1344,7 +1269,7 @@ const HomeComponent = () => {
                                             <Typography fontWeight="bold" mb={1} fontSize={{ xs: '9px', sm: '10px', md: '12px', lg: '14px' }}>
                                                 Installed Solutions
                                             </Typography>
-                                            
+
                                             {/* Add Solution Input */}
                                             <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
                                                 <TextField
@@ -1407,8 +1332,8 @@ const HomeComponent = () => {
 
                                             {/* Solutions List */}
                                             {installedSolutions.length > 0 && (
-                                                <Box sx={{ 
-                                                    display: 'flex', 
+                                                <Box sx={{
+                                                    display: 'flex',
                                                     flexDirection: 'column',
                                                     gap: 1,
                                                     mb: 2,
@@ -1494,9 +1419,9 @@ const HomeComponent = () => {
                                             )}
                                         </Box>
 
-                                        <Box 
-                                            display="flex" 
-                                            justifyContent="flex-end" 
+                                        <Box
+                                            display="flex"
+                                            justifyContent="flex-end"
                                             mt={2}
                                             sx={{
                                                 '&::-webkit-scrollbar': {

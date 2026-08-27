@@ -12,6 +12,7 @@ import {
 import { applySettingsSidebarTypographyVars } from './settingsSidebarTabStyles';
 import { applyCustomPremiumThemeTokens } from './premiumThemeTokens';
 import { applyHeatmapTabPillTokens } from '../../../shared/theme/utils/applyHeatmapTabPillTokens';
+import { resolveWordmarkLogoFilter } from '../../../shared/theme/utils/resolveWordmarkLogoFilter';
 
 /**
  * Applies CSS variables for custom hex-picker themes (not Gold / Blue / Brown presets).
@@ -53,7 +54,7 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--footer-background-color', background);
   root.style.removeProperty('--footer-background-image');
   root.style.setProperty('--footer-text-color', pageOn.primary);
-  root.style.setProperty('--footer-logo-filter', 'none');
+  root.style.setProperty('--footer-logo-filter', resolveWordmarkLogoFilter(resolvedBackground));
 
   const navbarGradient = buildCustomNavbarGradient(background);
   root.style.setProperty('--topbar-navbar-background', navbarGradient);
@@ -247,7 +248,7 @@ export function applyDynamicThemeTokens(
   root.style.setProperty('--auth-button-text', accentText);
   root.style.setProperty('--auth-button-hover-bg', darken(accentSolid, 0.12));
   root.style.setProperty('--auth-icon-color', panelOn.primary);
-  root.style.setProperty('--auth-logo-filter', lightPage ? 'brightness(0) saturate(100%)' : 'none');
+  root.style.setProperty('--auth-logo-filter', resolveWordmarkLogoFilter(resolvedBackground));
 
   root.style.setProperty('--floor-tool-field-bg', '#ffffff');
   root.style.setProperty('--floor-tool-field-text', whiteFieldOn.primary);

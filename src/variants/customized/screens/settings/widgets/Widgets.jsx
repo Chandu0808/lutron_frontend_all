@@ -28,7 +28,6 @@ import {
     fetchCustomGraphs,
     fetchAreaGroups,
     createCustomGraph,
-    DUPLICATE_CUSTOM_GRAPH_NAME_MSG,
     getBuiltinWidgetDefaultApiPath,
     BUILTIN_WIDGET_DEFAULT_API_PATHS,
     getApiFromKeyword,
@@ -104,6 +103,24 @@ import {
 } from "../../../utils/customizedDashboardBuiltinWidgetRows";
 import { createSingleFlight } from "../../../../../shared/utils/createSingleFlight";
 
+// Stable fallback labels (module scope so hook memos stay pure without listing a new object each render)
+const widgetTitlesFallback = {
+    savings_by_strategy: "Savings by Strategy",
+    total_consumption_by_group: "Consumption By Area Groups",
+    consumption_by_area_groups: "Consumption By Area Groups",
+    light_power_density: "Light Power Density",
+    consumption: "Consumption",
+    savings: "Savings",
+    peak_and_minimum_consumption: "Peak & Minimum Consumption",
+    consumption_saving: "Energy (Combined)",
+    utilization: "Utilization",
+    instant_occupancy_count: "Instant Occupancy Count",
+    instant_utilization_combined: "Space Utilization (Combined)",
+    utilization_by_area_group: "Utilization By Area Group",
+    utilization_by_area: "Utilization By Area",
+    peak_and_minimum_utilization: "Peak And Minimum Utilization",
+};
+
 export default function RenameWidget() {
     const dispatch = useDispatch();
     const store = useStore();
@@ -152,24 +169,6 @@ export default function RenameWidget() {
     const { role: currentUserRole } = UseAuth();
     const userProfile = useSelector(selectProfile);
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(currentUserRole, userProfile);
-
-    // Fallback labels if API is missing
-    const widgetTitlesFallback = {
-        savings_by_strategy: "Savings by Strategy",
-        total_consumption_by_group: "Consumption By Area Groups",
-        consumption_by_area_groups: "Consumption By Area Groups",
-        light_power_density: "Light Power Density",
-        consumption: "Consumption",
-        savings: "Savings",
-        peak_and_minimum_consumption: "Peak & Minimum Consumption",
-        consumption_saving: "Energy (Combined)",
-        utilization: "Utilization",
-        instant_occupancy_count: "Instant Occupancy Count",
-        instant_utilization_combined: "Space Utilization (Combined)",
-        utilization_by_area_group: "Utilization By Area Group",
-        utilization_by_area: "Utilization By Area",
-        peak_and_minimum_utilization: "Peak And Minimum Utilization",
-    };
 
     const humanizeWidgetKey = useCallback((key) => {
         return String(key)
@@ -242,7 +241,7 @@ export default function RenameWidget() {
 
     const parseWidgetVisibilityFromLocalStorage = () => parseCustomizedWidgetVisibilityRoot();
 
-    const [widgetVisibility, setWidgetVisibility] = useState(() =>
+    const [, setWidgetVisibility] = useState(() =>
         parseWidgetVisibilityFromLocalStorage()
     );
 

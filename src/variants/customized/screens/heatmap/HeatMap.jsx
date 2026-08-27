@@ -8,7 +8,7 @@ import {
 } from "../../../../shared/utils/bootstrapFetchGuards";
 import { createSingleFlight } from "../../../../shared/utils/createSingleFlight";
 import {
-  Box, CircularProgress, IconButton, Typography, Slider, Badge, Button, useMediaQuery, useTheme,
+  Box, CircularProgress, IconButton, Typography, Slider, Button, useMediaQuery, useTheme,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert,
 } from "@mui/material";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
@@ -30,7 +30,6 @@ import {
   fetchFloorMapData,
   fetchAreaOccupancyStatus,
   fetchAreaEnergyConsumption,
-  fetchFloorStatusRevision,
   selectPdfUrl,
   selectHeatmapData,
   selectSelectedFloorId,
@@ -40,33 +39,26 @@ import {
   selectAreaStatus,
   selectAreaStatusLoading,
   selectAreaStatusError,
-  selectAreaStatusFetchingId,
-  selectFloorStatusRevisionByFloorId,
-  updateAreaLightStatus,
-  updateZoneSettings,
   updateZonesByArea,
   toggleAllZonesInArea,
   updateAreaScene,
   renameArea,
-  refreshAllHeatmapData,
-  selectHeatmapLoading,
   selectHeatmapError,
-  optimisticallyUpdateAreaStatus,
   selectHeatmapSearchTerm, // added
 } from '../../redux/slice/settingsslice/heatmap/HeatmapSlice';
+import {
+  deriveSidebarMasterOn,
+  normalizeOccupancyStatus,
+} from '../../redux/slice/settingsslice/heatmap/heatmapMapSync';
 import { fetchActiveAlerts, selectAlerts } from '../../redux/slice/dashboard/alertsSlice';
 import { fetchSceneStatus } from '../../redux/slice/settingsslice/heatmap/areaSettingsSlice';
 import { fetchFloors, selectFloors } from "../../redux/slice/floor/floorSlice";
-import { BaseUrl } from '../../BaseUrl'
 import CloseIcon from "@mui/icons-material/Close";
 import SettingsIcon from "@mui/icons-material/Settings";
 import EditIcon from "@mui/icons-material/Edit";
-import Switch from "@mui/material/Switch";
 import PersonIcon from '@mui/icons-material/Person';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { fetchProcessors } from '../../redux/slice/processor/processorSlice';
 
 import AreaSettingsDialog from './AreaSettingsDialog';
@@ -76,13 +68,11 @@ import { fetchApplicationTheme, fetchHeatMapTheme, selectApplicationTheme, selec
 
 import { UseAuth } from '../../customhooks/UseAuth'; // Add this import
 
-import { interpolateHexColor, arraylargest } from '../../utils/colorScale';
 import {
   getLightLevelFillColor,
   resolveLightModeFill,
 } from './heatmapLightStyles';
 import { isMapProcessorUnreachable } from '../../../../shared/heatmap/processorReachable';
-import { resolveHeatmapAreaClickPlan } from '../../../../shared/heatmap/resolveHeatmapAreaClickPlan';
 import {
   areaRenameDialogActionsSx,
   areaRenameDialogContentSx,
@@ -99,7 +89,16 @@ import {
   ZONE_CONTROL_CARD_WIDTH_SX,
   ZONE_CONTROL_MAIN_PANEL_SX,
   ZONE_CONTROL_FADE_DELAY_COLUMN_SX,
-  ZONE_CONTROL_SLIDER_WRAP_SX,
+  SIDEBAR_ZONE_SLIDER_ROW_SX,
+  SIDEBAR_ZONE_FOLLOWING_SLIDER_ROW_SX,
+  SIDEBAR_ZONE_SLIDER_TRACK_SX,
+  SIDEBAR_ZONE_SIDE_VALUE_CHIP_SX,
+  SIDEBAR_ZONE_CARD_SHELL_SX,
+  SIDEBAR_ZONE_CARD_INNER_SX,
+  SIDEBAR_ZONE_NAME_SX,
+  SIDEBAR_ZONE_VALUE_CHIP_FONT_SX,
+  SIDEBAR_SECTION_TAB_FONT_SX,
+  SIDEBAR_BODY_TEXT_SX,
   HEATMAP_ZONES_SECTION_SX,
   HEATMAP_ZONES_LIST_SCROLL_SX,
   HEATMAP_ZONES_LIST_PAGINATED_SX,
@@ -114,14 +113,35 @@ import {
 } from '../../../../utils/heatmapSidebarUtils';
 import HeatmapShadesPanel from '../../../../components/heatmap/HeatmapShadesPanel';
 import { normalizeHeatmapColor } from '../../../../shared/utils/normalizeHeatmapColor';
+import {
+  buildAlertFocusPayload,
+  findAlertForFloorplanArea,
+  hasActiveAlertForArea,
+} from '../../../../shared/heatmap/alertAreaMatch';
+import { alertMarkerHitRadius } from '../../../../shared/heatmap/alertMarker';
+import { usePanDrag } from '../../../../shared/heatmap/usePanDrag';
+import { fitHeatmapAreaLabel } from '../../../../shared/heatmap/fitHeatmapAreaLabel';
+import { getHeatmapAreaLabelPlacement } from '../../../../shared/heatmap/getHeatmapAreaLabelCenter';
+import { useHeatmapLiveStatusSync } from '../../../../shared/heatmap/useHeatmapLiveStatusSync';
+import { getHeatmapSceneStatusKey } from '../../../../shared/heatmap/heatmapSceneStatusDedupe';
+import { areaLiveFieldsAlreadyOnMap } from '../../../../shared/heatmap/patchOpenAreaLiveStatus';
+import { shouldSkipAreaStatusRefetch } from '../../../../shared/heatmap/shouldSkipAreaStatusRefetch';
+import {
+  fadeSettleMsFromZones,
+  waitForFadeSettle,
+} from '../../../../shared/heatmap/fadeSettle';
 
 
 const isWhitening = (type) => ['whitening', 'white tune', 'whitetune', 'white_tune', 'White Tune', 'WhiteTune'].includes((type || '').toLowerCase());
 const isDimmed = (type) => (type || '').toLowerCase() === 'dimmed';
 const isSwitched = (type) => (type || '').toLowerCase() === 'switched';
 
-/** Sidebar zone list: always paginate 2 zones per page when more are available. */
-const SIDEBAR_ZONES_PER_PAGE = 2;
+/** Sidebar zone list: 2/page when CCT (White Tune) is present, else 4/page — no inner scroll. */
+const getSidebarZonesPerPage = (zones) => {
+  const list = zones || [];
+  const hasCct = list.some((z) => isWhitening(z.type));
+  return hasCct ? 2 : 4;
+};
 
 const buildSidebarZonesToShow = (zones) => {
   const list = zones || [];
@@ -134,17 +154,7 @@ const buildSidebarZonesToShow = (zones) => {
   return switchedZones;
 };
 
-
-// Add the missing TOP_PADDING constant
-const TOP_PADDING = 60; // Adjust this value based on your header height
-
 configurePdfJsWorker();
-
-function toTitleCase(str) {
-  return str.replace(/\w\S*/g, (txt) =>
-    txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
-  );
-}
 
 const HeatMap = () => {
   const navigate = useNavigate();
@@ -167,9 +177,10 @@ const HeatMap = () => {
   const areaStatus = useSelector(selectAreaStatus);
   const areaStatusLoading = useSelector(selectAreaStatusLoading);
   const areaStatusError = useSelector(selectAreaStatusError);
-  const areaStatusFetchingId = useSelector(selectAreaStatusFetchingId);
-  const floorStatusRevisionByFloorId = useSelector(selectFloorStatusRevisionByFloorId);
-  const heatmapLoading = useSelector(selectHeatmapLoading);
+  const sidebarOccupancyLabel =
+    normalizeOccupancyStatus(areaStatus?.occupancy_status) ||
+    areaStatus?.occupancy_status ||
+    "Unknown";
   const heatmapError = useSelector(selectHeatmapError);
   const searchTerm = useSelector(selectHeatmapSearchTerm); // added
   const activeAlerts = useSelector(selectAlerts); // added for alert indicators
@@ -327,25 +338,27 @@ const HeatMap = () => {
     };
   };
   const [selectedAreaId, setSelectedAreaId] = useState(null);
+  useHeatmapLiveStatusSync({
+    dispatch,
+    selectedFloorId,
+    displayMode,
+    selectedAreaId,
+    areaStatus,
+    fetchFloorMapData,
+    fetchAreaOccupancyStatus,
+    fetchAreaStatus,
+  });
   /** FOFP marker selection for sidebar zone highlight (zoneName matches panel zones). */
   const [highlightedFofpZone, setHighlightedFofpZone] = useState(null);
   const fofpConfigFromStore = useSelector(selectFofpConfig);
   const [scenePage, setScenePage] = useState(0);
   const SCENES_PER_PAGE = isMobile ? 6 : isTablet ? 8 : 9;
-  const [lightOn, setLightOn] = useState(areaStatus && areaStatus.light_status === "On");
-  const [shadesGroups, setShadesGroups] = useState([
-    { name: "Group 1", value: 50 },
-    { name: "Group 2", value: 50 },
-    { name: "Group 3", value: 50 },
-  ]);
-  const [selectedPreset, setSelectedPreset] = useState(null);
   const [zonePage, setZonePage] = useState(0);
-  const [updating, setUpdating] = useState(false);
   const [zoneLocalValues, setZoneLocalValues] = React.useState({});
   const [zoneUpdating, setZoneUpdating] = React.useState(false);
-  const [mainToggleUpdating, setMainToggleUpdating] = useState(false);
-  const [lastOccupancyStatus, setLastOccupancyStatus] = useState({});
-  const [lastEnergyStatus, setLastEnergyStatus] = useState({});
+  const [, setMainToggleUpdating] = useState(false);
+  const [, setLastOccupancyStatus] = useState({});
+  const [, setLastEnergyStatus] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [areaRenameOpen, setAreaRenameOpen] = useState(false);
   const [areaRenameValue, setAreaRenameValue] = useState("");
@@ -368,7 +381,6 @@ const HeatMap = () => {
   const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
   const buttonColor = appTheme?.application_theme?.button || '#232323'
 
-  const [refreshing, setRefreshing] = useState(false);
   const layoutRef = useRef(null);
   const [availableHeight, setAvailableHeight] = useState(null);
   const [pan, setPan] = useState({ x: 0, y: 0 }); // added: pan state for dragging
@@ -378,7 +390,7 @@ const HeatMap = () => {
   const [searchBounceAnimation, setSearchBounceAnimation] = useState(false); // added: search bounce animation
 
   // Add a loading state for the PDF
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [, setPdfLoading] = useState(false);
   // Bounding box of all areas (used to crop PDF whitespace)
   const [contentBBox, setContentBBox] = useState(null);
   // Track when the PDF page dimensions are actually loaded
@@ -417,18 +429,6 @@ const HeatMap = () => {
 
   // Removed unused constants for better space utilization
 
-  // Responsive zones per page based on screen size
-  const getZonesPerPage = () => {
-    if (isMobile) return 1;
-    if (isTablet) return 2;
-    if (isLargeScreen) return 3;
-    if (isUltraWide) return 4;
-    if (is2560Screen) return 5;
-    return 2; // Default for desktop
-  };
-
-  const ZONES_PER_PAGE = getZonesPerPage();
-
   const shades = areaStatus?.zones?.filter(z => (z.type || '').toLowerCase() === 'shade') || [];
 
   //heatmap api calling
@@ -456,7 +456,11 @@ const HeatMap = () => {
     occ: null,
     scene: null,
   });
-  const floorRevisionClickLockRef = useRef(null);
+  const lastSceneStatusKeyRef = useRef('');
+
+  useEffect(() => {
+    lastSceneStatusKeyRef.current = '';
+  }, [selectedAreaId]);
 
   const applyButtonSx = {
     background: '#222',
@@ -475,17 +479,12 @@ const HeatMap = () => {
     '&:hover': { background: '#111' }
   };
 
-  const scaledWidth = (pageDims?.width || A4_WIDTH) * scale;
-  const scaledHeight = (pageDims?.height || A4_HEIGHT) * scale;
   const MIN_SCALE = 0.2;
   // Dynamic MAX_SCALE based on screen size for better ultra-wide support
   const MAX_SCALE = is2560Screen ? 4.0 : isUltraWide ? 3.0 : 2.0;
   const SCALE_STEP = 0.05;
   // Add extra zoom out capability for tablets and ultra-wide screens
   const MIN_SCALE_TABLET = isTablet ? 0.1 : is2560Screen ? 0.05 : 0.2;
-
-  // Keep a small gap above the PDF so it never clips
-  const TOP_PADDING = isMobile ? 6 : isTablet ? 8 : is2560Screen ? 15 : 10;
 
   // Dynamic max scale: how big we can render without cropping the container
   const getDynamicMaxScale = () => {
@@ -639,7 +638,7 @@ const HeatMap = () => {
   }, [pageDims, hasFit, boundaryValues, isMobile, isTablet, is2560Screen, is1440Screen]);
 
   const [previousSelectedAreaId, setPreviousSelectedAreaId] = useState(null);
-  const [defaultFitScale, setDefaultFitScale] = useState(1);
+  const [, setDefaultFitScale] = useState(1);
 
   const calculateConsistentScale = () => {
     const { width: cw, height: ch } = getContainerDimensions();
@@ -913,89 +912,90 @@ const HeatMap = () => {
         });
         return updated;
       });
-
-      // CRITICAL: If there's an active scene, fetch its details to get fade/delay times
-      // This ensures fade/delay times are loaded when area status is refreshed
-      // Fade/delay times are stored in the scene definition, not in area status zones
-      // Skip while Area Settings is open — dialog owns scene_status for the editor.
-      if (areaStatus.active_scene && areaStatus.area_id && !settingsOpen) {
-
-        dispatch(fetchSceneStatus({
-          areaId: areaStatus.area_id,
-          sceneId: areaStatus.active_scene
-        }))
-          .unwrap()
-          .then(sceneStatusResponse => {
-            // The response structure: { status: "success", area_id: ..., scene_id: ..., details: [...] }
-            // Redux stores details in state.sceneStatus, but unwrap() returns the full response
-            const sceneDetails = sceneStatusResponse?.details || sceneStatusResponse || [];
-
-
-            if (sceneDetails && Array.isArray(sceneDetails) && sceneDetails.length > 0) {
-              setZoneLocalValues(prev => {
-                const updated = { ...prev };
-
-                sceneDetails.forEach(detail => {
-                  // CRITICAL: Match by zone_id first (most reliable)
-                  const zoneId = detail.zone_id;
-                  let zone = null;
-
-                  if (zoneId) {
-                    zone = areaStatus.zones?.find(z => z.id === zoneId);
-                    if (!zone) {
-                      console.warn(`Zone not found by zone_id ${zoneId} for scene detail:`, detail);
-                    }
-                  }
-
-                  // Fallback: match by name if zone_id not available
-                  if (!zone && detail.zone_name) {
-                    zone = areaStatus.zones?.find(z => z.name === detail.zone_name);
-                    if (zone) {
-                      console.warn(`Matched zone by name "${detail.zone_name}" (zone_id not found in scene detail)`);
-                    }
-                  }
-
-                  if (zone) {
-                    const zoneType = (detail.zone_type || '').toLowerCase();
-                    if (zoneType === 'dimmed' || zoneType === 'whitetune') {
-                      // CRITICAL: Update fade/delay times from scene (these are the source of truth)
-                      // Always use scene values - these are the saved values from the backend
-                      const existingZoneValues = updated[zone.id] || {};
-
-                      // Format fade/delay times to ensure they're 2-digit strings
-                      const fadeTime = detail.FadeTime ? String(detail.FadeTime).padStart(2, '0') : '02';
-                      const delayTime = detail.DelayTime ? String(detail.DelayTime).padStart(2, '0') : '00';
-
-                      updated[zone.id] = {
-                        ...existingZoneValues, // Preserve brightness, cct, etc. from areaStatus
-                        fadeTime: fadeTime, // ALWAYS use scene value
-                        delayTime: delayTime, // ALWAYS use scene value
-                      };
-                    }
-                  } else {
-                    console.warn(`Zone not found for scene detail:`, {
-                      zone_id: detail.zone_id,
-                      zone_name: detail.zone_name,
-                      zone_type: detail.zone_type,
-                      availableZones: areaStatus.zones?.map(z => ({ id: z.id, name: z.name }))
-                    });
-                  }
-                });
-
-
-                return updated;
-              });
-            } else {
-              console.warn('Scene details not found or invalid');
-            }
-          })
-          .catch(error => {
-            console.error('Failed to fetch active scene details for fade/delay times:', error);
-          });
-      } else {
-      }
     }
-  }, [areaStatus, selectedAreaId, dispatch, settingsOpen]);
+  }, [areaStatus?.zones, areaStatus?.area_id]);
+
+  useEffect(() => {
+    if (settingsOpen) return;
+    if (!areaStatus?.active_scene || !areaStatus?.area_id || !areaStatus?.zones?.length) {
+      return;
+    }
+
+    const key = getHeatmapSceneStatusKey(areaStatus.area_id, areaStatus.active_scene);
+    if (!key || lastSceneStatusKeyRef.current === key) {
+      return;
+    }
+    lastSceneStatusKeyRef.current = key;
+
+    dispatch(fetchSceneStatus({
+      areaId: areaStatus.area_id,
+      sceneId: areaStatus.active_scene,
+    }))
+      .unwrap()
+      .then((sceneStatusResponse) => {
+        const sceneDetails = sceneStatusResponse?.details || sceneStatusResponse || [];
+
+        if (sceneDetails && Array.isArray(sceneDetails) && sceneDetails.length > 0) {
+          setZoneLocalValues((prev) => {
+            const updated = { ...prev };
+
+            sceneDetails.forEach((detail) => {
+              const zoneId = detail.zone_id;
+              let zone = null;
+
+              if (zoneId) {
+                zone = areaStatus.zones?.find((z) => z.id === zoneId);
+                if (!zone) {
+                  console.warn(`Zone not found by zone_id ${zoneId} for scene detail:`, detail);
+                }
+              }
+
+              if (!zone && detail.zone_name) {
+                zone = areaStatus.zones?.find((z) => z.name === detail.zone_name);
+                if (zone) {
+                  console.warn(`Matched zone by name "${detail.zone_name}" (zone_id not found in scene detail)`);
+                }
+              }
+
+              if (zone) {
+                const zoneType = (detail.zone_type || '').toLowerCase();
+                if (zoneType === 'dimmed' || zoneType === 'whitetune') {
+                  const existingZoneValues = updated[zone.id] || {};
+                  const fadeTime = detail.FadeTime ? String(detail.FadeTime).padStart(2, '0') : '02';
+                  const delayTime = detail.DelayTime ? String(detail.DelayTime).padStart(2, '0') : '00';
+
+                  updated[zone.id] = {
+                    ...existingZoneValues,
+                    fadeTime,
+                    delayTime,
+                  };
+                }
+              } else {
+                console.warn(`Zone not found for scene detail:`, {
+                  zone_id: detail.zone_id,
+                  zone_name: detail.zone_name,
+                  zone_type: detail.zone_type,
+                  availableZones: areaStatus.zones?.map((z) => ({ id: z.id, name: z.name })),
+                });
+              }
+            });
+
+            return updated;
+          });
+        } else {
+          console.warn('Scene details not found or invalid');
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to fetch active scene details for fade/delay times:', error);
+      });
+  }, [
+    areaStatus?.area_id,
+    areaStatus?.active_scene,
+    areaStatus?.zones?.length,
+    dispatch,
+    settingsOpen,
+  ]);
 
   useEffect(() => {
     if (
@@ -1013,7 +1013,8 @@ const HeatMap = () => {
 
     const idx = findFofpZoneIndexInPanelList(areaStatus.zones, highlightedFofpZone);
     if (idx >= 0) {
-      setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
+      const perPage = getSidebarZonesPerPage(buildSidebarZonesToShow(areaStatus.zones));
+      setZonePage(Math.floor(idx / perPage));
     }
   }, [
     areaStatus,
@@ -1088,6 +1089,18 @@ const HeatMap = () => {
     lastAreaStatusSnapshotRef.current = next;
     if (!statusChanged) return;
 
+    if (
+      prev.scene === next.scene &&
+      areaLiveFieldsAlreadyOnMap(
+        heatmapData?.areas,
+        next.areaId,
+        next.light,
+        next.occ
+      )
+    ) {
+      return;
+    }
+
     const refreshMapData = async () => {
       try {
         if (displayMode === "Occupancy") {
@@ -1104,7 +1117,7 @@ const HeatMap = () => {
 
     const timeoutId = setTimeout(refreshMapData, 1000);
     return () => clearTimeout(timeoutId);
-  }, [areaStatus?.area_id, areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId, displayMode]);
+  }, [areaStatus?.area_id, areaStatus?.light_status, areaStatus?.occupancy_status, areaStatus?.active_scene, dispatch, selectedFloorId, displayMode, heatmapData?.areas]);
 
   const handleZoom = (direction) => {
     setScale((prev) => {
@@ -1122,14 +1135,6 @@ const HeatMap = () => {
     handleZoom(direction);
   };
 
-  const getMaxAllowedScale = () => {
-    const container = containerRef.current;
-    if (!container) return 1.0;
-    const maxScaleX = container.offsetWidth / A4_WIDTH;
-    const maxScaleY = container.offsetHeight / A4_HEIGHT;
-    return Math.min(maxScaleX, maxScaleY);
-  };
-
   const handleFit = () => {
     applyFitToScreen({ force: true });
   };
@@ -1137,12 +1142,6 @@ const HeatMap = () => {
   const handleFitButtonClick = () => {
     handleFit();
   };
-  const getCentroid = (pts) => {
-    const x = pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
-    const y = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
-    return { x, y };
-  };
-
   // Helper function to calculate Energy color for a given savings percentage (0-100)
   const getEnergyColor = (savingsPercent) => {
     if (savingsPercent === undefined || Number.isNaN(savingsPercent)) {
@@ -1227,7 +1226,6 @@ const HeatMap = () => {
     if (newIndex >= availableFloors.length) newIndex = 0;
 
     const newFloorId = availableFloors[newIndex].id;
-    const newFloorName = availableFloors[newIndex].floor_name;
 
     // Check if user can access this floor
     if (!canAccessFloor(newFloorId)) {
@@ -1244,98 +1242,21 @@ const HeatMap = () => {
     setHighlightedFofpZone(null);
     const areaId = Number(area.area_id ?? area.id);
     if (!Number.isFinite(areaId)) return;
+    if (
+      Number(selectedAreaId) === areaId &&
+      shouldSkipAreaStatusRefetch({
+        areaId,
+        areaStatus,
+        areaStatusLoading,
+        mapAreas: heatmapData?.areas,
+      })
+    ) {
+      return;
+    }
     setSelectedAreaId(areaId);
-
-    const floorId = selectedFloorId;
-    if (!floorId) {
-      dispatch(fetchAreaStatus(areaId));
-      return;
-    }
-
-    const lockKey = String(floorId);
-    if (floorRevisionClickLockRef.current === lockKey) return;
-    floorRevisionClickLockRef.current = lockKey;
-
-    const prevRevision = floorStatusRevisionByFloorId?.[String(floorId)];
-    let nextRevision = prevRevision;
-    try {
-      const result = await dispatch(fetchFloorStatusRevision({ floorId })).unwrap();
-      nextRevision = result.revision;
-    } catch (err) {
-      if (err?.name === "ConditionError") return;
-      dispatch(fetchAreaStatus(areaId));
-      return;
-    } finally {
-      floorRevisionClickLockRef.current = null;
-    }
-
-    const plan = resolveHeatmapAreaClickPlan({
-      areaId,
-      prevRevision,
-      nextRevision,
-      currentAreaId: areaStatus?.area_id,
-    });
-
-    if (plan.fetchArea) {
-      dispatch(fetchAreaStatus(areaId));
-    }
-    if (plan.fetchFloor) {
-      if (displayMode === "Occupancy") {
-        dispatch(fetchAreaOccupancyStatus({ floorId }));
-      } else if (displayMode === "Energy") {
-        dispatch(fetchAreaEnergyConsumption({ floorId }));
-      } else {
-        dispatch(fetchFloorMapData({ floorId }));
-      }
-    }
+    dispatch(fetchAreaStatus(areaId));
   };
 
-
-  const scenes = areaStatus?.area_scenes || [];
-  const totalPages = Math.ceil(scenes.length / SCENES_PER_PAGE);
-  const currentScenes = scenes.slice(scenePage * SCENES_PER_PAGE, (scenePage + 1) * SCENES_PER_PAGE);
-
-  const refreshAllData = async () => {
-    if (!areaStatus?.area_id || !areaStatus?.floor_id) return;
-
-    const floorId = areaStatus.floor_id;
-    const tasks = [dispatch(fetchAreaStatus(areaStatus.area_id))];
-    if (displayMode === "Occupancy") {
-      tasks.push(dispatch(fetchAreaOccupancyStatus({ floorId })));
-    } else if (displayMode === "Energy") {
-      tasks.push(dispatch(fetchAreaEnergyConsumption({ floorId })));
-    } else {
-      tasks.push(dispatch(fetchFloorMapData({ floorId })));
-    }
-    await Promise.all(tasks);
-  };
-
-  const refreshAllDataAndMap = async () => {
-    if (!selectedFloorId) return;
-
-    try {
-      await dispatch(refreshAllHeatmapData({
-        floorId: selectedFloorId,
-        areaId: areaStatus?.area_id || null,
-        displayMode,
-      })).unwrap();
-    } catch (error) {
-      // Failed to refresh heatmap data
-    }
-  };
-
-  const handleManualRefresh = async () => {
-    if (!selectedFloorId) return;
-
-    setRefreshing(true);
-    try {
-      await refreshAllDataAndMap();
-    } catch (error) {
-      // Manual refresh failed
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleMainToggle = async () => {
     if (!areaStatus) return;
@@ -1346,11 +1267,11 @@ const HeatMap = () => {
     }
 
     setMainToggleUpdating(true);
-    const newStatus = areaStatus.light_status === 'On' ? 'Off' : 'On';
+    const newStatus = deriveSidebarMasterOn(areaStatus) ? 'Off' : 'On';
     try {
       await dispatch(toggleAllZonesInArea({ areaId: areaStatus.area_id, action: newStatus })).unwrap();
-      // Only refresh the specific area status since we're toggling all zones in this area
-      // This prevents other areas from showing as "updated" in logs
+      // Wait for zone fade before live confirm — immediate read lands mid-fade.
+      await waitForFadeSettle(fadeSettleMsFromZones(areaStatus.zones));
       await dispatch(fetchAreaStatus(areaStatus.area_id));
       await dispatch(fetchProcessors());
     } catch (e) {
@@ -1409,8 +1330,10 @@ const HeatMap = () => {
     setZoneUpdating(true);
 
     // Only get zones that have been modified (have local values different from initial)
-    const zonesToUpdate = buildSidebarZonesToShow(areaStatus.zones)
-      .slice(zonePage * SIDEBAR_ZONES_PER_PAGE, (zonePage + 1) * SIDEBAR_ZONES_PER_PAGE)
+    const sidebarZones = buildSidebarZonesToShow(areaStatus.zones);
+    const perPage = getSidebarZonesPerPage(sidebarZones);
+    const zonesToUpdate = sidebarZones
+      .slice(zonePage * perPage, (zonePage + 1) * perPage)
       .filter(zone => {
         const localValues = zoneLocalValues[zone.id];
         const initialValues = initialZoneValues[zone.id];
@@ -1512,8 +1435,8 @@ const HeatMap = () => {
         zones: zonesToUpdate,
       })).unwrap();
 
-      // Only refresh the specific area status, not all heatmap data
-      // This prevents all zones from showing as "updated" in logs
+      // Confirm after fade settles so read is not mid-transition.
+      await waitForFadeSettle(fadeSettleMsFromZones(zonesToUpdate));
       await dispatch(fetchAreaStatus(selectedAreaId));
 
       // Update initial values after successful apply to track new baseline
@@ -1656,7 +1579,7 @@ const HeatMap = () => {
   });
 
   const zonesToShow = buildSidebarZonesToShow(areaStatus?.zones);
-  const zonesPerPage = SIDEBAR_ZONES_PER_PAGE;
+  const zonesPerPage = getSidebarZonesPerPage(zonesToShow);
   const totalZonePages = Math.ceil(zonesToShow.length / zonesPerPage) || 1;
   const visibleSidebarZones = zonesToShow.slice(
     zonePage * zonesPerPage,
@@ -1696,7 +1619,8 @@ const HeatMap = () => {
       if (!zones?.length) return;
       const idx = findFofpZoneIndexInPanelList(zones, highlight);
       if (idx >= 0) {
-        setZonePage(Math.floor(idx / SIDEBAR_ZONES_PER_PAGE));
+        const perPage = getSidebarZonesPerPage(buildSidebarZonesToShow(zones));
+        setZonePage(Math.floor(idx / perPage));
       }
     };
 
@@ -1712,61 +1636,12 @@ const HeatMap = () => {
   };
 
 
-  // Helper function to check if an area has active alerts
-  const hasActiveAlert = (areaName) => {
-    if (!activeAlerts || !Array.isArray(activeAlerts) || activeAlerts.length === 0) {
-      return false;
-    }
+  // Match alerts by LEAP area_code (never by leaf name)
+  const hasActiveAlert = (area) =>
+    hasActiveAlertForArea(activeAlerts, area, selectedFloorId);
 
-    // Normalize area name for comparison
-    const normalizedAreaName = (areaName || '').toLowerCase().trim();
-
-    // Check if any alert's location matches this area
-    return activeAlerts.some(alert => {
-      const alertLocation = (alert.location || '').toLowerCase().trim();
-
-      // Match 1: Exact match (for backward compatibility)
-      if (alertLocation === normalizedAreaName) {
-        return true;
-      }
-
-      // Match 2: Check if alert location ends with the area name
-      // Example: "tower a fourth floor/dining room" ends with "dining room"
-      if (alertLocation.endsWith(normalizedAreaName)) {
-        return true;
-      }
-
-      // Match 3: Extract the last part after "/" and match
-      // Example: "tower a fourth floor/dining room" -> "dining room"
-      const alertLocationParts = alertLocation.split('/');
-      const lastPart = alertLocationParts[alertLocationParts.length - 1].trim();
-      if (lastPart === normalizedAreaName) {
-        return true;
-      }
-
-      return false;
-    });
-  };
-
-  const findAlertForArea = (areaName) => {
-    if (!activeAlerts || !Array.isArray(activeAlerts) || activeAlerts.length === 0) {
-      return null;
-    }
-
-    const normalizedAreaName = (areaName || '').toLowerCase().trim();
-
-    return activeAlerts.find((alert) => {
-      const alertLocation = (alert.location || '').toLowerCase().trim();
-      if (!alertLocation || !normalizedAreaName) return false;
-
-      if (alertLocation === normalizedAreaName) return true;
-      if (alertLocation.endsWith(normalizedAreaName)) return true;
-
-      const alertLocationParts = alertLocation.split('/');
-      const lastPart = alertLocationParts[alertLocationParts.length - 1].trim();
-      return lastPart === normalizedAreaName;
-    }) || null;
-  };
+  const findAlertForArea = (area) =>
+    findAlertForFloorplanArea(activeAlerts, area, selectedFloorId);
 
   const navIconSx = {
     bgcolor: '#fff',
@@ -1841,8 +1716,6 @@ const HeatMap = () => {
             flexGrow: 1,
             flexShrink: 1,
             flexBasis: '100%',
-            // Ensure the container takes full available height
-            minHeight: { xs: 280, sm: '100%' },
           }}
         >
           {/* Floor Plan Container with Left/Right Padding and Zoom Controls - Reduced Height */}
@@ -2208,7 +2081,7 @@ const HeatMap = () => {
               }}>
                 {areaStatus && (
                   <MainAreaToggle
-                    isOn={areaStatus.light_status === 'On'}
+                    isOn={deriveSidebarMasterOn(areaStatus)}
                     onClick={handleMainToggle}
                     isMobile={isMobile}
                     disabled={!canUpdateAreaStatus()}
@@ -2301,15 +2174,15 @@ const HeatMap = () => {
               </Box>
             </Box>
 
-            {/* Scrollable body — Shades Apply reachable */}
+            {/* Body — no outer scroll; zones list scrolls when needed */}
             <Box
               className="heatmap-area-sidebar-body"
               sx={{
               ...CUSTOMIZED_HEATMAP_SIDEBAR_BODY_SX,
-              gap: { xs: 0.1, sm: 0.15, md: 0.2, lg: 0.25 },
-              p: { xs: 0.5, sm: 0.75, md: 1 },
-              pr: { xs: 1, sm: 1.25, md: 1.5 },
-              pb: { xs: 12, md: 14 },
+              gap: { xs: 0.35, sm: 0.4, md: 0.5 },
+              p: { xs: 0.4, sm: 0.5, md: 0.75 },
+              pr: { xs: 0.75, sm: 1, md: 1.25 },
+              pb: { xs: 0.75, md: 1 },
               boxSizing: 'border-box',
               position: 'relative',
             }}>
@@ -2341,7 +2214,7 @@ const HeatMap = () => {
                     alignItems: 'stretch',
                     bgcolor: '#807864',
                     borderRadius: 0,
-                    minHeight: { xs: 45, sm: 50, md: 55, lg: 60, xl: 60 },
+                    minHeight: { xs: 36, sm: 40, md: 44, lg: 48, xl: 48 },
                     flexShrink: 0,
                     p: 0,
                     m: 0,
@@ -2349,8 +2222,7 @@ const HeatMap = () => {
                   }}>
                     <Box sx={{
                       writingMode: 'vertical-rl',
-                      fontWeight: 'bold',
-                      fontSize: { xs: 8, sm: 9, md: 10, lg: 12 },
+                      ...SIDEBAR_SECTION_TAB_FONT_SX,
                       color: '#222',
                       px: { xs: 0.3, sm: 0.4, md: 0.5 },
                       py: 0.2,
@@ -2435,6 +2307,11 @@ const HeatMap = () => {
                                 }
 
                                 try {
+                                  lastSceneStatusKeyRef.current = getHeatmapSceneStatusKey(
+                                    areaStatus.area_id,
+                                    scene.id
+                                  );
+
                                   // Activate the scene
                                   await dispatch(updateAreaScene({
                                     area_id: areaStatus.area_id,
@@ -2571,7 +2448,7 @@ const HeatMap = () => {
                     </Box>
                   </Box>
 
-                  {/* Zones Section - content-sized; list scrolls when cards exceed max height */}
+                  {/* Zones Section — compact content height (not stretched) */}
                   <Box sx={{
                     display: 'flex',
                     flexDirection: 'row',
@@ -2585,8 +2462,7 @@ const HeatMap = () => {
                   }}>
                     <Box sx={{
                       writingMode: 'vertical-rl',
-                      fontWeight: 'bold',
-                      fontSize: { xs: 8, sm: 9, md: 10, lg: 12 },
+                      ...SIDEBAR_SECTION_TAB_FONT_SX,
                       color: '#222',
                       px: { xs: 0.3, sm: 0.4, md: 0.5 },
                       py: 0.2,
@@ -2599,6 +2475,7 @@ const HeatMap = () => {
                       justifyContent: 'center',
                       transform: 'rotate(180deg)',
                       mr: { xs: 0.5, md: 1 },
+                      flexShrink: 0,
                     }}>
                       Zones
                     </Box>
@@ -2610,7 +2487,8 @@ const HeatMap = () => {
                       p: { xs: 0.3, md: 0.5 },
                       minHeight: 0,
                       position: 'relative',
-                      gap: { xs: 0.3, md: 0.5 },
+                      gap: { xs: 0.6, md: 0.85 },
+                      overflow: 'hidden',
                     }}>
                       {/* Zone controls */}
                       <Box sx={{
@@ -2621,14 +2499,18 @@ const HeatMap = () => {
                         alignItems: 'stretch',
                         width: '100%',
                         minWidth: 0,
+                        minHeight: 0,
+                        overflow: 'hidden',
                       }}>
                         {zonesToShow.length > 0 ? (
                           <>
-                            <Box sx={{
-                              ...(totalZonePages > 1 ? HEATMAP_ZONES_LIST_PAGINATED_SX : HEATMAP_ZONES_LIST_SCROLL_SX),
+                            <Box
+                              className="heatmap-area-sidebar-zones-list"
+                              sx={{
+                              ...HEATMAP_ZONES_LIST_PAGINATED_SX,
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: { xs: 0.2, md: 0.3, lg: 0.4, xl: 0.5 },
+                              gap: { xs: 0.25, md: 0.35 },
                               alignItems: 'stretch',
                               width: '100%',
                             }}>
@@ -2664,7 +2546,7 @@ const HeatMap = () => {
                               display: 'flex',
                               justifyContent: 'flex-end',
                               width: '100%',
-                              mt: 0.5,
+                              mt: 0.25,
                               flexShrink: 0,
                             }}>
                               <Button
@@ -2733,7 +2615,7 @@ const HeatMap = () => {
                     alignItems: 'stretch',
                     bgcolor: '#807864',
                     borderRadius: 0,
-                    minHeight: { xs: 35, sm: 40, md: 45, lg: 45, xl: 45 },
+                    minHeight: { xs: 28, sm: 32, md: 36, lg: 36, xl: 36 },
                     flexShrink: 0,
                     p: 0,
                     m: 0,
@@ -2741,8 +2623,7 @@ const HeatMap = () => {
                   }}>
                     <Box sx={{
                       writingMode: 'vertical-rl',
-                      fontWeight: 'bold',
-                      fontSize: { xs: 10, md: 12 },
+                      ...SIDEBAR_SECTION_TAB_FONT_SX,
                       color: '#222',
                       px: 0.5,
                       py: 0.2,
@@ -2772,20 +2653,20 @@ const HeatMap = () => {
                         </Box>
                       ) : (
                         <>
-                          {areaStatus.occupancy_status === 'Occupied' && (
+                          {sidebarOccupancyLabel === 'Occupied' && (
                             <Box sx={{ bgcolor: '#fff', borderRadius: 2, p: { xs: 0.3, md: 0.5 }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <PersonIcon sx={{ fontSize: { xs: 20, md: 25 }, color: '#222' }} />
                               <CheckCircleIcon sx={{ fontSize: { xs: 12, md: 15 }, color: '#222', ml: -0.7, mt: 0.7 }} />
                             </Box>
                           )}
-                          {areaStatus.occupancy_status === 'Unoccupied' && (
+                          {sidebarOccupancyLabel === 'Unoccupied' && (
                             <Box sx={{ bgcolor: '#fff', borderRadius: 2, p: { xs: 0.3, md: 0.5 }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <PersonIcon sx={{ fontSize: { xs: 20, md: 25 }, color: '#222' }} />
                               <CancelIcon sx={{ fontSize: { xs: 12, md: 15 }, color: '#d32f2f', ml: -0.7, mt: 0.7 }} />
                             </Box>
                           )}
-                          <Typography fontSize={{ xs: 11, md: 13 }} color="#fff" fontWeight="normal">
-                            {areaStatus.occupancy_status || 'Unknown'}
+                          <Typography sx={{ ...SIDEBAR_BODY_TEXT_SX, color: '#fff' }}>
+                            {sidebarOccupancyLabel}
                           </Typography>
                         </>
                       )}
@@ -2799,7 +2680,7 @@ const HeatMap = () => {
                     alignItems: 'stretch',
                     bgcolor: '#807864',
                     borderRadius: 0,
-                    minHeight: { xs: 45, sm: 50, md: 55, lg: 55, xl: 55 },
+                    minHeight: { xs: 32, sm: 36, md: 40, lg: 40, xl: 40 },
                     flexShrink: 0,
                     p: 0,
                     m: 0,
@@ -2807,8 +2688,7 @@ const HeatMap = () => {
                   }}>
                     <Box sx={{
                       writingMode: 'vertical-rl',
-                      fontWeight: 'bold',
-                      fontSize: { xs: 10, md: 12 },
+                      ...SIDEBAR_SECTION_TAB_FONT_SX,
                       color: '#222',
                       px: 0.5,
                       py: 0.2,
@@ -2839,16 +2719,16 @@ const HeatMap = () => {
                       ) : (
                         <>
                           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: { xs: 60, md: 80 } }}>
-                            <Typography fontSize={{ xs: 10, md: 12 }} color="#fff" fontWeight="normal" letterSpacing={1}>Consumption</Typography>
-                            <Typography fontSize={{ xs: 10, md: 12 }} color="#fff" fontWeight="bold" mt={0.5}>
+                            <Typography sx={{ ...SIDEBAR_BODY_TEXT_SX, color: '#fff', letterSpacing: 1 }}>Consumption</Typography>
+                            <Typography sx={{ ...SIDEBAR_BODY_TEXT_SX, color: '#fff', fontWeight: 700, mt: 0.5 }}>
                               {areaStatus?.consumption !== undefined && areaStatus?.consumption !== null
                                 ? `${Number(areaStatus.consumption).toFixed(1)} W`
                                 : 'Unknown'}
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: { xs: 60, md: 80 } }}>
-                            <Typography fontSize={{ xs: 10, md: 12 }} color="#fff" fontWeight="normal" letterSpacing={1}>Savings</Typography>
-                            <Typography fontSize={{ xs: 10, md: 12 }} color="#fff" fontWeight="bold" mt={0.5}>
+                            <Typography sx={{ ...SIDEBAR_BODY_TEXT_SX, color: '#fff', letterSpacing: 1 }}>Savings</Typography>
+                            <Typography sx={{ ...SIDEBAR_BODY_TEXT_SX, color: '#fff', fontWeight: 700, mt: 0.5 }}>
                               {areaStatus?.savings !== undefined && areaStatus?.savings !== null
                                 ? `${Number(areaStatus.savings).toFixed(1)} W`
                                 : 'Unknown'}
@@ -2859,8 +2739,9 @@ const HeatMap = () => {
                     </Box>
                   </Box>
 
-                  {/* Shades Section - Only show if shades are present */}
+                  {/* Shades Section - pinned at bottom; only zones list scrolls */}
                   {shades.length > 0 && (
+                    <Box sx={{ flexShrink: 0, minHeight: 0 }}>
                     <HeatmapShadesPanel
                       variant="customized"
                       panelClassName="customized-heatmap-shades-panel"
@@ -2910,6 +2791,7 @@ const HeatMap = () => {
                         }),
                       }}
                     />
+                    </Box>
                   )}
                 </>
               )}
@@ -3140,18 +3022,10 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
   const renderZoneBrightnessHeaderPercent = (displayValue, { min, max }) => (
     <Typography
       component="div"
-      fontSize={{ xs: 8, sm: 9, md: 10 }}
-      fontWeight={700}
       sx={{
+        ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX,
+        ...SIDEBAR_ZONE_SIDE_VALUE_CHIP_SX,
         color: '#807864',
-        background: '#f5f5f5',
-        px: 0.3,
-        py: 0.1,
-        borderRadius: 0.5,
-        border: '1px solid #ddd',
-        minWidth: 28,
-        textAlign: 'center',
-        flexShrink: 0,
         cursor: disabled ? 'default' : 'text',
       }}
       onClick={() => {
@@ -3193,20 +3067,12 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
   const renderZoneCctKelvin = (displayValue, { min, max }) => (
     <Typography
       component="div"
-      fontSize={{ xs: 8, sm: 9, md: 10 }}
-      fontWeight={700}
       sx={{
+        ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX,
+        ...SIDEBAR_ZONE_SIDE_VALUE_CHIP_SX,
+        minWidth: { xs: 34, md: 40 },
         color: '#807864',
-        background: '#f5f5f5',
-        px: 0.3,
-        py: 0.1,
-        borderRadius: 0.5,
-        border: '1px solid #ddd',
-        minWidth: 36,
-        textAlign: 'center',
-        flexShrink: 0,
         cursor: disabled ? 'default' : 'text',
-        lineHeight: 1.4,
       }}
       onClick={() => {
         if (disabled) return;
@@ -3261,12 +3127,19 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
         flexDirection: 'row',
         alignItems: 'center',
         gap: 1,
-        mb: 0.5,
+        mb: 0.25,
         justifyContent: 'flex-start',
         boxSizing: 'border-box',
         ...highlightSx,
       }}>
-        <Typography fontWeight="bold" fontSize={{ xs: 11, md: 13 }} sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', mr: 0.5 }}>
+        <Typography
+          sx={{
+            ...SIDEBAR_ZONE_NAME_SX,
+            flex: 1,
+            minWidth: 0,
+            mr: 0.5,
+          }}
+        >
           {zone.name}
         </Typography>
         <Box
@@ -3332,50 +3205,34 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
     const cctValue = safeValues.cct !== undefined ? safeValues.cct : cctMin;
 
     return (
-      <Box sx={{ mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX, ...highlightSx }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.5, md: 0.75 }, width: '100%', minWidth: 0 }}>
+      <Box sx={{ ...SIDEBAR_ZONE_CARD_SHELL_SX, ...highlightSx }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.35, md: 0.5 }, width: '100%', minWidth: 0 }}>
         <Box sx={{
           ...ZONE_CONTROL_MAIN_PANEL_SX,
-          bgcolor: '#fff',
-          borderRadius: 0.5,
-          p: { xs: 0.5, md: 1 },
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          position: 'relative',
-          overflow: 'visible',
+          ...SIDEBAR_ZONE_CARD_INNER_SX,
         }}>
           <Box sx={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            mb: 0.5,
-            minHeight: 16,
-            lineHeight: 1.2,
+            mb: 0.05,
+            minHeight: 14,
+            lineHeight: 1.15,
             width: '100%',
+            overflow: 'hidden',
+            minWidth: 0,
           }}>
             <Typography
-              fontWeight="bold"
-              fontSize={{ xs: 9, sm: 10, md: 11 }}
               sx={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                flex: 1,
-                mr: 0.5,
+                ...SIDEBAR_ZONE_NAME_SX,
                 textTransform: 'uppercase',
               }}
             >
               {zone.name}
             </Typography>
-            {renderZoneBrightnessHeaderPercent(
-              safeValues.brightness !== undefined ? safeValues.brightness : brightnessMin,
-              { min: brightnessMin, max: brightnessMax }
-            )}
           </Box>
 
-          {/* Brightness Slider */}
-          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, mt: 0.5 }}>
+          {/* Brightness: value chip beside track (right). */}
+          <Box sx={SIDEBAR_ZONE_SLIDER_ROW_SX}>
             <Slider
               min={brightnessMin}
               max={brightnessMax}
@@ -3383,6 +3240,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
               onChange={(_, v) => onChange({ brightness: v })}
               disabled={disabled}
               sx={{
+                ...SIDEBAR_ZONE_SLIDER_TRACK_SX,
                 color: '#222',
                 height: { xs: 2, md: 3 },
                 '& .MuiSlider-thumb': {
@@ -3401,100 +3259,87 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
                 },
               }}
             />
+            {renderZoneBrightnessHeaderPercent(
+              safeValues.brightness !== undefined ? safeValues.brightness : brightnessMin,
+              { min: brightnessMin, max: brightnessMax }
+            )}
           </Box>
 
-          {/* CCT slider + editable Kelvin value */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              ...ZONE_CONTROL_SLIDER_WRAP_SX,
-              mt: 0.8,
-              gap: 0.5,
-            }}
-          >
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Slider
-                min={cctMin}
-                max={cctMax}
-                value={cctValue}
-                onChange={(_, v) => onChange({ cct: v })}
-                disabled={disabled}
-                sx={{
-                  color: '#FFD600',
+          {/* CCT: Kelvin chip beside track (right). */}
+          <Box sx={SIDEBAR_ZONE_FOLLOWING_SLIDER_ROW_SX}>
+            <Slider
+              min={cctMin}
+              max={cctMax}
+              value={cctValue}
+              onChange={(_, v) => onChange({ cct: v })}
+              disabled={disabled}
+              title={`${cctMin}K – ${cctMax}K`}
+              sx={{
+                ...SIDEBAR_ZONE_SLIDER_TRACK_SX,
+                color: '#FFD600',
+                height: { xs: 2, md: 3 },
+                '& .MuiSlider-thumb': {
+                  width: { xs: 8, md: 10 },
+                  height: { xs: 8, md: 10 },
+                  bgcolor: '#FFD600',
+                  boxShadow: 'none',
+                },
+                '& .MuiSlider-rail': {
                   height: { xs: 2, md: 3 },
-                  '& .MuiSlider-thumb': {
-                    width: { xs: 8, md: 10 },
-                    height: { xs: 8, md: 10 },
-                    bgcolor: '#FFD600',
-                    boxShadow: 'none',
-                  },
-                  '& .MuiSlider-rail': {
-                    height: { xs: 2, md: 3 },
-                    borderRadius: 1.5,
-                  },
-                  '& .MuiSlider-track': {
-                    height: { xs: 2, md: 3 },
-                    borderRadius: 1.5,
-                  },
-                }}
-              />
-            </Box>
+                  borderRadius: 1.5,
+                },
+                '& .MuiSlider-track': {
+                  height: { xs: 2, md: 3 },
+                  borderRadius: 1.5,
+                },
+              }}
+            />
             {renderZoneCctKelvin(cctValue, { min: cctMin, max: cctMax })}
-          </Box>
-
-          <Box sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: { xs: 7, md: 9 },
-            color: '#807864',
-            mt: 0.8 // Increased margin top
-          }}>
-            <span>{cctMin}K</span>
-            <span>{cctMax}K</span>
           </Box>
         </Box>
 
         {/* Fade/Delay Time inputs */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 0.75 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.35, md: 0.5 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
-            <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Fade</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Time</Typography>
             <input
               type="text"
               value={safeValues.fadeTime || '02'}
               onChange={e => onChange({ fadeTime: e.target.value.replace(/\D/g, '').slice(0, 2) })}
               style={{
                 width: isMobile ? 26 : 30,
-                height: isMobile ? 16 : 20,
-                fontSize: isMobile ? 10 : 12,
+                height: isMobile ? 16 : 18,
+                fontSize: isMobile ? 9 : 11,
                 textAlign: 'center',
                 borderRadius: 2,
                 border: '1px solid #ccc',
                 background: '#fff',
                 fontWeight: 600,
-                color: '#222'
+                color: '#222',
+                fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
               }}
               disabled={disabled}
             />
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Delay</Typography>
-            <Typography fontSize={{ xs: 9, md: 11 }} fontWeight={700} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Delay</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Time</Typography>
             <input
               type="text"
               value={safeValues.delayTime || '00'}
               onChange={e => onChange({ delayTime: e.target.value.replace(/\D/g, '').slice(0, 2) })}
               style={{
                 width: isMobile ? 26 : 30,
-                height: isMobile ? 16 : 20,
-                fontSize: isMobile ? 10 : 12,
+                height: isMobile ? 16 : 18,
+                fontSize: isMobile ? 9 : 11,
                 textAlign: 'center',
                 borderRadius: 2,
                 border: '1px solid #ccc',
                 background: '#fff',
                 fontWeight: 600,
-                color: '#222'
+                color: '#222',
+                fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
               }}
               disabled={disabled}
             />
@@ -3505,48 +3350,35 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
     );
   }
 
+
   if (isDimmedType) {
     return (
-      <Box sx={{ mb: 0.5, ...ZONE_CONTROL_CARD_WIDTH_SX, ...highlightSx }}>
-      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.5, md: 0.75 }, width: '100%', minWidth: 0 }}>
+      <Box sx={{ ...SIDEBAR_ZONE_CARD_SHELL_SX, ...highlightSx }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: { xs: 0.35, md: 0.5 }, width: '100%', minWidth: 0 }}>
         <Box sx={{
           ...ZONE_CONTROL_MAIN_PANEL_SX,
-          bgcolor: '#fff',
-          borderRadius: 0.5,
-          pt: 0.5,
-          pb: 0,
-          pl: 0.5,
-          pr: 0.5,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-start'
+          ...SIDEBAR_ZONE_CARD_INNER_SX,
+          pb: 0.15,
         }}>
           <Box sx={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            mb: 0.5,
-            minHeight: 16,
-            lineHeight: 1.2,
+            mb: 0.05,
+            minHeight: 14,
+            lineHeight: 1.15,
             width: '100%',
+            minWidth: 0,
           }}>
             <Typography
-              fontWeight="bold"
-              fontSize={{ xs: 9, sm: 10, md: 11 }}
               sx={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                flex: 1,
-                mr: 0.5,
+                ...SIDEBAR_ZONE_NAME_SX,
                 textTransform: 'uppercase',
               }}
             >
               {zone.name}
             </Typography>
-            {renderZoneBrightnessHeaderPercent(safeValues.brightness, { min: 0, max: 100 })}
           </Box>
-          <Box sx={{ ...ZONE_CONTROL_SLIDER_WRAP_SX, mt: 0.5 }}>
+          <Box sx={SIDEBAR_ZONE_SLIDER_ROW_SX}>
             <Slider
               min={0}
               max={100}
@@ -3554,6 +3386,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
               onChange={(_, v) => onChange({ brightness: v })}
               disabled={disabled}
               sx={{
+                ...SIDEBAR_ZONE_SLIDER_TRACK_SX,
                 color: '#222',
                 height: { xs: 2, md: 3 },
                 '& .MuiSlider-thumb': {
@@ -3572,49 +3405,52 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
                 },
               }}
             />
+            {renderZoneBrightnessHeaderPercent(safeValues.brightness, { min: 0, max: 100 })}
           </Box>
         </Box>
 
         {/* Fade/Delay Time inputs for dimmed */}
-        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.5, md: 0.75 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
+        <Box sx={{ display: 'flex', flexDirection: 'row', gap: { xs: 0.35, md: 0.5 }, alignItems: 'flex-start', justifyContent: 'center', ...ZONE_CONTROL_FADE_DELAY_COLUMN_SX }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Fade</Typography>
-            <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Fade</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Time</Typography>
             <input
               type="text"
               value={safeValues.fadeTime || '02'}
               onChange={e => onChange({ fadeTime: e.target.value.replace(/\D/g, '').slice(0, 2) })}
               style={{
-                width: 30,
-                height: 20,
-                fontSize: 12,
+                width: 28,
+                height: 18,
+                fontSize: 11,
                 textAlign: 'center',
                 borderRadius: 2,
                 border: '1px solid #ccc',
                 background: '#fff',
                 fontWeight: 600,
-                color: '#222'
+                color: '#222',
+                fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
               }}
               disabled={disabled}
             />
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Delay</Typography>
-            <Typography fontSize={{ xs: 9, md: 11 }} sx={{ mb: 0.2, textAlign: 'center' }}>Time</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Delay</Typography>
+            <Typography sx={{ ...SIDEBAR_ZONE_VALUE_CHIP_FONT_SX, mb: 0.15, textAlign: 'center' }}>Time</Typography>
             <input
               type="text"
               value={safeValues.delayTime || '00'}
               onChange={e => onChange({ delayTime: e.target.value.replace(/\D/g, '').slice(0, 2) })}
               style={{
-                width: 30,
-                height: 20,
-                fontSize: 12,
+                width: 28,
+                height: 18,
+                fontSize: 11,
                 textAlign: 'center',
                 borderRadius: 2,
                 border: '1px solid #ccc',
                 background: '#fff',
                 fontWeight: 600,
-                color: '#222'
+                color: '#222',
+                fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
               }}
               disabled={disabled}
             />
@@ -3624,6 +3460,7 @@ function ZoneControlCard({ zone, values, onChange, disabled, highlighted = false
       </Box>
     );
   }
+
 }
 
 function getPolygonBoundingBox(coords) {
@@ -3639,17 +3476,6 @@ function getPolygonBoundingBox(coords) {
     width: maxX - minX,
     height: maxY - minY,
   };
-}
-
-// Helper function to find the largest value in an array
-function arrayLargest(arr) {
-  if (!arr || arr.length === 0) return 0;
-  return Math.max(...arr);
-}
-
-function truncateText(text, maxChars) {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, Math.max(0, maxChars - 1)) + '…';
 }
 
 function HeatmapPdfSvgViewer({
@@ -3670,10 +3496,10 @@ function HeatmapPdfSvgViewer({
   pan,
   setPan,
   searchBounceAnimation,
-  isDragging,
-  setIsDragging,
-  dragStart,
-  setDragStart,
+  isDragging: _legacyIsDragging,
+  setIsDragging: _legacySetIsDragging,
+  dragStart: _legacyDragStart,
+  setDragStart: _legacySetDragStart,
   contentBBox,
   boundaryValues,
   getContainerDimensions,
@@ -3715,41 +3541,14 @@ function HeatmapPdfSvgViewer({
     setPageDims((prev) => (pageDimsEqual(prev, next) ? prev : next));
   }, [areas, setPageDims]);
 
-  // Pan/drag functionality
-  const handleMouseDown = (e) => {
-    if (e.button === 0) {
-      const canPan = scale > (fitScale || 0) + 0.001;
-      if (!canPan) return;
-      setIsDragging(true);
-      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-      e.preventDefault();
-    }
-  };
-
-
-  const handleMouseMove = (e) => {
-    if (isDragging) {
-      const newPan = {
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      };
-      setPan(newPan);
-      e.preventDefault();
-    }
-  };
-
-  const handleMouseUp = (e) => {
-    if (isDragging) {
-      setIsDragging(false);
-      e.preventDefault();
-    }
-  };
-
-  const handleMouseLeave = (e) => {
-    if (isDragging) {
-      setIsDragging(false);
-    }
-  };
+  // Pan/drag: only after 4px move so clicks on markers/areas still fire
+  const {
+    isDragging,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleMouseLeave,
+  } = usePanDrag({ scale, fitScale, pan, setPan });
 
   // Scroll-based zoom functionality with mouse-centered zoom
   const handleWheel = (e) => {
@@ -3905,10 +3704,12 @@ function HeatmapPdfSvgViewer({
               // so multi-piece areas are not mashed into one shape.
               const scaledCoords = flat.length ? flat : rings.flat();
 
-              const center = scaledCoords.length > 0
-                ? { x: scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length, y: scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length }
-                : { x: 0, y: 0 };
+              // Local strip placement (not full L-bbox) so thin shade areas keep labels inside
+              const labelPlacement = getHeatmapAreaLabelPlacement(scaledCoords, rings);
+              const center = { x: labelPlacement.x, y: labelPlacement.y };
               const bbox = getPolygonBoundingBox(scaledCoords);
+              const labelFitWidth = Math.max(8, labelPlacement.fitWidth || bbox.width);
+              const labelFitHeight = Math.max(8, labelPlacement.fitHeight || bbox.height);
 
               // Enhanced search highlight - consistent with main search logic
               const q = (searchTerm || "").trim().toLowerCase();
@@ -3941,12 +3742,12 @@ function HeatmapPdfSvgViewer({
               const isHighlightedById = highlightedAreaId && ((area.area_id || area.id) === highlightedAreaId);
               const isHighlighted = !!isHighlightedById || !!isHighlightedSearch;
 
-              // Calculate available space - use more space for larger areas
-              const areaSize = Math.min(bbox.width, bbox.height);
-              // Use more space for larger areas to show full text
+              // Auto-fit label to local strip size (not full L-shaped bbox)
+              const displayAreaName = area.name || area.area_name || '';
+              const areaSize = Math.min(labelFitWidth, labelFitHeight);
               const spaceFactor = areaSize > 50 ? 0.9 : 0.8;
-              const availableWidth = bbox.width * spaceFactor;
-              const availableHeight = bbox.height * spaceFactor;
+              const availableWidth = labelFitWidth * spaceFactor;
+              const availableHeight = labelFitHeight * spaceFactor;
 
               // Dynamic zoom threshold - show abbreviated text by default, full names after 5 zoom-ins
               // Default scale ~0.88, after 5 clicks: 0.88 + (5 × 0.05) = 1.13
@@ -3958,57 +3759,31 @@ function HeatmapPdfSvgViewer({
               const ZOOM_THRESHOLD = baseThreshold - sizeAdjustment;
               const isZoomedIn = scale > ZOOM_THRESHOLD;
 
-              // Zoom-independent font sizes normalized by floorplan width.
-              // Start from a PDF-wide base size, then apply slight adjustments for tiny areas.
               const baseFont = getNormalizedBaseFont();
-              let fontSize = baseFont;
-              if (areaSize < 40) fontSize = Math.max(5, baseFont - 3);
-              else if (areaSize < 80) fontSize = Math.max(5, baseFont - 2);
-
-              const padding = fontSize * 0.1;
-              const lineHeight = fontSize * 1.1;
-
-              // Two-line short label: MAIN + OS (or second token). Tooltip shows full name.
-              const createTwoLineLabel = (text) => {
-                if (!text) return [];
-                const upper = text.toUpperCase();
-                // Extract OS notation variants
-                const osMatch = upper.match(/OS[-\s]?(\d+(?:-\d+)?)/) || upper.match(/\b(\d+-\d+)\b/);
-                const os = osMatch ? (osMatch[0].startsWith('OS') ? osMatch[0] : `OS-${osMatch[1] || osMatch[0]}`) : '';
-                // Main name: before space or '('; fallback to first token
-                let main = upper.split('(')[0].trim();
-                main = main.split(/\s+/)[0] || main;
-
-                // Character limits vary with area size
-                const mainLimit = areaSize < 40 ? 5 : areaSize < 80 ? 7 : 9;
-                const secondLimit = areaSize < 40 ? 5 : areaSize < 80 ? 7 : 9;
-
-                const line1 = main.slice(0, mainLimit);
-                let line2 = os ? os.slice(0, secondLimit) : '';
-                if (!line2) {
-                  // Use next token as fallback
-                  const tokens = upper.split(/\s+/);
-                  if (tokens.length > 1) line2 = tokens[1].slice(0, secondLimit);
-                }
-
-                return line2 ? [line1, line2] : [line1];
-              };
-
-              const displayAreaName = area.name || area.area_name || '';
-              const finalLines = createTwoLineLabel(displayAreaName);
-
-              // For extremely small areas, show only essential info or skip text entirely
-              const isExtremelySmallForText = areaSize < 20;
-              const shouldShowText = !isExtremelySmallForText || (isExtremelySmallForText && isZoomedIn);
+              const labelFit = fitHeatmapAreaLabel({
+                name: displayAreaName,
+                bboxWidth: labelFitWidth,
+                bboxHeight: labelFitHeight,
+                baseFont,
+              });
+              let fontSize = labelFit.fontSize;
+              const padding = labelFit.padding;
+              const lineHeight = labelFit.lineHeight;
+              const finalLines = labelFit.lines;
+              const shouldShowText =
+                labelFit.shouldShowText || (areaSize < 20 && isZoomedIn && finalLines.length > 0);
 
               // Check if this area has active alerts
-              const areaHasAlert = hasActiveAlert && hasActiveAlert(displayAreaName);
+              const areaHasAlert = hasActiveAlert && hasActiveAlert(area);
               if (areaHasAlert) {
               }
 
-              // Calculate background dimensions with improved text accommodation
-              const charWidth = fontSize * 0.5; // Conservative character width estimation
-              const maxLineWidth = Math.max(...finalLines.map(line => line.length * charWidth));
+              // Match fitHeatmapAreaLabel CHAR_WIDTH_FACTOR so the chip covers full glyphs
+              const charWidth = fontSize * 0.66;
+              const maxLineWidth = Math.max(
+                0,
+                ...finalLines.map((line) => line.length * charWidth)
+              );
 
               // Set background dimensions based on area size (simplified since we only show abbreviated text)
               const isExtremelySmallForBg = areaSize < 30;
@@ -4017,23 +3792,17 @@ function HeatmapPdfSvgViewer({
 
               let backgroundWidth, backgroundHeight;
 
-              if (isExtremelySmallForBg) {
-                // Extremely small areas - compact background
-                backgroundWidth = Math.min(maxLineWidth + (padding * 4), availableWidth * 0.9);
-                backgroundHeight = Math.min(finalLines.length * lineHeight + (padding * 4), availableHeight * 0.9);
-              } else if (isVerySmallArea) {
-                // Very small areas - compact background
-                backgroundWidth = Math.min(maxLineWidth + (padding * 6), availableWidth * 0.9);
-                backgroundHeight = Math.min(finalLines.length * lineHeight + (padding * 4), availableHeight * 0.9);
-              } else if (isSmallArea) {
-                // Small areas - balanced approach
-                backgroundWidth = Math.min(maxLineWidth + (padding * 8), availableWidth * 0.9);
-                backgroundHeight = Math.min(finalLines.length * lineHeight + (padding * 6), availableHeight * 0.9);
-              } else {
-                // Normal areas - standard spacing
-                backgroundWidth = Math.min(maxLineWidth + (padding * 6), availableWidth * 0.9);
-                backgroundHeight = Math.min(finalLines.length * lineHeight + (padding * 6), availableHeight * 0.9);
-              }
+              // Chip must cover fitted glyphs (do not cap below text width — that looked like HANDWASH→ANDWASH)
+              const bgPadX = isExtremelySmallForBg ? 4 : isVerySmallArea ? 6 : isSmallArea ? 8 : 6;
+              const bgPadY = isExtremelySmallForBg || isVerySmallArea ? 4 : 6;
+              backgroundWidth = Math.min(
+                maxLineWidth + padding * bgPadX,
+                Math.max(labelFitWidth * 0.98, maxLineWidth + padding * 2)
+              );
+              backgroundHeight = Math.min(
+                finalLines.length * lineHeight + padding * bgPadY,
+                Math.max(labelFitHeight * 0.98, finalLines.length * lineHeight + padding * 2)
+              );
 
               return (
                 <g key={index}>
@@ -4091,7 +3860,8 @@ function HeatmapPdfSvgViewer({
 
                   {center.x && center.y && displayAreaName && finalLines.length > 0 && shouldShowText && (
                     <>
-                      <g clipPath={`url(#clip-${index})`} style={{ pointerEvents: 'none' }}>
+                      {/* Labels sized to bbox — no polygon clip (clip cut mid-glyphs e.g. HANDWASH → ANDWASH) */}
+                      <g style={{ pointerEvents: 'none' }}>
                         <rect
                           x={center.x - (backgroundWidth / 2)}
                           y={center.y - (backgroundHeight / 2)}
@@ -4122,8 +3892,6 @@ function HeatmapPdfSvgViewer({
                                 pointerEvents: 'none',
                                 userSelect: 'none',
                                 fontFamily: 'Arial, sans-serif',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
                               }}
                             >
                               {line}
@@ -4134,23 +3902,14 @@ function HeatmapPdfSvgViewer({
                     </>
                   )}
 
-                  {hasActiveAlert(area.name || area.area_name) && center.x && center.y && (
+                  {hasActiveAlert(area) && center.x && center.y && (
                     <g
                       onClick={(e) => {
                         e.stopPropagation();
-                        const areaName = area.name || area.area_name || '';
-                        const matchedAlert = findAlertForArea(areaName);
+                        const matchedAlert = findAlertForArea(area);
                         navigate("/dashboard/alerts", {
                           state: {
-                            focusAlert: {
-                              areaName,
-                              location: matchedAlert?.location || null,
-                              alertType: matchedAlert?.alert_type || null,
-                              deviceName: matchedAlert?.device_name || null,
-                              serialNo: matchedAlert?.serial_no || null,
-                              reportedTime: matchedAlert?.reported_time || null,
-                              time: matchedAlert?.time || null,
-                            }
+                            focusAlert: buildAlertFocusPayload(area, matchedAlert),
                           }
                         });
                       }}
@@ -4162,7 +3921,7 @@ function HeatmapPdfSvgViewer({
                       <circle
                         cx={center.x + fontSize * 3.2}
                         cy={center.y + fontSize * 2.0}
-                        r={12}
+                        r={alertMarkerHitRadius(fontSize, scale)}
                         fill="transparent"
                         style={{ pointerEvents: "all" }}
                       />

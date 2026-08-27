@@ -302,18 +302,19 @@ const UpdateAreaGroup = () => {
 
     return (
         <Box className="area-group-container" sx={{
-            minHeight: 'calc(100vh - 180px)',
-            maxHeight: 'none',
+            height: '100%',
+            maxHeight: '100%',
+            minHeight: 0,
             backgroundColor: 'white',
             padding: { xs: 2, sm: 3, md: 4 },
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            overflow: 'visible',
+            justifyContent: 'flex-start',
+            overflow: 'hidden',
             width: '100%',
             boxSizing: 'border-box'
         }}>
-                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
                     {/* Header Row */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mb: 3, flexShrink: 0 }}>
@@ -375,7 +376,9 @@ const UpdateAreaGroup = () => {
                     <Divider sx={{ my: 2, width: '40%', flexShrink: 0 }} />
 
                     {/* Scrollable List Box - Takes remaining space */}
-                    <Box sx={{ 
+                    <Box
+                        className="area-group-scrollable"
+                        sx={{ 
                         flex: 1, 
                         overflowY: 'auto', 
                         minHeight: 0,
@@ -443,7 +446,21 @@ backgroundColor: actionBlue,
                     />
                 </Box>
                 {/* Action Buttons - Fixed at bottom */}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0, mt: 2 }}>
+                <Box
+                    className="area-group-actions"
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: 2,
+                        flexShrink: 0,
+                        mt: 2,
+                        pt: 1,
+                        pb: 0.5,
+                        backgroundColor: '#fff',
+                        position: 'relative',
+                        zIndex: 2,
+                    }}
+                >
                     {/* Default mode (Copy, Modify, Delete, Close) */}
                     {!isEditing && (
                         <>

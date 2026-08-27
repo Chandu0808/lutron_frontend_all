@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getProcessorId, processorIdsEqual } from '../../../../../utils/processorId';
 import { toSafeReactText } from '../../../../../utils/safeReactText';
 import {
@@ -41,29 +41,7 @@ export default function ProcessorSelectionDialog({
     setSelectedProcessors(selectedInitialProcessors.map((p) => getProcessorId(p)).filter((id) => id != null));
   }, [selectedInitialProcessors, open]);
 
-  // Fetch processors only when dialog opens and only once
-  useEffect(() => {
-    if (open && !hasInitialized.current) {
-      refreshProcessors();
-      hasInitialized.current = true;
-    }
-    
-    // Reset the flag when dialog closes
-    if (!open) {
-      hasInitialized.current = false;
-    }
-  }, [open]);
-
-  const handleToggle = (processorId) => {
-    const pid = getProcessorId(processorId);
-    setSelectedProcessors((prevSelected) =>
-      prevSelected.some((id) => processorIdsEqual(id, pid))
-        ? prevSelected.filter((id) => !processorIdsEqual(id, pid))
-        : [...prevSelected, pid]
-    );
-  };
-
-  const refreshProcessors = async () => {
+  const refreshProcessors = useCallback(async () => {
     setRefreshing(true);
     setError('');
     try {
@@ -78,6 +56,28 @@ export default function ProcessorSelectionDialog({
     } finally {
       setRefreshing(false);
     }
+  }, [dispatch, onRefreshProcessors]);
+
+  // Fetch processors only when dialog opens and only once
+  useEffect(() => {
+    if (open && !hasInitialized.current) {
+      refreshProcessors();
+      hasInitialized.current = true;
+    }
+    
+    // Reset the flag when dialog closes
+    if (!open) {
+      hasInitialized.current = false;
+    }
+  }, [open, refreshProcessors]);
+
+  const handleToggle = (processorId) => {
+    const pid = getProcessorId(processorId);
+    setSelectedProcessors((prevSelected) =>
+      prevSelected.some((id) => processorIdsEqual(id, pid))
+        ? prevSelected.filter((id) => !processorIdsEqual(id, pid))
+        : [...prevSelected, pid]
+    );
   };
 
   const handleAdd = async () => {

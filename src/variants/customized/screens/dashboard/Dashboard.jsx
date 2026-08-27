@@ -24,7 +24,6 @@ import { registerPageSubNavHandler, requestTopbarNavFocus } from '../../../../ut
 import { isKeyboardNavBlockedTarget } from '../../../../utils/keyboard/keyboardNavUtils'
 import { useDispatch, useSelector, useStore, shallowEqual } from 'react-redux'
 import { useLocation, useNavigate } from "react-router-dom";
-import { normalizeAreaGroupListPayload } from "../../utils/normalizeAreaGroupListPayload";
 
 // import AreaGroupFilter from "./AreaGroupFilter";
 // import AreaGroupFilter from "../../redux/slice/settingsslice/heatmap/AreaGroupFilter";
@@ -32,22 +31,6 @@ import { DndContext, PointerSensor, MouseSensor, TouchSensor, useSensor, useSens
 import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { resolveOccupancySeriesKeyToGroupName } from '../../utils/areaGroupNameLookup'
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Label
-} from 'recharts'
 import {
   setSelectedFloor,
   setSelectedAreas,
@@ -59,7 +42,6 @@ import {
   setCurrentDate,
   setCurrentYear,
   setGlobalLoading,
-  setFilteredData,
   setIsNavigating,
   setCustomWidgetFilters,
   fetchTotalConsumptionByGroup,
@@ -92,7 +74,6 @@ import {
   selectSelectedFloor,
   selectSelectedAreas,
   selectSelectedFloorIds,
-  selectSelectedGroups,
   selectSelectedGroupIds,
   selectSelectedDuration,
   selectCustomDateRange,
@@ -100,22 +81,12 @@ import {
   selectGlobalLoading,
   selectCurrentDate,
   selectCurrentYear,
-  selectFilteredData,
   selectTotalConsumptionByGroup,
   selectLightPowerDensity,
-  selectOccupancyCount,
-  selectOccupancyByGroup,
-  selectInstantOccupancyCount,
-  selectInstantOccupancyCountLoading,
-  selectInstantOccupancyCountError,
   selectSavingsByStrategy,
   selectAreaGroups,
-  selectDashboardStatus,
   selectDashboardLoading,
   selectDashboardError,
-  selectEmailLoading,
-  selectEmailError,
-  selectEmailSuccess,
   selectCustomWidgetFilters,
   clearDashboardData,
   clearDataCache,
@@ -127,14 +98,13 @@ import {
   fetchUnifiedEnergyConsumptionSavingsData,
   selectUnifiedEnergyConsumption,
   selectUnifiedEnergySavings,
-  selectUnifiedPeakMinConsumption,
   selectUnifiedEnergyConsumptionLoading,
   selectUnifiedEnergySavingsLoading,
   selectUnifiedPeakMinConsumptionLoading
 } from '../../redux/slice/dashboard/unifiedEnergySlice'
-import { fetchFloors, getLeafByFloorID, selectFloors, selectAreaTree, selectFloorsLoading, selectAreaTreeLoading } from '../../redux/slice/floor/floorSlice'
+import { fetchFloors, getLeafByFloorID } from '../../redux/slice/floor/floorSlice'
 import { getDashboardOverview, selectDashboardOverview, selectDashboardOverviewLoading, selectDashboardOverviewError } from '../../redux/slice/home/homeSlice'
-import { selectProfile, selectProfileLoading, fetchProfile } from '../../redux/slice/auth/userlogin'
+import { fetchProfile } from '../../redux/slice/auth/userlogin'
 import SpaceUtilization from './SpaceUtilization'
 import DashboardOverview from './DashboardOverview'
 import {
@@ -149,7 +119,6 @@ import {
   BUILTIN_CHART_CARD,
   BUILTIN_CHART_HEADER_ROW,
   BUILTIN_CHART_LOADER_HEIGHT,
-  BUILTIN_CHART_EMPTY_BOX,
   BUILTIN_PIE_PLOT_BOX,
   BUILTIN_LINE_PLOT_BOX,
   BUILTIN_COMPACT_PANEL,
@@ -170,15 +139,13 @@ import {
 import { resolveDashboardThunkForCustomGraphPath } from '../../utils/dashboardCustomGraphThunkResolver'
 import { sumAbsoluteWhFromTotalConsumptionByGroupPayload } from '../../utils/normalizeTotalConsumptionByGroupPayload'
 import { getEffectiveBuiltinDashboardPage } from '../../utils/builtinWidgetDashboardPage'
-import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert, Typography, Button } from '@mui/material'
-import { AddBoxOutlined, IndeterminateCheckBoxOutlined, FileUpload as FileUploadIcon } from '@mui/icons-material'
+import { Grid, Box, useTheme, useMediaQuery, Snackbar, Alert } from '@mui/material'
+import { FileUpload as FileUploadIcon } from '@mui/icons-material'
 import Alerts from './Alerts'
 import {
   fetchAlertTypes,
-  fetchActiveAlerts,
   selectAlertTypes,
-  selectSelectedAlertType,
-  setSelectedAlertType,
+  selectAlerts,
 } from '../../redux/slice/dashboard/alertsSlice'
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice'
 import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
@@ -211,7 +178,6 @@ import {
 } from '../../utils/customWidgetFloorBuckets'
 import {
   formatDateForState,
-  parseDateFromState,
 } from '../../../../shared/dashboard/utils/dashboardDateState'
 import { useDashboardApiParams } from '../../../../shared/dashboard/hooks/useDashboardApiParams'
 import {
@@ -222,6 +188,7 @@ import {
   dispatchFetchProfileOnce,
   dispatchFetchWidgetTitlesOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards'
+import { resolveAlertFilterTypes } from '../../../../shared/alerts/resolveAlertFilterTypes'
 import { transformDataForCharts as sharedTransformDataForCharts } from '../../../../shared/dashboard/charts/transforms/transformDataForCharts'
 import { formatEnergyXAxisLabel } from '../../../../shared/dashboard/charts/transforms/formatEnergyXAxisLabel'
 import { consumptionSavingMergedData as sharedConsumptionSavingMergedData } from '../../../../shared/dashboard/charts/transforms/consumptionSavingMergedData'
@@ -231,7 +198,6 @@ import SavingsByStrategyWidget from '../../../../shared/dashboard/widgets/Saving
 import { CONSUMPTION_SAVINGS_COMBINED_SHELL_VARIANTS } from '../../../../shared/dashboard/widgets/energy/consumptionSavingsCombinedChrome'
 import { useAreaTreeSelection } from '../../../../shared/dashboard/hooks/useAreaTreeSelection'
 import {
-  flattenAreaTree as flattenAreaTreeShared,
   getAllAreaIdsFromFloor,
   getAllAreasFromGroup as resolveAreasFromGroup,
   shouldSkipLoadAllAreas,
@@ -412,21 +378,6 @@ function resolveAreaIdsForCustomEnergyPieTable(effectiveQp, areaIdToFloorIdMap, 
 }
 
 const ChartLoader = bindDashboardChartLoader('customized')
-
-const MONTH_NAME_TO_INDEX = {
-  Jan: 0,
-  Feb: 1,
-  Mar: 2,
-  Apr: 3,
-  May: 4,
-  Jun: 5,
-  Jul: 6,
-  Aug: 7,
-  Sep: 8,
-  Oct: 9,
-  Nov: 10,
-  Dec: 11,
-};
 
 function SortableDashboardItem({
   id,
@@ -704,10 +655,6 @@ function Dashboard() {
   const dispatch = useDispatch();
   const store = useStore();
 
-  const handleNavigateToAlerts = () => {
-    navigate("/dashboard/alerts");
-  };
-
   const handleNavigateToEnergy = () => {
     navigate("/dashboard/energy");
   };
@@ -715,17 +662,6 @@ function Dashboard() {
   const handleNavigateToSpace = () => {
     navigate("/dashboard/space-utilization");
   };
-
-  const handleNavigateToOverview = () => {
-    if (DASHBOARD_OVERVIEW_ENABLED) {
-      navigate("/dashboard");
-    }
-  };
-
-  // const handleNavigateToOverview = () => {
-  //   // setActiveTab("overview");
-  //   navigate("/dashboard");
-  // };
 
 
   useEffect(() => {
@@ -751,8 +687,6 @@ function Dashboard() {
   const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
   const isTabletViewport = useMediaQuery(theme.breakpoints.between('sm', 'lg'))
-  const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'))
-  const is2XLargeScreen = useMediaQuery('(min-width: 1600px)')
 
   const chartHeaderStyle = useMemo(() => ({
     margin: 0,
@@ -763,15 +697,23 @@ function Dashboard() {
   }), [isLargeScreen])
 
   // User authentication
-  const { user, role: currentUserRole } = UseAuth()
+  const { role: currentUserRole } = UseAuth()
   const isOperator = currentUserRole === 'Operator'
   /** Superadmin may rearrange/resize Energy cards; Admin/Operator see shared layout only. */
   const energyLayoutLocked = !isSuperadminRole(currentUserRole)
   const dashboardChartOrder = useSelector(selectDashboardChartOrder)
   const dashboardChartOrderStatus = useSelector(selectDashboardChartOrderStatus)
 
-  const alertTypes = useSelector(selectAlertTypes)
-  const selectedAlertType = useSelector(selectSelectedAlertType)
+  const alertTypesFromApi = useSelector(selectAlertTypes)
+  const activeAlertsList = useSelector(selectAlerts)
+  const alertTypes = useMemo(
+    () =>
+      resolveAlertFilterTypes({
+        apiTypes: alertTypesFromApi,
+        alerts: activeAlertsList,
+      }),
+    [alertTypesFromApi, activeAlertsList]
+  )
   const widgetList = useSelector(getWidgetList)
   const customGraphs = useSelector(selectCustomGraphs)
   const widgetConfiguration = useSelector(selectWidgetConfiguration)
@@ -795,8 +737,6 @@ function Dashboard() {
     const fid = areaTree?.floor_id || currentTreeFloorId;
 
     if (areaTree && fid) {
-      const floorsList = store.getState()?.floor?.floors;
-
       setAreaIdToFloorId(prev => {
         const next = new Map(prev);
         let changed = false;
@@ -883,6 +823,8 @@ function Dashboard() {
 
   const customWidgetFilters = useSelector(selectCustomWidgetFilters)
 
+  // Retained for energy custom-graph wiring (SpaceUtilization calls its own copy).
+  // eslint-disable-next-line no-unused-vars
   const fetchCustomGraphData = useCallback(async (g, qp) => {
     const id = String(g?.id ?? g?.name ?? '')
     const path = String(g?.api_path ?? '').trim()
@@ -913,7 +855,7 @@ function Dashboard() {
 
       // --- CASE: Area Group Widget (Isolated Logic) ---
       if (g?.is_area_group_widget && Array.isArray(g.custom_area_group_ids) && g.custom_area_group_ids.length > 0) {
-        const groupIds = g.custom_area_group_ids.filter(id => id != 37);
+        const groupIds = g.custom_area_group_ids.filter(id => id !== 37);
         const metric = pathLower.includes('savings') ? 'savings' : (pathLower.includes('occupancy') ? 'occupancy' : 'energy');
         const unit = metric === 'savings' ? '%' : (metric === 'occupancy' ? 'Count' : 'Wh');
 
@@ -1043,7 +985,6 @@ function Dashboard() {
 
       if (wantsPerFloorMetricBars) {
         const floorsList = store.getState()?.floor?.floors
-        const ag = store.getState()?.groupOccupancy?.areaGroups
         const apiEndpoint = perFloorMetric === 'savings' ? '/dashboard/energy_savings' : '/dashboard/energy_consumption'
         const sumPayload =
           perFloorMetric === 'savings' ? sumEnergySavingsPayload : aggregateEnergyConsumptionApiResponseToTotal
@@ -1368,7 +1309,7 @@ function Dashboard() {
                 : iterationType === 'floor'
                   ? getFloorDisplayLabel(floorsList, id)
                   : (() => {
-                    const gRec = [...(areaGroups?.user_area_groups || []), ...(areaGroups?.special_area_groups || [])].find(x => x.id == id || x.group_id == id);
+                    const gRec = [...(areaGroups?.user_area_groups || []), ...(areaGroups?.special_area_groups || [])].find(x => x.id === id || x.group_id === id);
                     return gRec?.name || `Group ${id}`;
                   })();
 
@@ -1843,7 +1784,7 @@ function Dashboard() {
   const [filterKey, setFilterKey] = useState(0) // Force re-render key
   const focusAlertFromLocation = location.state?.focusAlert || null
   const [reloadTrigger, setReloadTrigger] = useState(0) // Trigger for automatic reload on login
-  const [builtinOverridesTick, setBuiltinOverridesTick] = useState(0)
+  const [, setBuiltinOverridesTick] = useState(0)
   const dropdownRef = useRef(null)
   const areaDropdownRef = useRef(null) // Add ref for area dropdown
   const areaTreeContainerRef = useRef(null) // Add ref for area tree container
@@ -1888,7 +1829,6 @@ function Dashboard() {
   }, [floors, selectedAreas, customGraphs, areaIdToFloorId.size, dispatch]);
 
   const selectedFloorIds = useSelector(selectSelectedFloorIds) // Add this to get floor IDs from Redux
-  const selectedGroups = useSelector(selectSelectedGroups)
   const selectedGroupIds = useSelector(selectSelectedGroupIds)
 
   // User profile for email functionality and floor filtering
@@ -1898,7 +1838,6 @@ function Dashboard() {
 
 
   const {
-    floorsWithSelectedAreas,
     setFloorsWithSelectedAreas,
     localSelectedFloorIds,
     setLocalSelectedFloorIds,
@@ -1966,12 +1905,8 @@ function Dashboard() {
     extraReduxActions: { setCustomWidgetFilters },
   });
 
-  const flattenAreaTree = (treeData) =>
-    flattenAreaTreeShared(treeData, { includeAreaName: true });
-
   // Separate state for floor expansion (independent of floor selection)
-  const [expandedFloorIds, setExpandedFloorIds] = useState(new Set());
-  const [visibleWidgets, setVisibleWidgets] = useState([]);
+  const [, setExpandedFloorIds] = useState(new Set());
 
   // Fetch user profile on component mount (Topbar may already own this)
   useEffect(() => {
@@ -2009,11 +1944,9 @@ function Dashboard() {
   const customDateRange = useSelector(selectCustomDateRange)
   const isNavigating = useSelector(selectIsNavigating)
   const globalLoading = useSelector(selectGlobalLoading)
-  const filteredData = useSelector(selectFilteredData)
   // Use shallowEqual to prevent re-renders when other Redux state changes
   const energyConsumption = useSelector(selectUnifiedEnergyConsumption, shallowEqual)
   const energySavings = useSelector(selectUnifiedEnergySavings, shallowEqual)
-  const peakMinConsumption = useSelector(selectUnifiedPeakMinConsumption, shallowEqual)
   const energyConsumptionLoading = useSelector(selectUnifiedEnergyConsumptionLoading)
   const energySavingsLoading = useSelector(selectUnifiedEnergySavingsLoading)
   const peakMinConsumptionLoading = useSelector(selectUnifiedPeakMinConsumptionLoading)
@@ -2023,11 +1956,6 @@ function Dashboard() {
 
   const totalConsumptionByGroup = useSelector(selectTotalConsumptionByGroup)
   const lightPowerDensity = useSelector(selectLightPowerDensity)
-  const occupancyCount = useSelector(selectOccupancyCount)
-  const instantOccupancyCount = useSelector(selectInstantOccupancyCount)
-  const instantOccupancyCountLoading = useSelector(selectInstantOccupancyCountLoading)
-  const instantOccupancyCountError = useSelector(selectInstantOccupancyCountError)
-  const dashboardStatus = useSelector(selectDashboardStatus)
   const dashboardLoading = useSelector(selectDashboardLoading)
   const dashboardError = useSelector(selectDashboardError)
 
@@ -2040,10 +1968,6 @@ function Dashboard() {
   // Navigation state selectors
   const currentDate = useSelector(selectCurrentDate)
   const currentYear = useSelector(selectCurrentYear)
-  // Email state selectors
-  const emailLoading = useSelector(selectEmailLoading)
-  const emailError = useSelector(selectEmailError)
-  const emailSuccess = useSelector(selectEmailSuccess)
 
   const overviewData = useSelector(selectDashboardOverview)
   const overviewLoading = useSelector(selectDashboardOverviewLoading)
@@ -2080,22 +2004,14 @@ function Dashboard() {
     }
   }, [activeTab]);
 
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date()
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ]
-    return `${months[now.getMonth()]} ${now.getFullYear()}`
-  })
-  const [selectedMonthForData, setSelectedMonthForData] = useState(() => {
+  const [, setSelectedMonthForData] = useState(() => {
     const now = new Date()
     return {
       year: now.getFullYear(),
       month: now.getMonth()
     }
   })
-  const [showDurationDropdown, setShowDurationDropdown] = useState(false)
+  const [, setShowDurationDropdown] = useState(false)
 
   // Close area dropdown / floor tree when clicking outside (capture phase — dashboard shell uses stopPropagation on click).
   useEffect(() => {
@@ -2126,7 +2042,7 @@ function Dashboard() {
   const isInitialLoad = useRef(true) // Track if this is the initial load
 
   // Unified loading state - show single loader during navigation
-  const [isDataLoading, setIsDataLoading] = useState(false)
+  const [, setIsDataLoading] = useState(false)
 
   // Track when we're switching tabs to clear old data - removed to prevent flickering
 
@@ -2211,9 +2127,7 @@ function Dashboard() {
     visibility: {
       shouldShowEnergyWidget,
       isSpaceCombinedVisible,
-      energyCardOrder,
       setEnergyCardOrder,
-      energyCardSpan,
       setEnergyCardSpan,
       getEnergyCardCol,
       resolveEnergyCardLayout,
@@ -2227,7 +2141,6 @@ function Dashboard() {
       chartLoading,
       setChartLoading,
       allEnergyChartsReady,
-      setAllEnergyChartsReady,
       energyWidgetTitles,
       getWidgetTitle,
       getWidgetTitleWithAliases,
@@ -2246,9 +2159,6 @@ function Dashboard() {
     },
     dates: {
       dateParams,
-      getCurrentDateParameters,
-      calculateDateParameters,
-      calculateCurrentDateParameters,
       handlePrevious,
       handleNext,
       getCurrentPeriodText,
@@ -2258,7 +2168,6 @@ function Dashboard() {
       showExportDropdown,
       setShowExportDropdown,
       exportLoading,
-      handleExport,
       handleConsumptionEmail,
       handleConsumptionDownload,
       handleSavingsEmail,
@@ -2273,7 +2182,6 @@ function Dashboard() {
     consumption: consumptionTitle,
     savings: savingsTitle,
     savingsByStrategy: savingsByStrategyTitle,
-    totalConsumptionByGroup: totalConsumptionByGroupTitle,
   } = energyWidgetTitles
 
   const toggleEnergyCardSpan = useCallback(
@@ -2305,10 +2213,10 @@ function Dashboard() {
 
   // Email dialog handlers - removed as emails are now sent directly to logged-in user
 
-  // Fetch alert options/data when Alerts tab is active
+  // Fetch alert options/data when Alerts tab is active (force so Settings toggles apply)
   useEffect(() => {
     if (activeTab === 'alerts') {
-      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes)
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes, { force: true })
       // Note: fetchActiveAlerts is handled by the Alerts component itself
     }
   }, [activeTab, dispatch])
@@ -2431,8 +2339,6 @@ function Dashboard() {
   // Use a ref to track previous floors/userProfile to detect actual changes
   const prevFloorsRef = useRef(null);
   const prevUserProfileRef = useRef(null);
-  /** One-time default: select first floor when nothing is committed so APIs/UI match consumption-by-group scope. */
-  const hasAutoSelectedDefaultFloorRef = useRef(false);
 
   // Track if we've done the initial reload on login
   const hasInitialReloadRef = useRef(false);
@@ -2458,27 +2364,6 @@ function Dashboard() {
       loadAllAreasFromAllFloors()
     }
   }, [floors, userProfile, allAreasLoaded, selectedAreas.length])
-
-  // Helper function to filter chart data for this_week to show only "0" hour points
-  const filterWeeklyChartData = (chartData, xAxisLabels) => {
-    if (selectedDuration !== 'this-week') {
-      return { filteredData: chartData, filteredLabels: xAxisLabels };
-    }
-
-    // Filter to show only "0" hour points (Sun 0, Mon 0, Tue 0, etc.)
-    const filteredLabels = xAxisLabels.filter(label => label.endsWith(' 0'));
-    const filteredData = chartData.map(series => {
-      const filteredValues = [];
-      xAxisLabels.forEach((label, index) => {
-        if (label.endsWith(' 0')) {
-          filteredValues.push(series[index]);
-        }
-      });
-      return filteredValues;
-    });
-
-    return { filteredData, filteredLabels };
-  };
 
   // Function to load all areas from all floors (only accessible floors for operators)
   const loadAllAreasFromAllFloors = async () => {
@@ -2631,23 +2516,6 @@ function Dashboard() {
   useEffect(() => {
     dispatchFetchAreaGroupsOnce(dispatch, fetchAreaGroups);
   }, [dispatch])
-
-  // Handle area selection
-  const handleAreaChange = (areaIds) => {
-    // Filter out any invalid or duplicate area IDs
-    const validAreaIds = areaIds.filter(id => id && typeof id === 'number');
-
-    // Don't update Redux state immediately - wait for Set button
-    // Prevent selecting too many areas
-    // if (validAreaIds.length > 20) {
-    //   const limitedAreaIds = validAreaIds.slice(0, 15)
-    //   dispatch(setSelectedAreas(limitedAreaIds));
-    // } else {
-    // dispatch(setSelectedAreas(validAreaIds));
-    // }
-    // Don't close the dropdown immediately to allow multiple selections
-    // setShowAreaDropdown(false);
-  }
 
   // Add the missing handleToggleNode function
   const handleToggleNode = (nodeId) => {
@@ -3028,10 +2896,6 @@ function Dashboard() {
   const lastActiveTabRef = useRef(null);
   const lastAreaGroupScopeSigRef = useRef('');
 
-  // Refs for batching loading state updates to prevent line chart re-renders
-  const pendingLoadingUpdatesRef = useRef(new Set());
-  const updateScheduledRef = useRef(false);
-
   // Create stable string representation of apiParams to prevent unnecessary re-runs
   // This memoization ensures the string only changes when actual values change
 
@@ -3086,9 +2950,6 @@ function Dashboard() {
           isApiCallInProgressRef.current = false;
           return;
         }
-
-        const requestId = Math.random().toString(36).substr(2, 9);
-        const isLargeDateRange = ['this-month', 'this-year'].includes(selectedDuration);
 
         // Set loading states for all charts that will be called
         // Loading states are handled by individual API calls
@@ -3281,31 +3142,12 @@ function Dashboard() {
     });
 
     // Trigger API calls for the new tab if we have the required parameters
-    // Use selected areas if available, otherwise use all accessible areas from floors
-    let areasToUse = selectedAreas;
-    let floorsToUse = selectedFloorIds;
-
     // Always proceed with API calls if we have duration - let backend handle area filtering
     if (selectedDuration) {
       // Don't call APIs for custom until both dates are set
       if (selectedDuration === 'custom' && (!customStartDate || !customEndDate)) {
         return;
       }
-
-      // Calculate date parameters for current date (not navigated date)
-      const { startDate, endDate } = calculateCurrentDateParameters();
-
-      // Use the selectedDuration directly - let the Redux slice handle the time_range mapping
-      const params = {
-        // CORRECT LOGIC: If floor is selected, send ONLY floorIds, NOT areaIds
-        areaIds: (floorsToUse && floorsToUse.length > 0) ? null : (areasToUse.length > 0 ? areasToUse : null),
-        floorIds: floorsToUse && floorsToUse.length > 0 ? floorsToUse : null,
-        timeRange: selectedDuration,
-        startDate: startDate,
-        endDate: endDate,
-        isNavigating: false // Reset navigation flag when switching tabs
-      };
-
       // Don't call APIs directly here - let the useEffect handle it
       // This prevents multiple API calls that overwrite the complete data
     }
@@ -3372,44 +3214,6 @@ function Dashboard() {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [dashboardTabKeys]);
 
-  // Update the getCurrentSelectionText function to handle week display
-  const getCurrentSelectionText = () => {
-    // Convert currentDate string to Date object
-    const currentDateObj = parseDateFromState(currentDate);
-
-    if (selectedDuration === 'this-day') {
-      return currentDateObj.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } else if (selectedDuration === 'this-week') {
-      // Calculate the start and end of the week
-      const startOfWeek = new Date(currentDateObj);
-      startOfWeek.setDate(currentDateObj.getDate() - currentDateObj.getDay()); // Start of week (Sunday)
-
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6); // End of week (Saturday)
-
-      return `${startOfWeek.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric'
-      })} - ${endOfWeek.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      })}`;
-    } else if (selectedDuration === 'this-month') {
-      return currentDateObj.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long'
-      });
-    } else if (selectedDuration === 'this-year') {
-      return currentYear.toString();
-    }
-    return '';
-  };
   // Update the useEffect to reset current date when duration changes
   useEffect(() => {
 
@@ -3432,33 +3236,6 @@ function Dashboard() {
     }
   }, [selectedDuration, dispatch]);
 
-  // Copy the exact helper functions from AreaTreeDialog.jsx
-  const getAllAreaCodes = (node) => {
-    let codes = [node.area_code];
-    if (node.children && node.children.length > 0) {
-      node.children.forEach(child => {
-        codes = codes.concat(getAllAreaCodes(child));
-      });
-    }
-
-    // Limit the number of area codes to prevent selecting too many areas
-    if (codes.length > 20) {
-      return codes.slice(0, 15)
-    }
-
-    return codes;
-  };
-
-  const getAllLeafNodes = (node) => {
-    if (!node.children || node.children.length === 0) {
-      return [node];
-    }
-    return node.children.flatMap(getAllLeafNodes);
-  };
-
-
-  const availableAreas = flattenAreaTree(areaTree)
-  const isLoading = floorStatus === 'loading'
   const hasError = dashboardError || (floorStatus === 'failed')
 
     const transformDataForCharts = useCallback(
@@ -3478,11 +3255,6 @@ function Dashboard() {
   );
 
   // Isolated wrapper removed — consumption/savings use UnifiedEnergyWidget
-
-  // Add the missing getNavigationButtonText function
-  const getNavigationButtonText = (direction) => {
-    return direction === 'previous' ? 'Previous' : 'Next';
-  };
 
   const consumptionCustomizedSurface = useMemo(
     () => ({
@@ -4905,7 +4677,6 @@ function Dashboard() {
                   style={{
                     display: 'inline-flex',
                     gap: isLargeScreen ? '12px' : (isMediumScreen ? '10px' : '6px'),
-                    backgroundColor: "#807864",
                     borderRadius: "5px",
                     padding: isLargeScreen ? '5px 10px' : (isMediumScreen ? '4px 8px' : '3px 6px'),
                     minWidth: 0,

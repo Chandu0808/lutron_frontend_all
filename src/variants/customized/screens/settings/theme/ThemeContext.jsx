@@ -16,7 +16,6 @@ import { createCustomizedAppTheme } from "../../../../../shared/theme/mui/create
 
 const DEFAULT_BG = '/assets/defaultBg.png';
 const DEFAULT_TAB_COLOR = '#1976d2';
-const POLLING_INTERVAL = 30000;
 
 const normalizeUiColors = createNormalizeUiColors({
   background: "#CDC0A0",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
     Accordion,
     AccordionSummary,
@@ -25,10 +25,7 @@ import { downloadHelpFile } from "../../../../../shared/help/downloadHelpFile";
 const GetHelp = () => {
     const dispatch = useDispatch();
     const helpFiles = useSelector(fetchHelpFileList);
-    const [expandedId, setExpandedId] = useState({});
     const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
     const buttonColor = appTheme?.application_theme?.button || '#232323'
     useEffect(() => {
         dispatch(getHelpFileList());
@@ -44,9 +41,6 @@ const GetHelp = () => {
         if (!filePath) return;
         void downloadHelpFile(filePath, { fileName });
     };
-
-    const toggle = (id) =>
-        setExpandedId((prev) => ({ ...prev, [id]: !prev[id] }));
 
     const cards = [
         {

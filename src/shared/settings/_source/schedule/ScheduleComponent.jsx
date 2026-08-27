@@ -388,10 +388,10 @@ function ScheduleComponent() {
               if (!newCalendar[dateKey]) {
                 newCalendar[dateKey] = {};
               }
-              if (!newCalendar[dateKey][time]) {
-                newCalendar[dateKey][time] = [];
+              if (!newCalendar[dateKey][displayTimeSlot]) {
+                newCalendar[dateKey][displayTimeSlot] = [];
               }
-              newCalendar[dateKey][time].push(event);
+              newCalendar[dateKey][displayTimeSlot].push(event);
             }
           }
         }

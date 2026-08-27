@@ -26,6 +26,11 @@ import {
   selectAlertsDisplayUpdating,
   selectAlertsDisplayUpdateError,
 } from "../../../redux/slice/settingsslice/alerts/alertsDisplaySlice";
+import { fetchAlertTypes } from "../../../redux/slice/dashboard/alertsSlice";
+import {
+  dispatchFetchAlertTypesOnce,
+  invalidateAlertTypesBootstrap,
+} from "../../../../../shared/utils/bootstrapFetchGuards";
 
 const ALERT_TYPES_ORDER = [
   "Ballast Failure",
@@ -88,13 +93,16 @@ const AlertsComponent = () => {
 
       await dispatch(disableAlerts({ alert_type: alertType, display: desiredDisplay })).unwrap();
       await dispatch(fetchAlertsDisplayStatus());
+      // Keep Alerts page filter in sync with Settings visibility toggles.
+      invalidateAlertTypesBootstrap();
+      dispatchFetchAlertTypesOnce(dispatch, fetchAlertTypes, { force: true });
     } finally {
       setLocallyUpdatingType(null);
     }
   };
 
   return (
-    <Grid container sx={{ ml: '18px', p: '18px' }}>
+    <Grid container className="settings-layout-root" sx={{ ml: '18px', p: '18px', alignItems: 'flex-start' }}>
       {/* Full-width header (title + 2 horizontal dividers) */}
       <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
         <Typography
@@ -131,6 +139,7 @@ const AlertsComponent = () => {
         item
         xs={12}
         md={10}
+        className="settings-main-content-column"
         sx={{
           backgroundColor: isDefaultWhiteTheme ? '#ffffff' : contentColor,
           p: 3,

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import lutronLogo from "../assets/lutron-logo.png";
 import { FOOTER_VERSION_FONT_SIZE, getAppDisplayVersion } from "../../../utils/appVersion";
 
 const Footer = () => {
@@ -29,6 +28,9 @@ const Footer = () => {
         left: 0,
         right: 0,
         zIndex: 1000,
+        // Decorative only — must not intercept Cancel/Save (bottom-right) clicks
+        pointerEvents: "none",
+        overflow: "hidden",
         backgroundColor: "var(--footer-background-color, transparent)",
         backgroundImage: "var(--footer-background)",
         "html.gold-theme &": {
@@ -56,13 +58,16 @@ const Footer = () => {
         >
           Communicating with
         </Typography>
-        <img
-          src={lutronLogo}
+        <Box
+          component="img"
+          src="/assets/loginlogo.png"
           alt="Lutron Logo"
-          style={{
-            height: "100px",
-            marginBottom: "0px",
-            filter: "var(--footer-logo-filter, none)",
+          sx={{
+            height: 15,
+            width: "auto",
+            display: "block",
+            flexShrink: 0,
+            filter: "var(--footer-logo-filter, brightness(0) saturate(100%))",
           }}
         />
       </Box>

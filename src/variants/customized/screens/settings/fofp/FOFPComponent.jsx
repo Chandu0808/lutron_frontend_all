@@ -46,6 +46,7 @@ import { UseAuth, getVisibleSidebarItemsWithPaths } from "../../../customhooks/U
 import { BaseUrl } from "../../../BaseUrl";
 import { resolveFloorPlanMediaUrl } from "../../../../../shared/pdf/floorPlanPdf";
 import { dispatchFetchFloorsOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
+import { getFloorsList } from "../../../../../shared/utils/floorList";
 import { fetchFloors, selectFloors, selectFloorLoading } from "../../../redux/slice/floor/floorSlice";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { isLightSurface } from "../../../utils/themeOnSurface";
@@ -135,7 +136,7 @@ const FOFPComponent = () => {
   const fofpConfig = useSelector(selectFofpConfig);
   const configSaving = useSelector(selectFofpConfigSaving);
   const effectiveMarkerColor = useSelector(selectFofpEffectiveMarkerColor);
-  const floors = useSelector(selectFloors) || [];
+  const floors = getFloorsList(useSelector(selectFloors));
   const floorStatus = useSelector(selectFloorLoading);
   const floorsLoading = floorStatus === "loading";
   const floorsError = useSelector((state) => state.floor?.error) || null;
@@ -449,7 +450,7 @@ const FOFPComponent = () => {
       >
         <SettingsSidebar items={visibleSidebarItemsWithPaths} />
 
-        <Grid item xs={12} lg={9} sx={settingsHelpLayoutContentColumnSx}>
+        <Grid item xs={12} lg={9} className="settings-help-content-column" sx={settingsHelpLayoutContentColumnSx}>
       <Box
         sx={{
           display: "flex",

@@ -4,6 +4,13 @@ import Swal from 'sweetalert2';
 import { getFloorsList } from '../../utils/floorList';
 import { normalizeFloorListResponse } from '../../utils/normalizeFloorListResponse';
 
+function floorApiError(err, fallback) {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string' && detail) return detail;
+  if (detail && typeof detail === 'object' && detail.message) return detail.message;
+  return err?.message || fallback;
+}
+
 
 export function createFloorModule({
   BaseUrl,
@@ -33,6 +40,7 @@ export function createFloorModule({
     },
     loading: true,
     processorAreaIds: {}, // Add this to track area_ids per processor
+    sortError: null,
   };
   // Fetch Floors — coalesce concurrent list GETs (Dashboard + Space mount race)
   let floorsListInflight = null;
@@ -48,7 +56,7 @@ export function createFloorModule({
         });
       return await floorsListInflight;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || "Failed to fetch floors.");
+      return rejectWithValue(floorApiError(err, "Failed to fetch floors."));
     }
   });
 
@@ -56,12 +64,12 @@ export function createFloorModule({
     'floors/setFloorSortMode',
     async (manual_sort_enabled, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.put('/floor/sort-settings', { manual_sort_enabled });
+        const response = await BaseUrl.put('/floor/sort-settings', {
+          manual_sort_enabled: Boolean(manual_sort_enabled),
+        });
         return normalizeFloorListResponse(response.data);
       } catch (err) {
-        return rejectWithValue(
-          err.response?.data?.detail || 'Failed to update floor sort settings.'
-        );
+        return rejectWithValue(floorApiError(err, 'Failed to update floor sort settings.'));
       }
     }
   );
@@ -70,12 +78,12 @@ export function createFloorModule({
     'floors/reorderFloors',
     async (floorIds, { rejectWithValue }) => {
       try {
-        const response = await BaseUrl.put('/floor/reorder', { floor_ids: floorIds });
+        const response = await BaseUrl.put('/floor/reorder', {
+          floor_ids: floorIds,
+        });
         return normalizeFloorListResponse(response.data);
       } catch (err) {
-        return rejectWithValue(
-          err.response?.data?.detail || 'Failed to reorder floors.'
-        );
+        return rejectWithValue(floorApiError(err, 'Failed to reorder floors.'));
       }
     }
   );
@@ -390,35 +398,43 @@ export function createFloorModule({
         })
         .addCase(fetchFloors.fulfilled, (state, action) => {
           state.status = 'succeeded';
-          state.floors = action.payload.floors;
-          state.manualSortEnabled = action.payload.manual_sort_enabled;
+          const next = normalizeFloorListResponse(action.payload);
+          state.floors = next.floors;
+          state.manualSortEnabled = next.manual_sort_enabled;
           state.error = null;
         })
         .addCase(fetchFloors.rejected, (state, action) => {
+          const message = action.payload || action.error.message || '';
+          const text = typeof message === 'string' ? message.toLowerCase() : '';
+          if (text.includes('cancel') || text.includes('abort')) {
+            return;
+          }
           state.status = 'failed';
           state.error = action.payload || action.error.message;
         })
         .addCase(setFloorSortMode.pending, (state) => {
-          state.error = null;
+          state.sortError = null;
         })
         .addCase(setFloorSortMode.fulfilled, (state, action) => {
-          state.floors = action.payload.floors;
-          state.manualSortEnabled = action.payload.manual_sort_enabled;
-          state.error = null;
+          const next = normalizeFloorListResponse(action.payload);
+          state.floors = next.floors;
+          state.manualSortEnabled = next.manual_sort_enabled;
+          state.sortError = null;
         })
         .addCase(setFloorSortMode.rejected, (state, action) => {
-          state.error = action.payload || action.error.message;
+          state.sortError = action.payload || action.error.message;
         })
         .addCase(reorderFloors.pending, (state) => {
-          state.error = null;
+          state.sortError = null;
         })
         .addCase(reorderFloors.fulfilled, (state, action) => {
-          state.floors = action.payload.floors;
-          state.manualSortEnabled = action.payload.manual_sort_enabled;
-          state.error = null;
+          const next = normalizeFloorListResponse(action.payload);
+          state.floors = next.floors;
+          state.manualSortEnabled = next.manual_sort_enabled;
+          state.sortError = null;
         })
         .addCase(reorderFloors.rejected, (state, action) => {
-          state.error = action.payload || action.error.message;
+          state.sortError = action.payload || action.error.message;
         })
         //fetch single floor
         .addCase(fetchSingleFloor.pending, (state) => {
@@ -614,7 +630,7 @@ export function createFloorModule({
     setProcessorAreaIds,
    } = floorSlice.actions;
   const selectFloors = (state) => getFloorsList(state.floor.floors);
-  const selectManualSortEnabled = (state) => state.floor.manualSortEnabled;
+  const selectManualSortEnabled = (state) => Boolean(state.floor.manualSortEnabled);
   const uniqueFloor = (state) => state.floor.singleFloor;
   const selectFloorLoading = (state) => state.floor.status;
   const fetchLeafDataByID = (state) => state.floor.leafData

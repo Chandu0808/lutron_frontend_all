@@ -1,6 +1,12 @@
 const path = require('path');
 
 module.exports = {
+  // Skip ESLintWebpackPlugin during `craco start` / `craco build`.
+  // Does not change bundled JS, variants, or runtime behavior — only removes
+  // compile-time linting (saves RAM/CPU). Use `npm run lint` when you want ESLint.
+  eslint: {
+    enable: false,
+  },
   webpack: {
     alias: {
       'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist'),
@@ -24,4 +30,4 @@ module.exports = {
       return webpackConfig;
     },
   },
-}; 
+};

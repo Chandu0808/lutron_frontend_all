@@ -512,7 +512,7 @@ export default function RenameWidget() {
     };
 
     return (
-        <Grid container sx={{ alignItems: "flex-start", ml: '18px', p: '18px' }}>
+        <Grid container className="settings-layout-root" sx={{ alignItems: "flex-start", ml: '18px', p: '18px' }}>
             {/* Full-width header (title + 2 horizontal dividers) */}
             <Grid item xs={12} sx={{ pt: '18px', mb: 1.5 }}>
                 <Typography
@@ -550,6 +550,7 @@ export default function RenameWidget() {
                 item
                 xs={12}
                 md={10}
+                className="settings-main-content-column"
                 sx={{
                     p: 3,
                     borderTopRightRadius: 2,

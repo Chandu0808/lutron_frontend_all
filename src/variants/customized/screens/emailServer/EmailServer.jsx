@@ -12,11 +12,9 @@ import {
     Snackbar,
     Alert
 } from '@mui/material';
-import { SidebarItems, getVisibleSidebarItems } from '../../utils/sidebarItems';
 import SettingsSidebar from '../../components/SettingsSidebar';
-import { useDispatch, useSelector } from 'react-redux';
-import { createEmail, fetchEmailConfigs, getEmailData, testEmail } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
-import {  selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
+import { useDispatch } from 'react-redux';
+import { createEmail, fetchEmailConfigs, testEmail } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { useNavigate } from 'react-router-dom';
 import { getVisibleSidebarItemsWithPaths, UseAuth } from '../../customhooks/UseAuth';
 
@@ -30,11 +28,6 @@ const EmailServer = () => {
     const runSaveOnce = useMemo(() => createSingleFlight(), []);
     const navigate = useNavigate();
     const theme = useTheme();
-    const emailData = useSelector(getEmailData)
-    const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
-    const buttonColor = appTheme?.application_theme?.button || '#232323'
     const [formData, setFormData] = useState({
         serverName: '',
         port: '',
@@ -122,27 +115,22 @@ const EmailServer = () => {
                 });
             }
         });
-    }, []);
+    }, [dispatch]);
     
     const { role } = UseAuth();
-    const visibleSidebarItems = getVisibleSidebarItems(role);
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(role);
     
-    // Check if user has permission to access Email Server settings
-    const canAccessEmailServer = () => {
-        // Only Admin and Superadmin can access Email Server settings
-        // All Operator roles (Not Required) according to Excel sheet
-        return role === 'Superadmin' || role === 'Admin';
-    };
+    // Only Admin and Superadmin can access Email Server settings
+    const canAccessEmailServer = role === 'Superadmin' || role === 'Admin';
     
     // Redirect unauthorized users
     useEffect(() => {
-        if (!canAccessEmailServer()) {
+        if (!canAccessEmailServer) {
             navigate('/setting/manage-area-groups', { replace: true });
         }
-    }, [role, navigate]);
+    }, [canAccessEmailServer, navigate]);
     
-    if (!canAccessEmailServer()) {
+    if (!canAccessEmailServer) {
         return null;
     }
     

@@ -11,7 +11,6 @@ import {
     Divider,
 } from "@mui/material";
 import React, { useEffect, useRef, useState } from "react";
-import { SidebarItems, getVisibleSidebarItems } from "../../../utils/sidebarItems";
 import SettingsSidebar from "../../../components/SettingsSidebar";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
@@ -23,16 +22,16 @@ import {
     getUploadStatus,
     getUploadError,
 } from "../../../redux/slice/settingsslice/heatmap/groupOccupancySlice";
-import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { getVisibleSidebarItemsWithPaths, UseAuth } from "../../../customhooks/UseAuth";
+import {
+    settingsHelpLayoutShellSx,
+    settingsHelpLayoutGridSx,
+    settingsHelpLayoutContentColumnSx,
+    settingsSidebarGridItemSx,
+} from "../../../utils/settingsPageLayout";
 function HelpDropdown({ value, onChange }) {
-    const dispatch = useDispatch()
     const [open, setOpen] = useState(false);
     const [piOpen, setPiOpen] = useState(true);
-    const appTheme = useSelector(selectApplicationTheme);
-    const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-    const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
-    const buttonColor = appTheme?.application_theme?.button || '#232323'
     const toggle = () => setOpen((v) => !v);
     const chooseTop = (name) => {
         if (name === "Project Information") {
@@ -173,7 +172,6 @@ const CreateHelp = () => {
     const [didTriggerUpload, setDidTriggerUpload] = useState(false);
     const fileInputRef = useRef();
     const { role } = UseAuth();
-    const visibleSidebarItems = getVisibleSidebarItems(role);
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(role);
 
     useEffect(() => {
@@ -245,19 +243,19 @@ const CreateHelp = () => {
     };
 
     return (
-        <Box className="help-container" sx={{ 
-            width: '100%', 
-            height: 'calc(100vh - 180px)',
-            minHeight: 'calc(100vh - 180px)',
-            maxHeight: 'calc(100vh - 180px)',
-            display: 'flex',
-            flexDirection: 'column',
-            p: '18px',
-            ml:'16px',
-            overflow: 'hidden'
-        }}>
-            <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1.5 }} sx={{ flex: 1, overflow: 'hidden', width: '100%' }}>
-            <Grid item xs={12} lg={3} sx={{ order: { xs: 2, lg: 1 }, p: 1 }}>
+        <Box className="help-container" sx={settingsHelpLayoutShellSx}>
+            <Grid container spacing={{ xs: 0.3, sm: 0.5, md: 1, lg: 1.5 }} sx={settingsHelpLayoutGridSx}>
+            <Grid
+              item
+              xs={12}
+              md={3}
+              lg={3}
+              className="settings-sidebar-column"
+              sx={{
+                ...settingsSidebarGridItemSx,
+                order: { xs: 2, lg: 1 },
+              }}
+            >
             <Typography variant="h6" sx={{
                             mb: { xs: 0.8, sm: 1, md: 1.5, lg: 2 },
                             color: theme.palette.text.secondary,
@@ -272,7 +270,14 @@ const CreateHelp = () => {
                 
                 <SettingsSidebar items={visibleSidebarItemsWithPaths} embedded />
             </Grid>
-            <Grid item xs={12} lg={9} sx={{ order: { xs: 1, lg: 2 }, p: 2, overflow: 'hidden', width: '100%' }}>
+            <Grid
+              item
+              xs={12}
+              md={9}
+              lg={9}
+              className="settings-help-content-column"
+              sx={settingsHelpLayoutContentColumnSx}
+            >
                 <Paper
                     sx={{
                         p: 2,

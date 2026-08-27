@@ -1,5 +1,5 @@
 // src/screens/authentication/Login.jsx
-import React, { useState, useEffect, useContext, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Card,
@@ -12,7 +12,6 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { ThemeContext } from "../settings/theme/ThemeContext";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 
 // Auth thunks + selectors
@@ -26,7 +25,6 @@ import {
 // Theme settings
 import {
   fetchThemeSettings,
-  selectThemeSettings,
   selectThemeLoading,
   selectThemeError,
 } from "../../redux/slice/theme/themeSlice";
@@ -44,7 +42,6 @@ const Login = () => {
 
   const loading = useSelector(selectSignInLoading);
   const error = useSelector(selectSignInError);
-  const themeSettings = useSelector(selectThemeSettings);
   const themeLoading = useSelector(selectThemeLoading);
   const themeError = useSelector(selectThemeError);
 

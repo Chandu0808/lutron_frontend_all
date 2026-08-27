@@ -5,36 +5,24 @@ import {
     Typography,
     Button,
     Grid,
-    Card,
-    CardContent,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
     TableHead,
     TableRow,
-    Paper,
     Chip,
     useTheme,
-    useMediaQuery,
     CircularProgress,
     Alert,
     Snackbar,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ExtensionIcon from '@mui/icons-material/Extension';
-import { useDispatch, useSelector } from 'react-redux';
-import { SidebarItems, getVisibleSidebarItems } from '../../../utils/sidebarItems';
 import { UseAuth, getVisibleSidebarItemsWithPaths } from '../../../customhooks/UseAuth';
 import SettingsSidebar from '../../../components/SettingsSidebar';
 
 const ManageModules = () => {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const isLaptop = useMediaQuery(theme.breakpoints.between('md', 'lg'));
-    const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
-    const dispatch = useDispatch();
-    
     // Get current user role for sidebar filtering
     const { role: currentUserRole } = UseAuth();
     const visibleSidebarItemsWithPaths = getVisibleSidebarItemsWithPaths(currentUserRole);
@@ -117,7 +105,7 @@ const ManageModules = () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const result = await response.json();
+            await response.json();
             setUploadSuccess(true);
             setSelectedFile(null);
             
@@ -156,15 +144,6 @@ const ManageModules = () => {
                 return 'warning';
             default:
                 return 'default';
-        }
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        try {
-            return new Date(dateString).toLocaleString();
-        } catch {
-            return dateString;
         }
     };
 

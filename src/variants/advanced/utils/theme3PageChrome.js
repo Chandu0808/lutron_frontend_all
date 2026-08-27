@@ -8,6 +8,7 @@ import {
 } from '../config/themeConstants';
 import { applySettingsSidebarTypographyVars } from './settingsSidebarTabStyles';
 import { applyHeatmapTabPillTokens } from '../../../shared/theme/utils/applyHeatmapTabPillTokens';
+import { resolveWordmarkLogoFilter } from '../../../shared/theme/utils/resolveWordmarkLogoFilter';
 
 /** Theme 3 (Blue) page chrome — overrides generic else-branch vars in ThemeContext. */
 export function applyTheme3PageChrome(root) {
@@ -16,6 +17,7 @@ export function applyTheme3PageChrome(root) {
   root.style.setProperty('--topbar-nav-active-text', THEME_3_LIGHT_SURFACE_TEXT);
   root.style.setProperty('--topbar-nav-inactive-text', '#ffffff');
   root.style.setProperty('--footer-text-color', THEME_3_LIGHT_SURFACE_TEXT);
+  root.style.setProperty('--footer-logo-filter', resolveWordmarkLogoFilter(THEME_3_LIGHT_PANEL_BG));
 
   root.style.setProperty('--settings-panel-inner-bg', THEME_3_LIGHT_PANEL_BG);
   root.style.setProperty('--settings-theme-card-bg', THEME_3_LIGHT_PANEL_BG);

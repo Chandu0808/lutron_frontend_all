@@ -11,10 +11,8 @@ import {
   IconButton,
   Button,
   OutlinedInput,
-  ListSubheader,
   CircularProgress,
   Alert,
-  Snackbar
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { useDispatch, useSelector } from 'react-redux';
@@ -26,17 +24,10 @@ import {
   selectGroupOccupancyStatus,
   selectGroupOccupancyLoading,
   selectGroupOccupancyUpdating,
-  selectAreaGroupsLoading
 } from '../../redux/slice/settingsslice/heatmap/groupOccupancySlice';
 import { selectApplicationTheme } from '../../redux/slice/theme/themeSlice';
 import { darken } from '@mui/material/styles';
 import { normalizeOccupancyModeString } from '../../redux/slice/settingsslice/heatmap/occupancyModeUtils';
-
-function toTitleCase(str) {
-  return str.replace(/\w\S*/g, (txt) =>
-    txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
-  );
-}
 
 const modeOptions = ['Disabled', 'Auto', 'Vacancy'];
 
@@ -51,10 +42,8 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
   const status = useSelector(selectGroupOccupancyStatus);
   const loading = useSelector(selectGroupOccupancyLoading);
   const updating = useSelector(selectGroupOccupancyUpdating);
-  const areaGroupsLoading = useSelector(selectAreaGroupsLoading);
   const appTheme = useSelector(selectApplicationTheme);
   const backgroundColor = appTheme?.application_theme?.background || '#d2c4a2';
-  const contentColor = appTheme?.application_theme?.content || 'rgba(128, 120, 100, 0.7)';
   const buttonColor = appTheme?.application_theme?.button || '#232323';
 
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -150,7 +139,7 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
       const res = await fetch(
         `/dashboard/total_consumption/by_area?area_ids=${areaIds.join(",")}`
       );
-      const data = await res.json();
+      await res.json();
   
     } catch (err) {
       console.error("Consumption error:", err);
@@ -162,7 +151,7 @@ const GroupOccupancyModel = ({ open, onClose, currentUserRole }) => {
       const res = await fetch(
         `/dashboard/space_utilization_per?area_ids=${areaIds.join(",")}`
       );
-      const data = await res.json();
+      await res.json();
   
     } catch (err) {
       console.error("Utilization error:", err);

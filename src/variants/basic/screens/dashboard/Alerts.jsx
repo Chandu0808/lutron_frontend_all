@@ -25,6 +25,7 @@ import {
   dispatchFetchActiveAlertsOnce,
   dispatchFetchProfileOnce,
 } from '../../../../shared/utils/bootstrapFetchGuards';
+import { findFocusedAlertIndex } from '../../../../shared/heatmap/alertAreaMatch';
 import {
   Snackbar,
   Alert,
@@ -300,36 +301,7 @@ function Alerts({ selectedTypes = [], focusAlert = null }) {
   useEffect(() => {
     if (!focusAlert || loading || !Array.isArray(filtered) || filtered.length === 0) return;
 
-    const targetLocation = normalizeText(focusAlert.location);
-    const targetAreaName = normalizeText(focusAlert.areaName);
-    const targetType = normalizeText(focusAlert.alertType);
-    const targetDevice = normalizeText(focusAlert.deviceName);
-    const targetSerial = normalizeText(focusAlert.serialNo);
-    const targetTime = normalizeText(focusAlert.reportedTime || focusAlert.time);
-
-    let matchedIndex = filtered.findIndex((alert) => {
-      const location = normalizeText(alert?.location);
-      const type = normalizeText(alert?.alert_type);
-      const device = normalizeText(alert?.device_name);
-      const serial = normalizeText(alert?.serial_no);
-      const time = normalizeText(alert?.reported_time || alert?.time);
-
-      if (targetLocation && location === targetLocation) {
-        const typeOk = !targetType || type === targetType;
-        const deviceOk = !targetDevice || device === targetDevice;
-        const serialOk = !targetSerial || serial === targetSerial;
-        const timeOk = !targetTime || time === targetTime;
-        return typeOk && deviceOk && serialOk && timeOk;
-      }
-
-      if (targetAreaName) {
-        if (location === targetAreaName || location.endsWith(targetAreaName)) return true;
-        const lastPart = location.split('/').pop()?.trim() || '';
-        return lastPart === targetAreaName;
-      }
-
-      return false;
-    });
+    const matchedIndex = findFocusedAlertIndex(filtered, focusAlert);
 
     if (matchedIndex < 0) return;
 

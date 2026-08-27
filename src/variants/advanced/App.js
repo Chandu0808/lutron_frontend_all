@@ -18,7 +18,6 @@ import CreateFloor from './screens/settings/floor/CreateFloor';
 import LutronPublicHome from './screens/lutronwebsite page/LutronPublicHome'
 import EditFloor from './screens/settings/floor/EditFloor';
 import CreateAreaModelComponent from './screens/create-area-model/CreateAreaModelComponent';
-import GroupOccupancyModel from './screens/heatmap/GroupOccupancymodel'
 import HomeComponent from './screens/settings/home/HomeComponent';
 import ScheduleComponent from './screens/schedule/ScheduleComponent';
 import UpdatePreconfigurdEvent from './screens/schedule/UpdatePreconfigurdEvent';
@@ -51,6 +50,7 @@ import ManageModules from './screens/settings/modules/ManageModules'
 import AlertsComponent from './screens/settings/alerts/AlertsComponent'
 import ProcessorsSettings from './screens/settings/processors/ProcessorsSettings'
 import Maintenance from './screens/settings/maintenance/Maintenance'
+import ApplicationMonitoring from './screens/settings/applicationMonitoring/ApplicationMonitoring'
 
 
 const HeatMap = lazy(() => import('./screens/heatmap/HeatMap'));
@@ -97,11 +97,9 @@ const App = () => {
             <Route path="/heatmap" element={<Suspense fallback={<div>Loading...</div>}><HeatMap /></Suspense>} />
             <Route path="/create-area-model" element={<CreateAreaModelComponent />} />
             <Route path="/main" element={<Navigate to="/setting/main" replace />} />
-            <Route path="/heatmap" element={<GroupOccupancyModel />} />
             <Route path="/floor" element={<Navigate to="/setting/floor" replace />} />
             <Route path="/createfloor" element={<CreateFloor />} />
             <Route path="/lutron" element={<LutronPublicHome />} />
-            <Route path="/create-area-model" element={<CreateAreaModelComponent />} />
             <Route path="/editfloor/:floorId" element={<EditFloor />} />
             <Route path='/schedule' element={<ScheduleComponent />} />
             <Route path='/schedule/update-preconfigured-event' element={<UpdatePreconfigurdEvent />} />
@@ -151,6 +149,7 @@ const App = () => {
             <Route path="/setting/alerts" element={<AuthGuard allowedRoles={["Superadmin"]}><AlertsComponent /></AuthGuard>} />
             <Route path="/setting/processors" element={<AuthGuard allowedRoles={["Superadmin"]}><ProcessorsSettings /></AuthGuard>} />
             <Route path="/setting/maintenance" element={<AuthGuard allowedRoles={["Superadmin"]}><Maintenance /></AuthGuard>} />
+            <Route path="/setting/application-monitoring" element={<AuthGuard allowedRoles={["Superadmin"]}><ApplicationMonitoring /></AuthGuard>} />
             <Route
               path="/setting/fofp"
               element={

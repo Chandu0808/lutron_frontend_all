@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 // import AreaGroupFilter from "./AreaGroupFilter";
 // import { normalizeAreaGroupListPayload } from "utils/areaGroupListNormalize.js
 // import { normalizeAreaGroupListPayload } from "../../utils/normalizeAreaGroupListPayload";
-import { normalizeAreaGroupListPayload } from "../../utils/normalizeAreaGroupListPayload";
 // import AreaGroupFilter from "../../redux/slice/settingsslice/heatmap/AreaGroupFilter";
 // import { useSelector } from "react-redux";
 
@@ -29,7 +28,7 @@ import {
 import { useSelector, useDispatch, useStore } from 'react-redux'
 import { UseAuth, isSuperadminRole } from '../../customhooks/UseAuth'
 import { FileUpload as FileUploadIcon } from '@mui/icons-material';
-import { Box, useTheme, useMediaQuery, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Button, Grid } from '@mui/material'
+import { Box, useTheme, useMediaQuery, Snackbar, Alert, Typography } from '@mui/material'
 import { BaseUrl } from '../../BaseUrl'
 import { coalesceDashboardHttpGet } from '../../../../shared/dashboard/utils/coalesceDashboardHttpGet'
 import {
@@ -68,9 +67,6 @@ import {
   selectCustomDateRange,
   selectOccupancyCount,
   selectInstantOccupancyCount,
-  selectInstantOccupancyCountLoading,
-  selectInstantOccupancyCountError,
-  setSelectedAreas,
   setCustomDateRange,
   setCurrentDate,
   setCurrentYear,
@@ -78,10 +74,8 @@ import {
   setIsNavigating,
   selectCurrentDate,
   selectCurrentYear,
-  selectEmailLoading,
   selectIsNavigating,
   selectGlobalLoading,
-  clearDataCache,
   buildOccupancyCountSearchParams,
   selectCustomWidgetFilters,
 } from '../../redux/slice/dashboard/dashboardSlice'
@@ -344,14 +338,6 @@ function peakMinForOccupancyCustomGraphCard(apiPathStr, raw, instantOccupancyCou
 }
 
 /** Manage Area Groups name tokens ? used only by built-in Utilization by area list. */
-function addBuiltInUtilizationAreaNameTokens(set, nameStr) {
-  const raw = String(nameStr ?? '').trim().toLowerCase()
-  if (!raw) return
-  // Normalize separators to "/" and remove surrounding whitespace
-  const norm = raw.replace(/\s*[>\/]\s*/g, ' / ').trim().toLowerCase()
-  if (norm) set.add(norm)
-}
-
 /** Walk areaTree or floors array to find an area name by ID and normalize it to a "Parent / Name" path. */
 function resolveAreaNameFromTree(id, tree, allFloors) {
   const search = (node, parentName = '') => {
@@ -391,101 +377,7 @@ function resolveAreaNameFromTree(id, tree, allFloors) {
     }
   }
 
-  return fullName ? fullName.replace(/\s*[>\/]\s*/g, ' / ').trim().toLowerCase() : null
-}
-
-function buildSpecialAreaGroupMemberTokenSet(areaGroups, areaTree, allFloors) {
-  const set = new Set()
-  const list = areaGroups?.special_area_groups
-  if (!Array.isArray(list)) return set
-  for (const gr of list) {
-    if (!gr || typeof gr !== 'object') continue
-    for (const a of Array.isArray(gr.areas) ? gr.areas : []) {
-      if (a && a.name) addBuiltInUtilizationAreaNameTokens(set, a.name)
-
-      // 1. Prioritize floor_id from group object if available
-      if (a && a.floor_id && allFloors) {
-        const f = allFloors.find(floor => String(floor.id || floor.floor_id) === String(a.floor_id))
-        if (f) {
-          const fname = String(f.name || f.floor_name || '').trim()
-          const aname = String(a.name || a.area_name || '').trim()
-          const norm = `${fname} / ${aname}`.replace(/\s*[>\/]\s*/g, ' / ').trim().toLowerCase()
-          if (norm) set.add(norm)
-        }
-      }
-
-      // 2. Fallback to full resolution via ID and tree
-      if (a && a.area_id) {
-        const full = resolveAreaNameFromTree(a.area_id, areaTree, allFloors)
-        if (full) addBuiltInUtilizationAreaNameTokens(set, full)
-      }
-    }
-    if (Array.isArray(gr.floors)) {
-      for (const f of gr.floors) {
-        if (Array.isArray(f.area_ids)) {
-          for (const aid of f.area_ids) {
-            const name = resolveAreaNameFromTree(aid, areaTree, allFloors)
-            if (name) addBuiltInUtilizationAreaNameTokens(set, name)
-          }
-        }
-      }
-    }
-  }
-  return set
-}
-
-function builtInUtilizedAreaRowMatchesTokenSet(area, tokenSet) {
-  if (!tokenSet || tokenSet.size === 0) return false
-  const rawName = String(area.name ?? '').trim().toLowerCase()
-  const normName = rawName.replace(/\s*[>\/]\s*/g, ' / ').trim()
-  return tokenSet.has(normName)
-}
-
-/** First matching special area group label for this API row (strict normalized name match). */
-function resolveBuiltInSpecialAreaGroupLabel(apiAreaName, areaGroups, areaTree, allFloors) {
-  const rawName = String(apiAreaName ?? '').trim().toLowerCase()
-  if (!rawName) return null
-  const normRow = rawName.replace(/\s*[>\/]\s*/g, ' / ').trim()
-
-  const list = areaGroups?.special_area_groups
-  if (!Array.isArray(list)) return null
-  for (const gr of list) {
-    if (!gr || typeof gr !== 'object') continue
-    const gname = String(gr.name ?? gr.group_name ?? '').trim()
-    if (!gname) continue
-
-    const match = (name) => {
-      if (!name) return false
-      const norm = String(name).replace(/\s*[>\/]\s*/g, ' / ').trim().toLowerCase()
-      return norm === normRow
-    }
-
-    for (const a of Array.isArray(gr.areas) ? gr.areas : []) {
-      if (match(a?.name)) return gname
-      // 1. Resolve via floor_id if available
-      if (a && a.floor_id && allFloors) {
-        const f = allFloors.find(floor => String(floor.id || floor.floor_id) === String(a.floor_id))
-        if (f) {
-          const fname = String(f.name || f.floor_name || '').trim()
-          const aname = String(a.name || a.area_name || '').trim()
-          const norm = `${fname} / ${aname}`.replace(/\s*[>\/]\s*/g, ' / ').trim().toLowerCase()
-          if (norm === normRow) return gname
-        }
-      }
-      // 2. Fallback to tree resolution
-      if (a && a.area_id && match(resolveAreaNameFromTree(a.area_id, areaTree, allFloors))) return gname
-    }
-    if (Array.isArray(gr.floors)) {
-      for (const f of gr.floors) {
-        if (Array.isArray(f.area_ids)) {
-          for (const aid of f.area_ids) {
-            if (match(resolveAreaNameFromTree(aid, areaTree, allFloors))) return gname
-          }
-        }
-      }
-    }
-  }
-  return null
+  return fullName ? fullName.replace(/\s*[>/]\s*/g, ' / ').trim().toLowerCase() : null
 }
 
 /**
@@ -798,12 +690,9 @@ const SpaceUtilization = ({
   const theme = useTheme()
   const isMediumScreen = useMediaQuery(theme.breakpoints.up('md'))
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'))
-  const isXLargeScreen = useMediaQuery(theme.breakpoints.up('xl'))
-  const is2XLargeScreen = useMediaQuery('(min-width: 1600px)')
 
   // Get floors and area data from Redux (Moved up to avoid TDZ errors in renderCustomGraphCard)
   const floors = useSelector((state) => state.floor.floors)
-  const floorStatus = useSelector((state) => state.floor.status)
   const areaTree = useSelector((state) => state.floor.leafData)
 
   const areaIdToFloorId = useMemo(() => {
@@ -840,8 +729,6 @@ const SpaceUtilization = ({
     return map
   }, [floors])
 
-  const dashboardStatus = useSelector((state) => state.dashboard.status)
-  const dashboardLoading = useSelector((state) => state.dashboard.loading)
   const dashboardError = useSelector((state) => state.dashboard.error)
   const occupancyCountLoading = useSelector((state) => state.dashboard.occupancyCountLoading || false)
   const occupancyByGroupLoading = useSelector((state) => state.dashboard.occupancyByGroupLoading || false)
@@ -864,7 +751,6 @@ const SpaceUtilization = ({
   const instantOccupancyCount = useSelector(selectInstantOccupancyCount)
   const currentDate = useSelector(selectCurrentDate)
   const currentYear = useSelector(selectCurrentYear)
-  const emailLoading = useSelector(selectEmailLoading)
   const isNavigating = useSelector(selectIsNavigating)
   const globalLoading = useSelector(selectGlobalLoading)
   const customWidgetFilters = useSelector(selectCustomWidgetFilters)
@@ -877,11 +763,7 @@ const SpaceUtilization = ({
   // Use _from_logs data when in Charts tab, otherwise use regular data
   const activeOccupancyByGroup = showChartsTab ? occupancyByGroupFromLogs : occupancyByGroup
   const activeSpaceUtilizationPerArea = showChartsTab ? spaceUtilizationPerFromLogs : spaceUtilizationPerArea
-  const activeOccupancyByGroupLoading = showChartsTab ? occupancyByGroupFromLogsLoading : occupancyByGroupLoading
-  const activeSpaceUtilizationLoading = showChartsTab ? spaceUtilizationPerFromLogsLoading : spaceUtilizationLoading
 
-  // Use global loading as fallback when specific loading states are not available
-  const anyLoading = occupancyCountLoading || activeOccupancyByGroupLoading || activeSpaceUtilizationLoading || instantOccupancyCountLoading || globalLoading
   const chartHeaderStyle = useMemo(() => ({
     margin: 0,
     color: '#fff',
@@ -958,10 +840,6 @@ const SpaceUtilization = ({
   const [snackbarSeverity, setSnackbarSeverity] = useState('success')
 
   // Email dialog state - DISABLED: No popup, using saved email only
-  // State variables kept for compatibility but not used
-  const [emailDialogOpen] = useState(false)
-  const [emailInput] = useState('')
-  const [pendingEmailAction] = useState(null)
 
   // Snackbar handlers
   const handleSnackbarClose = () => {
@@ -976,7 +854,6 @@ const SpaceUtilization = ({
 
   // User profile for email functionality
   const userProfile = useSelector((state) => state.user?.profile)
-  const profileLoading = useSelector((state) => state.user?.profileLoading)
 
   // Duplicated selectors removed to resolve TDZ issues
 
@@ -1977,7 +1854,6 @@ const SpaceUtilization = ({
                       },
                     ]
                   }
-                  const areaSlices = slices
                   slices = slices.filter((s) => Number(s.value) > 0)
 
                   // Map per-area slice names (EL/TEST) into group names for scoped area-group graphs.
@@ -3810,52 +3686,6 @@ const SpaceUtilization = ({
     }
   };
 
-  const getCurrentSelectionText = () => {
-    if (selectedAreas.length === 0) {
-      return 'All Areas (Project View)';
-    }
-
-    const areaNames = selectedAreas.map(areaId => {
-      // Find area name from floors data
-      const findAreaName = (nodes, targetAreaCode) => {
-        for (const node of nodes) {
-          if (node.area_code === targetAreaCode) {
-            return node.area_name;
-          }
-          if (node.children && node.children.length > 0) {
-            const found = findAreaName(node.children, targetAreaCode);
-            if (found) return found;
-          }
-        }
-        return targetAreaCode;
-      };
-
-      return findAreaName(floors, areaId);
-    });
-
-    return areaNames.join(', ');
-  };
-
-  const getNavigationButtonText = (direction) => {
-    if (direction === 'previous') {
-      switch (selectedDuration) {
-        case 'this-day': return '? Previous Day';
-        case 'this-week': return '? Previous Week';
-        case 'this-month': return '? Previous Month';
-        case 'this-year': return '? Previous Year';
-        default: return '? Previous';
-      }
-    } else {
-      switch (selectedDuration) {
-        case 'this-day': return 'Next Day ?';
-        case 'this-week': return 'Next Week ?';
-        case 'this-month': return 'Next Month ?';
-        case 'this-year': return 'Next Year ?';
-        default: return 'Next ?';
-      }
-    }
-  };
-
   const handleSpaceChartsDurationChange = useCallback(
     (e) => {
       e.stopPropagation();
@@ -4144,21 +3974,6 @@ const SpaceUtilization = ({
 
   // Keep chart cards uniform like Energy tab.
   const spaceCardHeight = 560;
-
-  const spaceRegularKeys = [
-    'utilization',
-    'utilization_by_area_group',
-    'peak_and_minimum_utilization',
-    'utilization_by_area',
-  ];
-
-  const spaceRegularVisibleCount = spaceRegularKeys.reduce(
-    (acc, key) => acc + (shouldShowWidget(key) ? 1 : 0),
-    0
-  );
-  const spaceRegularGridCols =
-    spaceRegularVisibleCount === 1 ? '1fr' : '1fr 1fr';
-
 
   // Match Dashboard.jsx: prefer `title` after rename (API may update title before dropdown_name).
   const getWidgetTitle = (widgetKey, fallbackTitle) => {

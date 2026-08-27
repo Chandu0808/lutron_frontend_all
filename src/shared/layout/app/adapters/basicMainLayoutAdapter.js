@@ -17,6 +17,8 @@ import {
   getBasicSettingsSectionLabel,
   isBasicAreaGroupSettingsChildRoute,
   isBasicMaintenanceRoute,
+  isBasicGetHelpRoute,
+  isBasicApplicationMonitoringRoute,
   isBasicSettingsAppRoute,
 } from "../../../../variants/basic/utils/basicSettingsPaths";
 
@@ -25,16 +27,43 @@ export const basicMainLayoutAdapter = {
 
   getFrameSx(ctx) {
     const useNaturalHeight = ctx.isDashboard || ctx.isSettingsLayout;
+    // Application Monitoring needs a scrollable shell so the Resource Usage card
+    // isn't clipped (advanced settings frame is not overflow:hidden).
+    if (ctx.isApplicationMonitoring) {
+      return {
+        width: "100%",
+        minHeight: { xs: "auto", md: "100dvh" },
+        height: "auto",
+        maxHeight: "none",
+        overflow: "visible",
+        backgroundColor: ctx.layoutShellBg,
+        backgroundImage: "var(--app-background-image, none)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+        pb: { xs: "22px", md: 3 },
+      };
+    }
     return {
       width: "100%",
-      minHeight: useNaturalHeight ? "auto" : "calc(100vh - 100px)",
+      minHeight: ctx.isSettingsLayout
+        ? { xs: "auto", md: "100dvh" }
+        : useNaturalHeight
+          ? "auto"
+          : "calc(100vh - 100px)",
+      height: ctx.isSettingsLayout ? { xs: "auto", md: "100dvh" } : "auto",
+      maxHeight: ctx.isSettingsLayout ? { xs: "none", md: "100dvh" } : "none",
+      overflow: ctx.isSettingsLayout
+        ? { xs: "visible", md: "hidden" }
+        : "visible",
       backgroundColor: ctx.layoutShellBg,
       backgroundImage: "var(--app-background-image, none)",
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: "fixed",
       backgroundRepeat: "no-repeat",
-      pb: "22px",
+      pb: ctx.isSettingsLayout ? { xs: "22px", md: 0 } : "22px",
     };
   },
 
@@ -89,11 +118,11 @@ export const basicMainLayoutAdapter = {
       whiteChrome &&
       (isScheduleRoute(location.pathname) || isQuickControlsRoute(location.pathname));
     const isBasicMaintenanceRouteActive = isBasicMaintenanceRoute(location.pathname);
+    const isApplicationMonitoring = isBasicApplicationMonitoringRoute(location.pathname);
     const isLutronWebsite = isLutronWebsiteRoute(location.pathname);
     const showSecondaryRibbon =
       isActivityReport ||
-      location.pathname === "/get-help" ||
-      location.pathname.startsWith("/get-help/") ||
+      isBasicGetHelpRoute(location.pathname) ||
       isBasicMaintenanceRouteActive ||
       isSettingsLayout ||
       isAreaGroupSettingsChild ||
@@ -106,10 +135,7 @@ export const basicMainLayoutAdapter = {
       if (isLutronWebsite) return "Home";
       if (isBasicMaintenanceRouteActive) return "Settings > Maintenance";
       if (isActivityReport) return "Activity Report";
-      if (
-        location.pathname === "/get-help" ||
-        location.pathname.startsWith("/get-help/")
-      ) {
+      if (isBasicGetHelpRoute(location.pathname)) {
         return "Help";
       }
       if (isScheduleRoute(location.pathname)) return "Schedule";
@@ -138,6 +164,7 @@ export const basicMainLayoutAdapter = {
     return {
       isDashboard,
       isSettingsLayout,
+      isApplicationMonitoring,
       layoutShellBg,
       mainContentPanelBg,
       whiteChrome,
@@ -170,18 +197,63 @@ export const basicMainLayoutAdapter = {
   getContentPanelSx({ ctx, location, contentPanelRadius }) {
     const pathname = location.pathname;
 
-    if (ctx.isSettingsLayout) {
+    if (isBasicGetHelpRoute(pathname)) {
       return {
         width: "100%",
         mx: "auto",
         backgroundColor: ctx.mainContentPanelBg,
         borderRadius: contentPanelRadius,
-        flexGrow: 0,
-        overflowY: "visible",
+        flexGrow: 1,
+        overflowY: "auto",
         overflowX: "hidden",
         height: "auto",
         maxHeight: "none",
-        minHeight: "auto",
+        minHeight: "calc(100vh - 107px)",
+        mb: 0,
+        p: 0,
+        pb: { xs: 3, md: 4 },
+      };
+    }
+
+    // Match advanced: don't clip Resource Usage with nested overflow:hidden shells.
+    if (isBasicApplicationMonitoringRoute(pathname)) {
+      return {
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        mx: "auto",
+        backgroundColor: ctx.mainContentPanelBg,
+        borderRadius: contentPanelRadius,
+        flexGrow: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflowX: "hidden",
+        overflowY: "visible",
+        height: "auto",
+        maxHeight: "none",
+        minHeight: { xs: "auto", md: "calc(100dvh - 200px)" },
+        mb: 0,
+        p: 0,
+        pb: { xs: 2, md: 3 },
+      };
+    }
+
+    if (ctx.isSettingsLayout) {
+      return {
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        mx: "auto",
+        backgroundColor: ctx.mainContentPanelBg,
+        borderRadius: contentPanelRadius,
+        flexGrow: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflowX: "hidden",
+        overflowY: { xs: "visible", md: "hidden" },
+        height: { xs: "auto", md: "calc(100dvh - 260px)" },
+        maxHeight: { xs: "none", md: "calc(100dvh - 260px)" },
+        minHeight: { xs: "auto", md: 0 },
         mb: 0,
         p: 0,
       };

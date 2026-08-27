@@ -98,16 +98,17 @@ const Maintenance = () => {
   return (
     <SettingsLayout>
       <Box
+        className="basic-maintenance-page"
         sx={{
           display: "flex",
           flexDirection: "column",
-          gap: 2,
-          p: 2,
+          gap: 1.25,
+          p: { xs: 1, sm: 1.25, md: 1.5 },
           maxWidth: 980,
         }}
       >
         <Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 0.5 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.25 }}>
             <Typography
               variant="h4"
               sx={{
@@ -121,7 +122,7 @@ const Maintenance = () => {
           </Box>
           <Typography
             sx={{
-              mb: 1,
+              mb: 0.5,
               color: mutedColor,
               fontSize: { xs: 12, sm: 13, md: 14 },
             }}
@@ -179,8 +180,8 @@ const Maintenance = () => {
             sx={{
               display: "flex",
               flexDirection: "column",
-              gap: 1.5,
-              p: { xs: 2, sm: 2.5 },
+              gap: 1,
+              p: { xs: 1.5, sm: 2 },
             }}
           >
             <FormGroup>
@@ -238,8 +239,8 @@ const Maintenance = () => {
             sx={{
               display: "flex",
               justifyContent: "flex-end",
-              px: { xs: 2, sm: 2.5 },
-              py: 1.5,
+              px: { xs: 1.5, sm: 2 },
+              py: 1,
               borderTop: isLightChrome
                 ? "1px solid var(--users-border, #C5CDD8)"
                 : "1px solid rgba(255,255,255,0.12)",

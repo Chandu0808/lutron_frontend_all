@@ -254,52 +254,6 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
     return null;
   };
 
-  // Helper function to generate a unique key for each zone
-  // CRITICAL: Use zone_id as the PRIMARY key since it's stable and doesn't change
-  // assignment_href can change when backend creates new assignments, but zone_id remains constant
-  // This ensures user edits are preserved even when assignment_href changes
-  const getZoneKey = (d, idx) => {
-    // CRITICAL: Use zone_id as the primary identifier (it's stable)
-    // zone_id uniquely identifies each zone and doesn't change when assignments are updated
-    const zoneId = d.zone_id;
-    
-    if (zoneId) {
-      // Use zone_id alone as the key - this is stable and won't change
-      // Format: "zone_123" where 123 is the zone_id
-      return `zone_${zoneId}`;
-    }
-    
-    // Fallback 1: If zone_id is missing, try to get it from areaZones
-    if (!zoneId && areaZones.length > 0) {
-      const foundZoneId = getZoneIdFromSceneDetail(d, areaZones);
-      if (foundZoneId) {
-        return `zone_${foundZoneId}`;
-      }
-    }
-    
-    // Fallback 2: Use assignment_href if zone_id not available
-    // This is less ideal but necessary for backwards compatibility
-    const assignmentHref = d.assignment_href || '';
-    if (assignmentHref) {
-      console.warn(`Using assignment_href as key (zone_id missing) for zone: ${d.zone_name}`, {
-        assignment_href: assignmentHref,
-        zone_name: d.zone_name
-      });
-      return assignmentHref;
-    }
-    
-    // Fallback 3: If all else fails, use zone_name + zone_type + index
-    // This should never happen in production
-    const name = (d.zone_name || '').toString();
-    const type = (d.zone_type || '').toString();
-    console.error(`Using fallback key for zone: ${name}`, {
-      zone_name: name,
-      zone_type: type,
-      index: idx
-    });
-    return `fallback_${name}_${type}_${idx}`;
-  };
-
   useEffect(() => {
     // CRITICAL: If we just applied scene changes, don't re-initialize from backend
     // The user's edits are already saved and we don't want to overwrite them with potentially stale backend data
@@ -433,9 +387,6 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
 
   const handleZoneValueChange = (zoneKey, changed) => {
     if (!canEditScene) return;
-    
-    // Debug: Log which zone is being updated
-    const currentValues = sceneZoneValues[zoneKey];
     
     // CRITICAL: Only update the specific zone identified by zoneKey
     // Ensure we're not accidentally updating multiple zones
@@ -588,7 +539,7 @@ export default function AreaSettingsDialog({ open, onClose, areaId, canUpdateAre
       
       
       // First, save the scene definition
-      const editResult = await dispatch(editScene({ areaId, sceneId, details })).unwrap();
+      await dispatch(editScene({ areaId, sceneId, details })).unwrap();
       
       // CRITICAL: Set flag to prevent re-initialization when fetchSceneStatus updates Redux state
       // This ensures user's edits are preserved after save

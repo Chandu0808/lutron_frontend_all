@@ -46,6 +46,7 @@ import { UseAuth } from "../../../customhooks/UseAuth";
 import { BaseUrl } from "../../../BaseUrl";
 import { resolveFloorPlanMediaUrl } from "../../../../../shared/pdf/floorPlanPdf";
 import { dispatchFetchFloorsOnce } from "../../../../../shared/utils/bootstrapFetchGuards";
+import { getFloorsList } from "../../../../../shared/utils/floorList";
 import { fetchFloors, selectFloors, selectFloorLoading } from "../../../redux/slice/floor/floorSlice";
 import { selectApplicationTheme } from "../../../redux/slice/theme/themeSlice";
 import { isLightSurface } from "../../../utils/themeOnSurface";
@@ -132,7 +133,7 @@ const FOFPComponent = () => {
   const fofpConfig = useSelector(selectFofpConfig);
   const configSaving = useSelector(selectFofpConfigSaving);
   const effectiveMarkerColor = useSelector(selectFofpEffectiveMarkerColor);
-  const floors = useSelector(selectFloors) || [];
+  const floors = getFloorsList(useSelector(selectFloors));
   const floorStatus = useSelector(selectFloorLoading);
   const floorsLoading = floorStatus === "loading";
   const floorsError = useSelector((state) => state.floor?.error) || null;
